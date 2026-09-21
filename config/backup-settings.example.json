@@ -1,0 +1,26 @@
+{
+  "schema": "evolving-profile.backup-settings.v1",
+  "enabled": true,
+  "schedule": {
+    "mode": "daily",
+    "hour": 3,
+    "minute": 25,
+    "weekday": 1,
+    "day": 1
+  },
+  "local": {
+    "root": "REPLACE_WITH_A_DEDICATED_BACKUP_DIRECTORY",
+    "retention_days": 14,
+    "max_sets": 14,
+    "database": true,
+    "config": true,
+    "capture": true,
+    "verify_checksum": true
+  },
+  "cloud": {
+    "enabled": false,
+    "provider": "not_configured",
+    "retention_sets": 2,
+    "encryption": "AES-256-CBC + PBKDF2-SHA256"
+  }
+}

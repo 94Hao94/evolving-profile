@@ -1,0 +1,1199 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useLocale } from "next-intl";
+import { projectFlowAudit, type FlowEvidenceItem, type FlowPrompt } from "@/lib/flow-projection";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { NavigationTopicBrowser } from "@/components/navigation-topic-browser";
+import { useParams } from "next/navigation";
+import {
+  ArrowDown,
+  BookOpen,
+  Check,
+  GitBranch,
+  History,
+  Search,
+  Sparkles,
+  TerminalSquare,
+  RefreshCw,
+} from "lucide-react";
+
+type NodeId = "entry" | "map" | "guidance" | "history" | "answer";
+type ToolStatus = "observed" | "not_observed";
+type MemoryMapNode = {
+  id: string;
+  label: string;
+  lane: string;
+  count?: number | null;
+  route: string;
+  freshness: string;
+  summary: string;
+};
+type CatalogHint = {
+  topic_id?: string;
+  title?: string;
+  abstract?: string;
+  overview?: string;
+  source_count?: number | null;
+  source_count_semantics?: string;
+  coverage?: { sampled?: number; total?: number | null; semantics?: string } | { kind?: string };
+  pending_changes?: number | null;
+  conflicts?: string[] | null;
+  pending_changes_status?: string;
+  conflict_status?: string;
+  content_status?: string;
+  review?: { state?: string; reason?: string };
+  boundary?: string;
+  memory_id?: string;
+  type?: string;
+  topic?: string;
+  mentioned_at?: string | null;
+  occurred_start?: string | null;
+  occurred_end?: string | null;
+  state?: string;
+};
+type RouteDecision = {
+  decision: string;
+  recommended_route: string;
+  reason: string;
+  confidence?: number | null;
+  confidence_semantics?: string;
+  matched_nodes: string[];
+  catalog_probe?: {
+    status?: string;
+    candidate_count?: number | null;
+    matched_entities?: string[];
+    catalog_coverage?: string;
+  };
+  catalog_hints?: CatalogHint[];
+  agent_may_override?: boolean;
+};
+const FLOW_COPY = {
+  zh: {
+    intro: "左侧选择用户 Prompt，中间查看本轮路径，右侧查看节点真实回执。",
+    prompts: "用户 Prompt",
+    empty: "尚无可展示的用户 Prompt。",
+    decision: "Agent 结合原问题和前文判断：是否缺少历史依据？",
+    entry: "入口提供使用说明与 L0 轻量地图；完整偏好和历史证据由 Agent 按任务需要读取。",
+    answer:
+      "当前记录展示入口说明、指导包和 recall/research 的实际回执；已返回并送达的内容视为本轮 Agent 可见输入，页面不再单独追踪回答侧注意力。",
+    select: "选择一条 Prompt 后显示可观测回执。",
+    deferredExplanation:
+      "条相关偏好可按需补读。它们没有被丢弃，也没有一次性塞进上下文；只有后续行动确实依赖某项条件时，Agent 才会继续读取。",
+  },
+  en: {
+    intro:
+      "Select a user prompt on the left, inspect its path in the center, and review observable receipts on the right.",
+    prompts: "User prompts",
+    empty: "No user prompts are available yet.",
+    decision:
+      "The Agent evaluates the original question and context: is historical evidence missing?",
+    entry:
+      "The entry provides usage instructions and applicable preferences. The Agent decides whether historical retrieval is needed.",
+    answer:
+      "This record shows entry instructions, guidance packets, and recall or research receipts. Returned and delivered content is treated as visible input for the turn; the UI does not separately track answer-side attention.",
+    select: "Select a prompt to view observable receipts.",
+    deferredExplanation:
+      "related preferences are available on demand. They were not discarded or injected all at once; the Agent reads one only when a later action depends on it.",
+  },
+} as const;
+
+function displayEvidence(item: FlowEvidenceItem) {
+  return item.text || item.title || item.id;
+}
+
+function displayToolLabel(tool?: string) {
+  return tool?.includes("get_task_guidance") || tool?.includes("get_preference") ? "Get Preference" : tool ?? "工具";
+}
+
+export function routeConfidenceLabel(route: {
+  recommended_route?: string;
+  confidence?: number | null;
+}) {
+  return typeof route.confidence === "number"
+    ? `路线信号 ${Math.round(route.confidence * 100)}/100 · 启发式`
+    : "由当前 Agent 判断 · 不评分";
+}
+
+export function uniqueCatalogHints(hints: CatalogHint[] = []) {
+  const seen = new Set<string>();
+  return hints.filter((hint) => {
+    const key = [hint.title ?? hint.topic ?? "", hint.abstract ?? hint.type ?? ""].join("\u0000");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function catalogStatusLabel(hint: CatalogHint) {
+  const values = [];
+  values.push(hint.content_status === "entity_navigation_only" ? "结构导航" : "主题概览");
+  values.push(
+    hint.pending_changes_status === "not_computed" || hint.pending_changes == null
+      ? "更新状态未计算"
+      : `待更新 ${hint.pending_changes}`
+  );
+  values.push(
+    hint.conflict_status === "not_computed" || hint.conflicts == null
+      ? "冲突未计算"
+      : `冲突 ${hint.conflicts.length}`
+  );
+  return values.join(" · ");
+}
+
+export function entryGuidanceLabel(hasInstruction: boolean, coverage?: string) {
+  if (!hasInstruction) return "历史记录：说明送达待核对";
+  return coverage === "agent_decision_pending"
+    ? "核心说明已生成 · 私人偏好待 Agent 判断"
+    : "核心说明已生成 · 偏好已检查";
+}
+
+export function guidanceNodeValue(audit: ReturnType<typeof projectFlowAudit> | null) {
+  if (!audit) return "本轮未形成可核验的读取回执";
+  const visible = audit.guidance.count;
+  const deferred = audit.guidance.deferred;
+  if (visible > 0) return `已注入 ${visible} 项偏好摘要${deferred ? ` · ${deferred} 项可展开完整条件` : ""} · 已送达 Agent 上下文`;
+  if (deferred > 0) return `本轮已识别候选 · ${deferred} 项可展开完整条件`;
+  return "本轮未形成可核验的读取回执";
+}
+
+export function historyToolStatus(
+  route: string | undefined,
+  tool: "recall" | "research" | "read_source",
+): ToolStatus {
+  return route?.includes(tool) ? "observed" : "not_observed";
+}
+
+function EvidenceList({
+  items,
+  onSelect,
+}: {
+  items: FlowEvidenceItem[];
+  onSelect: (item: FlowEvidenceItem) => void;
+}) {
+  if (!items.length)
+    return <p className="text-sm text-muted-foreground">本轮没有可逐项展示的回执内容。</p>;
+  return (
+    <ul className="space-y-2 text-sm">
+      {items.slice(0, 8).map((item) => (
+        <li key={item.id} className="border-l-2 border-border pl-3 leading-6">
+          <button onClick={() => onSelect(item)} className="w-full text-left hover:text-primary">
+            {displayEvidence(item)}
+            {typeof item.score === "number" && (
+              <span className="ml-2 text-xs text-muted-foreground">{item.score.toFixed(2)}</span>
+            )}
+          </button>
+        </li>
+      ))}
+      {items.length > 8 && (
+        <li className="text-xs text-muted-foreground">
+          其余 {items.length - 8} 项已保留在本次回执中。
+        </li>
+      )}
+    </ul>
+  );
+}
+
+function ToolRail({
+  history,
+}: {
+  history?: {
+    route?: string;
+    state?: string;
+    decision?: string;
+    metrics?: { candidates?: number | null; returned?: number | null; unread?: number | null };
+    items?: FlowEvidenceItem[];
+    routeReceipt?: FlowPrompt["memory_route_receipt"];
+    timeWindowActivity?: FlowPrompt["time_window_activity"];
+    timeWindowGuidanceActivity?: FlowPrompt["time_window_guidance_activity"];
+    preferenceItems?: FlowEvidenceItem[];
+    preferenceCount?: number;
+  };
+}) {
+  const route = history?.route ?? "";
+  const historyState = history?.state ?? "unknown";
+  const items = history?.items ?? [];
+  const toolEvents = history?.routeReceipt?.tool_events ?? [];
+  const windowActivity = history?.timeWindowActivity;
+  const windowGuidanceActivity = history?.timeWindowGuidanceActivity;
+  const preferenceItems = history?.preferenceItems ?? [];
+  const candidates = history?.metrics?.candidates ?? null;
+  const returned = history?.metrics?.returned ?? null;
+  const typeCounts = items.reduce<Record<string, number>>((counts, item) => {
+    const key = item.type ?? "未分类";
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+  const normalized = route ?? "";
+  const toolState = (tool: "recall" | "research" | "read_source"): ToolStatus =>
+    historyToolStatus(normalized, tool);
+  const tools = [
+    { id: "recall" as const, label: "recall", caption: "候选召回", icon: Search },
+    { id: "research" as const, label: "research", caption: "复杂关联", icon: GitBranch },
+    { id: "read_source" as const, label: "read_source", caption: "原文回读", icon: BookOpen },
+  ];
+  const statusText: Record<ToolStatus, string> = {
+    observed: "调用回执已记录",
+    not_observed: "未取得调用回执",
+  };
+  return (
+    <div className="mt-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">
+          <TerminalSquare className="h-3.5 w-3.5" />
+          工具轨道
+        </div>
+        <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+          缺少依据时才触发
+        </span>
+      </div>
+      {toolEvents.length > 0 && (
+        <div className="mb-3 rounded-lg border border-emerald-200/80 bg-background/70 p-2.5 text-[11px] dark:border-emerald-900/60">
+          <div className="font-semibold text-emerald-800 dark:text-emerald-300">已记录的工具调用</div>
+          <div className="mt-1 space-y-1.5">
+            {toolEvents.slice(-6).map((event, index) => (
+              <div key={`${event.tool}-${event.at ?? index}`} className="flex flex-wrap gap-x-2 gap-y-0.5 text-muted-foreground">
+                <span className="font-medium text-foreground">{displayToolLabel(event.tool)}</span>
+                {event.at && <span>{new Date(event.at).toLocaleString("zh-CN")}</span>}
+                {event.returned_count != null && <span>返回 {event.returned_count} 条</span>}
+                {event.research_id && <span className="break-all">research_id {event.research_id}</span>}
+                {event.memory_id && <span className="break-all">memory_id {event.memory_id}</span>}
+                {event.memory_ids?.length ? <span className="break-all">读取 {event.memory_ids.slice(0, 6).join("、")}</span> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {windowActivity?.state === "observed" && (
+        <div className="mb-3 rounded-lg border border-amber-200/80 bg-amber-50/70 p-2.5 text-[11px] dark:border-amber-900/60 dark:bg-amber-950/20">
+          <div className="font-semibold text-amber-900 dark:text-amber-200">
+            Prompt 后时间窗观测 · {windowActivity.window_minutes ?? 3} 分钟内
+          </div>
+          <div className="mt-1 text-muted-foreground">
+            仅表示该时间段内观察到的活动，不归因于当前 Prompt。
+          </div>
+          {windowActivity.start && windowActivity.end && (
+            <div className="mt-1 text-muted-foreground">
+              {new Date(windowActivity.start).toLocaleTimeString("zh-CN")} – {new Date(windowActivity.end).toLocaleTimeString("zh-CN")}
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {Object.entries(windowActivity.by_tool ?? {}).map(([tool, summary]) => (
+              <span key={tool} className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100">
+                {tool} {summary.calls ?? 0} 次 · 返回 {summary.returned ?? 0} 条
+              </span>
+            ))}
+          </div>
+          {windowActivity.items?.length ? <div className="mt-2 space-y-1.5">{windowActivity.items.slice(0, 8).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground"><span className="mr-1 font-medium text-foreground">{item.type ?? "memory"}</span>{displayEvidence(item)}</div>)}</div> : null}
+        </div>
+      )}
+      {windowActivity?.state === "not_observed" && (
+        <div className="mb-3 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-2.5 text-[11px] text-muted-foreground dark:border-slate-700 dark:bg-slate-900/30">
+          Prompt 后 {windowActivity.window_minutes ?? 3} 分钟内未观测到工具回执；这不等于工具一定没有调用。
+        </div>
+      )}
+      {windowGuidanceActivity?.state === "observed" && (
+        <div className="mb-3 rounded-lg border border-violet-200/80 bg-violet-50/70 p-2.5 text-[11px] dark:border-violet-900/60 dark:bg-violet-950/20">
+          <div className="font-semibold text-violet-900 dark:text-violet-200">Prompt 后 Get Preference 观测 · {windowGuidanceActivity.window_minutes ?? 3} 分钟内</div>
+          <div className="mt-1 text-muted-foreground">时间窗内返回 {windowGuidanceActivity.returned_count ?? 0} 项指导，待补读 {windowGuidanceActivity.deferred_count ?? 0} 项；不归因于当前 Prompt。</div>
+          {preferenceItems.length ? <div className="mt-2 space-y-1.5">{preferenceItems.slice(0, 6).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground">{displayEvidence(item)}</div>)}</div> : null}
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-2">
+        {tools.map(({ id, label, caption, icon: Icon }) => {
+          const state = toolState(id);
+          const count =
+            state === "observed"
+              ? candidates != null
+                ? `${candidates} 个候选`
+                : `${returned ?? items.length} 条预览`
+              : "无法确认是否调用";
+          return (
+            <div
+              key={id}
+              className="rounded-lg border border-emerald-200/80 bg-background/90 p-2.5 dark:border-emerald-900/60"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <Icon className="h-3.5 w-3.5 text-emerald-600" />
+                {label}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{caption}</div>
+              <div className="mt-1 text-[11px] font-medium tabular-nums text-foreground/80">
+                {count}
+              </div>
+              <div
+                className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${state === "observed" ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-200"}`}
+              >
+                {state === "observed" ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                )}
+                {statusText[state]}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {items.length > 0 ? (
+        <div className="mt-3 border-t border-emerald-200/80 pt-2 dark:border-emerald-900/60">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">
+            已返回内容预览 · {items.length} 条
+          </div>
+          <div className="mb-2 flex flex-wrap gap-1">
+            {Object.entries(typeCounts).map(([type, count]) => (
+              <span
+                key={type}
+                className="rounded-full bg-emerald-100/70 px-2 py-0.5 text-[10px] text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+              >
+                {type} {count}
+              </span>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {items.slice(0, 2).map((item) => (
+              <div
+                key={item.id}
+                className="line-clamp-2 rounded-md bg-background/70 px-2 py-1.5 text-[11px] leading-4 text-muted-foreground"
+              >
+                {displayEvidence(item)}
+              </div>
+            ))}
+          </div>
+          {items.length > 2 && (
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              其余 {items.length - 2} 条可在右侧详情查看
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-dashed border-emerald-200/80 bg-background/50 px-2.5 py-2 text-[11px] leading-4 text-muted-foreground dark:border-emerald-900/60">
+          {history?.decision === "agent_decides"
+            ? "当前页面没有宿主级调用回执，无法判断 Codex 是否调用或读取了历史结果。"
+            : historyState === "unknown"
+              ? "当前缺少 recall / research / read_source 回执，无法判断是未调用还是回执未投影。"
+              : "页面未取得本轮历史工具回执；这不等于历史库为空。"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FlowView() {
+  const locale = useLocale();
+  const copy = FLOW_COPY[locale.startsWith("zh") ? "zh" : "en"];
+  const [rows, setRows] = useState<FlowPrompt[]>([]);
+  const [selected, setSelected] = useState<FlowPrompt | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<FlowPrompt | null>(null);
+  const [active, setActive] = useState<NodeId>("entry");
+  const [selectedEvidence, setSelectedEvidence] = useState<FlowEvidenceItem | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [nodeOpen, setNodeOpen] = useState(false);
+  const [latestNavigation, setLatestNavigation] = useState<FlowPrompt["navigation_map"] | null>(null);
+  const [mapMode, setMapMode] = useState<"recorded" | "latest">("recorded");
+  const [browseTopic, setBrowseTopic] = useState<string | null>(null);
+  const params = useParams<{ bankId: string }>();
+  const [cursor, setCursor] = useState(0);
+  const [query, setQuery] = useState("");
+  const [host, setHost] = useState("all");
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [memoryMap, setMemoryMap] = useState<MemoryMapNode[]>([]);
+  const [routeDecision, setRouteDecision] = useState<RouteDecision | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const currentRow = selectedDetail?.prompt_id === selected?.prompt_id ? selectedDetail : selected;
+  const navigation = mapMode === "latest" ? latestNavigation : currentRow?.navigation_map;
+  useEffect(() => {
+    if (!mapOpen) return;
+    const abort = new AbortController();
+    fetch("/api/evolving-profile/guidance/memory-map", { signal: abort.signal })
+      .then(r => r.json()).then(value => setLatestNavigation(value.navigation ?? null))
+      .catch(() => setLatestNavigation(null));
+    return () => abort.abort();
+  }, [mapOpen]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    const search = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+    fetch(
+      `/api/evolving-profile/guidance/prompts?limit=20&cursor=${cursor}&host=${encodeURIComponent(host)}${search}`,
+      { cache: "no-store", signal: controller.signal }
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error("prompt_list_unavailable");
+        return response.json();
+      })
+      .then((payload) => {
+        const nextRows = payload.items ?? [];
+        setRows(nextRows);
+        setSelected(nextRows[0] ?? null);
+        setHasMore(Boolean(payload.has_more));
+      })
+      .catch((cause) => {
+        if (cause.name !== "AbortError") setError("链路记录暂时不可读取。请刷新后重试。");
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [cursor, query, host, refreshNonce]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/evolving-profile/guidance/memory-map", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => setMemoryMap(payload?.nodes ?? []))
+      .catch((cause) => {
+        if (cause.name !== "AbortError") setMemoryMap([]);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!currentRow?.user_prompt) {
+      setRouteDecision(null);
+      return;
+    }
+    const recorded = currentRow.memory_route_receipt;
+    if (recorded?.recommended_route && recorded.reason) {
+      setRouteDecision({
+        decision: recorded.decision ?? recorded.recommended_route,
+        recommended_route: recorded.recommended_route,
+        reason: recorded.reason,
+        confidence: recorded.confidence,
+        confidence_semantics: recorded.confidence_semantics,
+        matched_nodes: recorded.matched_nodes ?? [],
+        catalog_probe: recorded.catalog_probe,
+        catalog_hints: recorded.catalog_hints ?? [],
+        agent_may_override: recorded.agent_may_override,
+      });
+      return;
+    }
+    const controller = new AbortController();
+    fetch(
+      `/api/evolving-profile/guidance/memory-check?q=${encodeURIComponent(currentRow.user_prompt)}`,
+      { cache: "no-store", signal: controller.signal }
+    )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => setRouteDecision(payload ?? null))
+      .catch((cause) => {
+        if (cause.name !== "AbortError") setRouteDecision(null);
+      });
+    return () => controller.abort();
+  }, [currentRow?.user_prompt, currentRow?.memory_route_receipt]);
+
+  useEffect(() => {
+    if (!selected?.prompt_id) return;
+    const controller = new AbortController();
+    setSelectedDetail(null);
+    fetch(`/api/evolving-profile/guidance/prompts/${encodeURIComponent(selected.prompt_id)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload?.prompt_id === selected.prompt_id) setSelectedDetail(payload);
+      })
+      .catch((cause) => {
+        if (cause.name !== "AbortError") setSelectedDetail(null);
+      });
+    return () => controller.abort();
+  }, [selected?.prompt_id]);
+
+  const audit = useMemo(() => (currentRow ? projectFlowAudit(currentRow) : null), [currentRow]);
+  const entryStateLabel = (value?: string) =>
+    value === "observed_entry_adapter" ? "入口已检查" : "入口状态待确认";
+  const historyStateLabel = (value?: string) =>
+    value?.includes("recall") || value?.includes("research") ? "已读取历史" : "未观测历史工具";
+  const controllerLabel = (value?: string) =>
+    ({
+      same_turn_host_receipt: "同回合宿主回执",
+      admission_applied: "入口准入",
+      not_in_candidate_path: "Agent 自主调用",
+      not_used: "本轮未调用",
+    })[value ?? ""] ?? "状态待确认";
+  const coverageLabel = (value?: string) =>
+    value?.includes("deferred")
+      ? "部分内容可按需补读"
+      : value === "complete_active_set"
+        ? "本轮所需指导已提供"
+        : "指导覆盖待确认";
+  const historyValue =
+    !audit || audit.history.decision === "agent_decides"
+      ? "自动召回已关闭 · 本页面未取得工具回执"
+      : audit.history.value === "unknown"
+        ? "历史链路未核实 · 缺少 recall/research 回执"
+        : audit.history.value === "not_observed"
+          ? "已确认本轮未调用历史工具"
+          : audit.history.value === "executed_empty"
+            ? `已调用但返回 0 条候选 · 查询 ${audit.history.metrics.candidates ?? "—"}`
+            : audit.history.value === "executed_no_result"
+              ? "已执行但未形成结果回执"
+              : `${audit.history.value} · 候选 ${audit.history.metrics.candidates ?? "—"} · 本页 ${audit.history.metrics.returned ?? "—"}`;
+  const isLegacyAutoHistory = audit?.history.mode === "hook_auto_recall";
+  const historyTitle = isLegacyAutoHistory ? "历史记录 · Hook 自动召回" : "Codex 按需历史读取";
+  const nodes: Array<{ id: NodeId; title: string; value: string; tone: string }> = [
+    {
+      id: "entry",
+      title: "UserPromptSubmit · 说明与偏好入口",
+      value: entryGuidanceLabel(Boolean(audit?.entry.instruction), audit?.entry.coverage),
+      tone: "border-sky-400",
+    },
+    {
+      id: "map",
+      title: "Memory Map · L0 总览",
+      value: audit?.map.l0.status === "observed"
+        ? `${audit.map.l0.preferenceCount ?? "—"} 条偏好 · ${audit.map.l0.topicCount ?? "—"} 个 Bank 主题 · ${audit.map.l0.contextChars ?? "—"} 字符`
+        : "该回合未保存 L0 地图回执",
+      tone: "border-cyan-500",
+    },
+    {
+      id: "guidance",
+      title: "Get Preference · L1",
+      value: guidanceNodeValue(audit),
+      tone: "border-amber-400",
+    },
+    { id: "history", title: historyTitle, value: historyValue, tone: "border-emerald-400" },
+    {
+      id: "answer",
+      title: "Agent 判断与回答",
+      value: "已返回内容视为本轮可见输入 · 不追踪回答侧注意力",
+      tone: "border-rose-400",
+    },
+  ];
+  const activeNode = nodes.find((node) => node.id === active) ?? nodes[0];
+  const stageLabels = ["入口", "L0 总览", "L1 目录", "L2 证据", "回答"];
+  const catalogHints = uniqueCatalogHints(routeDecision?.catalog_hints ?? []);
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">链路</h1>
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-300">
+                  EP 2.2
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm text-muted-foreground">从 Prompt 到回答的可观测证据图</p>
+            </div>
+          </div>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+            {copy.intro} 每一条路径都只展示实际回执；“按需可用”不等于“本轮已调用”。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <span>宿主</span>
+            <select
+              value={host}
+              onChange={(event) => {
+                setCursor(0);
+                setHost(event.target.value);
+              }}
+              className="bg-transparent font-medium text-foreground outline-none"
+            >
+              <option value="all">全部</option>
+              <option value="codex">Codex</option>
+              <option value="hermes">Hermes</option>
+              <option value="claude-code">Claude Code</option>
+              <option value="codex-cli">Codex CLI</option>
+            </select>
+          </label>
+          <div className="rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+            {loading ? "正在同步" : `${rows.length} 条 / 当前页 ${Math.floor(cursor / 20) + 1}`}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-w-0 overflow-hidden rounded-2xl border bg-background shadow-sm">
+          <div className="border-b bg-muted/20 px-3 py-3">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span className="flex items-center gap-2">
+                {copy.prompts}
+                <button
+                  type="button"
+                  aria-label="刷新用户 Prompt 链路"
+                  title="刷新用户 Prompt 链路"
+                  onClick={() => setRefreshNonce((value) => value + 1)}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border bg-background text-foreground hover:bg-muted"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </span>
+              <span>共 {rows.length || "-"} 条</span>
+            </div>
+            <input
+              value={query}
+              onChange={(event) => {
+                setCursor(0);
+                setQuery(event.target.value);
+              }}
+              placeholder="搜索用户 Prompt"
+              className="mt-2 h-9 w-full rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div className="max-h-[68vh] overflow-y-auto">
+            {loading && <div className="p-3 text-sm text-muted-foreground">正在读取链路记录…</div>}
+            {error && <div className="p-3 text-sm text-destructive">{error}</div>}
+            {!loading && !error && rows.length === 0 && (
+              <div className="p-3 text-sm text-muted-foreground">{copy.empty}</div>
+            )}
+            {!loading &&
+              !error &&
+              rows.map((row) => (
+                <button
+                  key={row.prompt_id}
+                  onClick={() => {
+                    setSelected(row);
+                    setActive("entry");
+                  }}
+                  className={`w-full border-b p-3 text-left text-sm transition-colors hover:bg-muted/60 ${selected?.prompt_id === row.prompt_id ? "bg-muted" : ""}`}
+                >
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(row.at).toLocaleString("zh-CN")}
+                  </div>
+                  <div className="mt-1 line-clamp-3 leading-5">{row.user_prompt}</div>
+                  <div className="mt-2 flex gap-2 text-[11px] text-muted-foreground">
+                    <span>{entryStateLabel(row.routes?.entry_guidance)}</span>
+                    <span>
+                      {historyStateLabel(
+                        row.prompt_id === currentRow?.prompt_id
+                          ? (currentRow.historical_audit?.route ??
+                              currentRow.routes?.historical_memory)
+                          : (row.historical_audit?.route ?? row.routes?.historical_memory)
+                      )}
+                    </span>
+                  </div>
+                </button>
+              ))}
+          </div>
+          <div className="flex justify-between border-t p-3 text-sm">
+            <button
+              disabled={cursor === 0}
+              onClick={() => setCursor(Math.max(0, cursor - 20))}
+              className="disabled:opacity-40"
+            >
+              上一页
+            </button>
+            <button
+              disabled={!hasMore}
+              onClick={() => setCursor(cursor + 20)}
+              className="disabled:opacity-40"
+            >
+              下一页
+            </button>
+          </div>
+        </aside>
+
+        <main className="min-w-0 rounded-2xl border bg-gradient-to-b from-slate-50/80 to-background p-4 shadow-sm sm:p-6 dark:from-slate-950/50">
+          <div>
+            <div className="mb-5 rounded-xl border bg-background/90 p-4 shadow-sm">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <History className="h-3.5 w-3.5" />
+                当前观测回合
+              </div>
+              <div className="text-sm leading-6">
+                {loading ? "正在读取链路记录…" : (selected?.user_prompt ?? "选择一条用户 Prompt")}
+              </div>
+            </div>
+            <div className="mb-5 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+              {stageLabels.map((label, index) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {index + 1}
+                  </span>
+                  <span>{label}</span>
+                  {index < stageLabels.length - 1 && (
+                    <span className="mx-0.5 text-slate-300">→</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="w-full space-y-3">
+              <button
+                onClick={() => setActive("entry")}
+                className={`w-full rounded-xl border-l-4 ${nodes[0].tone} bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md`}
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                    01 · ENTRY
+                  </span>
+                  {nodes[0].title}
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">{nodes[0].value}</div>
+              </button>
+              <div className="flex justify-center text-muted-foreground">
+                <ArrowDown className="h-4 w-4" />
+              </div>
+              <div className="text-center text-xs font-medium text-muted-foreground">
+                入口提供说明与地图，随后进入三条同级判断路径
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <button
+                  onClick={() => {
+                    setActive("entry");
+                    setManualOpen(true);
+                  }}
+                  className="min-h-28 rounded-xl border-l-4 border-sky-400 bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="font-medium">记忆使用说明书</div>
+                  <div className="mt-2 break-words text-sm text-muted-foreground">
+                    {audit?.entry.instruction?.instruction_version ?? "旧记录未保存说明版本"}
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setActive("map");
+                    setMapOpen(true);
+                  }}
+                  className="min-h-28 rounded-xl border-l-4 border-cyan-500 bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="font-medium">{nodes[1].title}</div>
+                  <div className="mt-2 text-sm text-muted-foreground">{nodes[1].value}</div>
+                  <div className="mt-2 text-xs text-cyan-700 dark:text-cyan-300">点击查看本轮 L0，并预览 L1 / L2 下钻状态</div>
+                </button>
+              </div>
+              <div className="flex justify-center text-muted-foreground">
+                <ArrowDown className="h-4 w-4" />
+              </div>
+              <p className="rounded-xl border border-dashed bg-background/70 p-3 text-center text-sm shadow-sm">
+                {copy.decision}
+              </p>
+              <div className="grid items-start gap-3 md:grid-cols-3">
+                <div className="self-start rounded-xl border border-dashed bg-background/50 p-4 text-sm text-muted-foreground">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                    路径 A
+                  </div>
+                  上下文已足够 → 直接回答或执行
+                </div>
+                <button
+                  onClick={() => { setActive("history"); setNodeOpen(true); }}
+                  className="rounded-xl border-l-4 border-emerald-400 bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                      路径 B
+                    </span>
+                    {nodes[3].title}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">{nodes[3].value}</div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    缺少依据时查询 · 不足时翻页或回读原文
+                  </div>
+                  {audit && (
+                    <div className="mt-3 space-y-1.5 border-t border-emerald-200/70 pt-2 dark:border-emerald-900/60">
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {Object.entries(audit.timeWindowActivity?.by_tool ?? {}).map(([tool, summary]) => (
+                          <span key={tool} className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">{tool} {summary.calls ?? 0} 次 · {summary.returned ?? 0} 条</span>
+                        ))}
+                      </div>
+                      {(audit.timeWindowActivity?.items ?? audit.history.items).slice(0, 2).map((item) => (
+                        <div key={item.id} role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setSelectedEvidence(item); }} onKeyDown={(event) => { if (event.key === "Enter") setSelectedEvidence(item); }} className="line-clamp-2 rounded-md bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-4 text-muted-foreground hover:text-primary dark:bg-emerald-950/20">{displayEvidence(item)}</div>
+                      ))}
+                    </div>
+                  )}
+                </button>
+                <button
+                  onClick={() => { setActive("guidance"); setNodeOpen(true); }}
+                  className="rounded-xl border-l-4 border-amber-400 bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                      偏好路径
+                    </span>
+                    {nodes[2].title}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">{nodes[2].value}</div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    当前任务先看候选偏好，需要时按 ID 补读
+                  </div>
+                  {audit?.guidance.items.length ? (
+                    <div className="mt-3 space-y-1.5 border-t border-amber-200/70 pt-2 dark:border-amber-900/60">
+                      {audit.guidance.items.slice(0, 4).map((item) => (
+                        <div key={item.id} className="rounded-md bg-amber-50/70 px-2 py-1.5 text-[11px] leading-4 text-muted-foreground dark:bg-amber-950/30">
+                          {displayEvidence(item)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+              </div>
+              <div className="flex justify-center text-muted-foreground">
+                <ArrowDown className="h-4 w-4" />
+              </div>
+              <button
+                onClick={() => { setActive("answer"); setNodeOpen(true); }}
+                className={`w-full rounded-xl border-l-4 ${nodes[4].tone} bg-background p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md`}
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800 dark:bg-rose-950 dark:text-rose-200">
+                    05 · OUTPUT
+                  </span>
+                  {nodes[4].title}
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">{nodes[4].value}</div>
+              </button>
+            </div>
+          </div>
+        </main>
+
+        <aside className="hidden">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">
+              <GitBranch className="h-3.5 w-3.5" />
+            </div>
+            <h2 className="text-sm font-semibold">节点详情</h2>
+          </div>
+          <div className="mt-3 border-t pt-3">
+            <div className="font-medium">{activeNode.title}</div>
+            <div className="mt-1 text-sm text-muted-foreground">{activeNode.value}</div>
+          </div>
+          {active === "entry" && audit && (
+            <div className="mt-4 space-y-4 text-sm">
+              <p>{copy.entry}</p>
+              <dl className="space-y-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">说明版本</dt>
+                  <dd className="break-all">
+                    {audit.entry.instruction?.instruction_version ?? "该记录未保存"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">当前任务投影</dt>
+                  <dd>
+                    {audit.entry.taskState?.current_objective ?? "旧记录未保存"}
+                    {audit.entry.taskState?.continuation ? " · 续接" : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">偏好筛选覆盖</dt>
+                  <dd>{coverageLabel(audit.entry.coverage)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">说明生成记录</dt>
+                  <dd>{audit.entry.instruction ? "已生成至 Hook 上下文" : "未记录"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">模型实际收到／遵循</dt>
+                  <dd>需独立宿主证据，不能由生成记录推断</dd>
+                </div>
+              </dl>
+              <button
+                onClick={() => setManualOpen(true)}
+                className="rounded border px-3 py-2 hover:bg-muted"
+              >
+                查看本轮说明书
+              </button>
+            </div>
+          )}
+          {active === "guidance" && audit && (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                页面展示的是已收到并送达 Agent 上下文的指导回执；这可以说明 Agent 看到了这些内容，
+                但页面不再声称知道它最终如何使用。
+              </p>
+              {audit.guidance.deferred > 0 && (
+                <p className="border-l-2 border-amber-400 pl-3 text-sm leading-6 text-muted-foreground">
+                  {audit.guidance.deferred} 项指导已识别但尚未展开完整条件；需要时可按 ID 读取。
+                </p>
+              )}
+              <EvidenceList items={audit.guidance.items} onSelect={setSelectedEvidence} />
+            </div>
+          )}
+          {active === "map" && audit && (
+            <div className="mt-4 space-y-3 text-sm">
+              <p className="leading-6 text-muted-foreground">
+                L0 是该 Prompt 当时收到的固定预算导航；L1 和 L2 只显示页面实际收到的读取回执。
+              </p>
+              <dl className="grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-xs">
+                <dt className="text-muted-foreground">L0 总览</dt><dd>{audit.map.l0.contextChars ?? "—"} 字符 · {audit.map.l0.preferenceCount ?? "—"} 条偏好 · {audit.map.l0.topicCount ?? "—"} 个主题</dd>
+                <dt className="text-muted-foreground">L1 目录</dt><dd>{audit.map.l1.previewEntities ?? "—"} 个轻量预览 · {audit.map.l1.searchableEntities ?? "—"} 个实体名称可搜索</dd>
+                <dt className="text-muted-foreground">L2 证据</dt><dd>{audit.map.l2.actualRoute === "not_observed" || audit.map.l2.actualRoute === "unknown" ? "本轮未观测到证据下钻" : `${audit.map.l2.actualRoute} · 返回 ${audit.map.l2.returned ?? "—"} 条`}</dd>
+              </dl>
+              <button onClick={() => setMapOpen(true)} className="rounded border px-3 py-2 hover:bg-muted">查看本轮 L0 / L1 / L2</button>
+            </div>
+          )}
+          {active === "history" && audit && (
+            <div className="mt-4 space-y-4">
+              <ToolRail
+                history={{
+                  route: audit.history.value,
+                  state: audit.history.state,
+                  decision: audit.history.decision,
+                  metrics: audit.history.metrics,
+                  items: audit.history.items,
+                  routeReceipt: audit.history.routeReceipt,
+                  timeWindowActivity: audit.timeWindowActivity,
+                  timeWindowGuidanceActivity: audit.timeWindowGuidanceActivity,
+                  preferenceItems: audit.guidance.items,
+                  preferenceCount: audit.guidance.count,
+                }}
+              />
+              {audit.history.routeReceipt && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 dark:border-sky-900/60 dark:bg-sky-950/20">
+                  <div className="text-xs font-semibold text-sky-900 dark:text-sky-200">
+                    目录路由回执
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    建议：
+                    {audit.history.routeReceipt.recommended_route ??
+                      audit.history.routeReceipt.decision ??
+                      "—"}{" "}
+                    · 置信度{" "}
+                    {audit.history.routeReceipt.confidence == null
+                      ? "—"
+                      : `${Math.round(audit.history.routeReceipt.confidence * 100)}%`}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {audit.history.routeReceipt.reason ?? "未记录理由"}
+                  </div>
+                  {audit.history.routeReceipt.tool_events?.length ? (
+                    <div className="mt-3 space-y-2">
+                      {audit.history.routeReceipt.tool_events.map((event, index) => (
+                        <div
+                          key={`${event.tool}-${index}`}
+                          className="rounded-lg border bg-background/80 p-2 text-xs"
+                        >
+                          <div className="font-medium">
+                            {event.tool} · {event.route ?? "—"}
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            候选 {event.candidate_count ?? "—"} · 返回 {event.returned_count ?? "—"}{" "}
+                            ·{" "}
+                            {event.next_offset == null
+                              ? "分页结束或未分页"
+                              : `下一页 ${event.next_offset}`}
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            宿主可见：{event.delivery?.host_visibility ?? "未测量"} · 回答使用：
+                            {event.delivery?.answer_use ?? "未测量"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      尚未记录同一绑定 ID 的历史工具事件。
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">读取模式</div>
+                  <div className="mt-1 font-medium break-words">{audit.history.mode}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">回执来源</div>
+                  <div className="mt-1 font-medium break-words">
+                    {controllerLabel(audit.history.controller)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">候选索引</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {audit.history.metrics.candidates ?? "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">本页候选预览</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {audit.history.metrics.returned ?? "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">待展开候选</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {audit.history.metrics.unread ?? "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">自动链路准入排除</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {audit.history.metrics.rejected ?? "—"}
+                  </div>
+                </div>
+              </div>
+              {audit.history.decision === "agent_decides" && (
+                <div className="rounded-lg border border-dashed bg-sky-50/70 px-3 py-2 text-xs leading-5 text-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+                  自动历史召回已关闭；当前页面没有宿主级工具回执，无法判断 Codex 是否调用或读取了历史结果。
+                </div>
+              )}
+              {audit.history.state === "unknown" && audit.history.decision !== "agent_decides" && (
+                <div className="rounded-lg border border-dashed bg-amber-50/60 px-3 py-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                  历史链路未核实：当前没有足够回执判断 Codex 是主动跳过，还是 recall/research
+                  回执未被投影。
+                </div>
+              )}
+              {audit.history.state === "not_observed" &&
+                audit.history.decision !== "agent_decides" && (
+                  <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                    本轮未调用历史工具，所以候选数量和内容为空；这不是加载失败，也不代表历史库为空。
+                  </div>
+                )}
+              <p className="text-sm leading-6 text-muted-foreground">
+                {isLegacyAutoHistory
+                  ? "这条旧记录发生在自动历史召回仍开启时：Controller 先做准入，Hook 再尝试投递。它只用于解释历史行为，不代表当前默认链路。"
+                  : "候选和原文由同回合 MCP 工具回执确认返回；页面把已返回内容作为本轮可见输入展示。"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                宿主送达：{audit.history.delivered ?? "未测量"} · 状态：{audit.history.delivery}
+              </p>
+              <EvidenceList items={audit.history.items} onSelect={setSelectedEvidence} />
+              {currentRow?.historical_audit?.admission_items?.length ? (
+                <>
+                  <p className="text-xs font-medium text-muted-foreground">历史自动链路准入样本</p>
+                  <EvidenceList
+                    items={currentRow.historical_audit.admission_items}
+                    onSelect={setSelectedEvidence}
+                  />
+                </>
+              ) : null}
+            </div>
+          )}
+          {active === "answer" && (
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">{copy.answer}</p>
+          )}
+          {!audit && <p className="mt-4 text-sm text-muted-foreground">{copy.select}</p>}
+        </aside>
+      </div>
+      <Dialog open={nodeOpen} onOpenChange={setNodeOpen}>
+        <DialogContent className="max-h-[88vh] min-w-0 overflow-y-auto [overflow-wrap:anywhere] sm:max-w-3xl" style={{ width: "calc(100vw - 2rem)" }}>
+          <DialogTitle>{activeNode.title}</DialogTitle>
+          <DialogDescription>{activeNode.value}</DialogDescription>
+          {active === "entry" && audit?.entry.instruction ? (
+            <div className="whitespace-pre-wrap text-sm leading-7">{audit.entry.instruction.core_text}</div>
+          ) : null}
+          {active === "guidance" && audit ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">以下为本轮已返回的偏好候选；deferred 项需要按 ID 继续补读。</p>
+              <EvidenceList items={audit.guidance.items} onSelect={(item) => { setNodeOpen(false); setSelectedEvidence(item); }} />
+            </div>
+          ) : null}
+          {active === "history" && audit ? (
+            <ToolRail history={{ route: audit.history.value, state: audit.history.state, decision: audit.history.decision, metrics: audit.history.metrics, items: audit.history.items, routeReceipt: audit.history.routeReceipt, timeWindowActivity: audit.timeWindowActivity, timeWindowGuidanceActivity: audit.timeWindowGuidanceActivity, preferenceItems: audit.guidance.items, preferenceCount: audit.guidance.count }} />
+          ) : null}
+          {active === "answer" ? <p className="text-sm leading-6 text-muted-foreground">{copy.answer}</p> : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={manualOpen} onOpenChange={setManualOpen}>
+        <DialogContent
+          className="min-w-0 max-h-[85vh] overflow-y-auto [overflow-wrap:anywhere]"
+          style={{ width: "calc(100vw - 2rem)", maxWidth: "42rem" }}
+        >
+          <DialogTitle>本轮记忆使用说明</DialogTitle>
+          <DialogDescription>展示该次入口回执保存的说明版本与正文。</DialogDescription>
+          {audit?.entry.instruction ? (
+            <div className="space-y-4 text-sm">
+              <p className="break-all font-mono text-xs">
+                {audit.entry.instruction.instruction_version}
+              </p>
+              <p className="whitespace-pre-wrap leading-7">{audit.entry.instruction.core_text}</p>
+              <dl className="space-y-2 text-xs text-muted-foreground">
+                <dt>来源文件</dt>
+                <dd className="break-all">{audit.entry.instruction.source_file}</dd>
+                <dt>内容 SHA-256</dt>
+                <dd className="break-all">{audit.entry.instruction.content_sha256}</dd>
+              </dl>
+            </div>
+          ) : (
+            <p className="text-sm">旧回执没有保存说明正文，不能用当前版本替代当时的送达证据。</p>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+        <DialogContent className="max-h-[88vh] min-w-0 overflow-y-auto [overflow-wrap:anywhere] sm:max-w-3xl" style={{ width: "calc(100vw - 2rem)" }}>
+          <DialogTitle>{mapMode === "latest" ? "最新 Memory Map" : "本轮 Memory Map"}</DialogTitle>
+          <DialogDescription>{mapMode === "latest" ? "查看当前目录与覆盖状态；不替代所选历史回合的地图回执。" : "展示该 Prompt 当时保存的地图。旧回合不会被最新目录改写。"}</DialogDescription>
+          <div className="flex flex-wrap gap-2"><button className={`rounded border px-3 py-2 text-xs ${mapMode === "recorded" ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setMapMode("recorded"); setBrowseTopic(null); }}>本轮地图快照</button><button className={`rounded border px-3 py-2 text-xs ${mapMode === "latest" ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setMapMode("latest"); setBrowseTopic(null); }}>浏览最新地图与来源</button></div>
+          {navigation ? <div className="space-y-5 text-sm">
+            <section>
+              <div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold text-cyan-800 dark:text-cyan-200">L0 · 每轮总览</h3><span className="text-xs text-muted-foreground">{navigation.context_chars ?? "—"} 字符</span></div>
+              <details className="mt-3"><summary className="cursor-pointer text-sm text-muted-foreground">五维偏好入口 · {navigation.preferences?.approved_count ?? "—"} 条 · 展开场景</summary><div className="mt-3 space-y-2">
+                {(navigation.preferences?.dimensions ?? []).map((dimension) => <div key={dimension.id ?? dimension.label} className="border-l-2 border-amber-400 pl-3">
+                  <div className="font-medium">{dimension.label ?? dimension.id} · {dimension.count ?? "—"} 条</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{(dimension.scopes ?? []).map((scope) => scope.scope).filter(Boolean).join(" / ") || "场景预览未保存"}</div>
+                </div>)}
+              </div></details>
+              {navigation.bank?.hierarchy_coverage?.total_memory_count != null && <div className="mt-4 rounded border border-cyan-200 bg-cyan-50 p-3 text-xs leading-6 dark:border-cyan-900 dark:bg-cyan-950"><strong>Bank 全库导航</strong> · {navigation.bank.hierarchy_coverage.indexed_memory_count} / {navigation.bank.hierarchy_coverage.total_memory_count} 条已归组 · {navigation.bank.hierarchy_coverage.unassigned_memory_count} 条待整理<p>跨领域记录可出现在多个入口，各领域数量不可直接相加。摘要经来源样本检查，尚不代表逐条事实或语义归类都已核实。</p></div>}
+              <div className="mt-2 text-[10px] text-muted-foreground">以下为 L0 导航摘要，不是该主题的完整正文；进入目录后再看 L1 与来源。</div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {(navigation.bank?.topics ?? []).map((topic) => <button key={topic.topic_id ?? topic.title} className="min-w-0 rounded border bg-muted/20 p-3 text-left hover:border-cyan-500 focus-visible:outline-cyan-600" onClick={() => setBrowseTopic(topic.topic_id ?? null)}>
+                  <div className="font-medium">{topic.title ?? topic.topic_id}</div>
+                  <div className="mt-1 line-clamp-4 text-xs leading-5 text-muted-foreground">{topic.navigation_summary ?? "导航摘要未保存"}</div>
+                  <div className="mt-2 text-xs text-cyan-800 dark:text-cyan-200">{topic.memory_count != null ? `${topic.memory_count} 条 · ${topic.children?.length ?? 0} 个 L1 · ` : ""}{topic.source_count != null ? `${topic.source_count_semantics === "unique_documents_in_full_membership" ? "" : "样本至少 "}${topic.source_count} 个文档 · ` : ""}进入目录 →</div>
+                </button>)}
+              </div>
+            </section>
+            {browseTopic && <NavigationTopicBrowser topicId={browseTopic} bankId={params.bankId} />}
+            <section className="border-t pt-4">
+              <h3 className="font-semibold">L1 · 目录预览</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{navigation.bank?.hierarchy_coverage?.leaf_count ? `${navigation.bank.hierarchy_coverage.leaf_count} 个具体主题覆盖已归组记录。` : "此快照尚无全库分层目录。"} 名称索引 {navigation.bank?.searchable_entity_count ?? "—"} 项；另保留 {navigation.bank?.entity_count ?? "—"} 个实体详情预览。点击上方领域进入最新 L1，可查看来源与原文。</p>
+            </section>
+            {navigation.context_text && <details className="border-t pt-3"><summary className="cursor-pointer text-sm font-medium">查看实际提供给 Agent 的 L0 文本</summary><pre className="mt-3 whitespace-pre-wrap text-xs leading-6">{navigation.context_text}</pre></details>}
+            <section className="border-t pt-4">
+              <h3 className="font-semibold">L2 · 所选回合的实际读取</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{!audit || ["not_observed", "unknown", "agent_decides"].includes(audit.map.l2.actualRoute) ? "当前页面没有可核验的 recall / research / read_source 回执，无法展示 Agent 实际看到的内容。" : `页面收到路线回执 ${audit.map.l2.actualRoute}；候选 ${audit.map.l2.candidates ?? "—"}；返回 ${audit.map.l2.returned ?? "—"}；未读 ${audit.map.l2.unread ?? "—"}。`}</p>
+              {!!audit?.map.l2.items.length && <div className="mt-3"><EvidenceList items={audit.map.l2.items.slice(0, 6)} onSelect={setSelectedEvidence} /></div>}
+            </section>
+          </div> : <p className="text-sm">该历史回执未保存本轮地图，不能用当前地图替代。</p>}
+        </DialogContent>
+      </Dialog>
+      {selectedEvidence && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="候选详情"
+        >
+          <div className="max-h-[75vh] w-full max-w-2xl overflow-y-auto rounded-lg border bg-background p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedEvidence.type ?? "evidence"}
+                </p>
+                <h3 className="mt-1 font-semibold">候选详情</h3>
+              </div>
+              <button
+                onClick={() => setSelectedEvidence(null)}
+                className="rounded border px-2 py-1 text-sm hover:bg-muted"
+              >
+                关闭
+              </button>
+            </div>
+            <dl className="mt-5 space-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">记录 ID</dt>
+                <dd className="mt-1 break-all font-mono text-xs">{selectedEvidence.id}</dd>
+              </div>
+              {typeof selectedEvidence.score === "number" && (
+                <div>
+                  <dt className="text-xs text-muted-foreground">分数</dt>
+                  <dd className="mt-1">{selectedEvidence.score.toFixed(3)}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-xs text-muted-foreground">候选预览</dt>
+                <dd className="mt-1 whitespace-pre-wrap leading-6">
+                  {displayEvidence(selectedEvidence)}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
