@@ -1,0 +1,9 @@
+[
+  {"id":"architecture","title":"Evolving Profile 架构与演进","aliases":["EP","Evolving Profile","Hindsight","Query Controller","Memory Map","HAM-OS"],"navigation_summary":"版本演进、组件分工、Hook/地图/检索的决策依据","questions":["系统名称、组件职责和兼容边界怎样变化？","当前架构与历史方案应如何区分？","某个 Controller、Hook、MCP 或 Bank 位于哪一层？"]},
+  {"id":"backup-storage","title":"备份、恢复与存储治理","aliases":["备份","恢复","云备份","存储","清理","WPS"],"navigation_summary":"本地/云端备份、保留和清理决策、恢复验证记录","questions":["备份方式、保留安排和空间清理如何演进？","最近一次恢复或完整性验证有哪些来源？","历史状态能否代表当前健康状态？"]},
+  {"id":"xiaodai-feishu","title":"小黛与飞书交付可靠性","aliases":["小黛","飞书","CardKit","空回复","流式"],"navigation_summary":"空回复/流式/投递故障、修复过程、最终消息回执","questions":["空回复、投递失败和流式显示分别发生在哪一层？","当前入口、回执和可见消息怎样核验？","历史故障与当前状态如何区分？"]},
+  {"id":"trainer","title":"导学复习训练系统","aliases":["Trainer","导学复习训练师","Y Core","复习","队列"],"navigation_summary":"导学机制、复习队列、目标结算、提醒与页脚约定","questions":["导学、复习队列和目标状态如何衔接？","当前服务与历史 OpenClaw 入口怎样区分？","固定页脚、结算和提醒有哪些来源？"]},
+  {"id":"crm","title":"CRM 与审批后修改流程","aliases":["CRM","报销","审核后修改","金智"],"navigation_summary":"审批后字段修改、权限开关恢复、单据操作证据","questions":["已审批记录的字段如何受控修改并恢复限制？","哪一步需要当前 UI 与权限验证？","历史操作能否证明当前设置？"]},
+  {"id":"institutional-delivery","title":"高校与政企项目交付方法","aliases":["高校","政企","申报书","投标","PPT","DOCX","课程"],"navigation_summary":"项目底稿、课程/场景/预算关联、格式与验收纠错","questions":["正式材料的权威底稿、格式和验收要求是什么？","课程、场景、预算和设备如何形成同一闭环？","哪些规则只适用于特定项目或媒介？"]},
+  {"id":"tool-infrastructure","title":"Codex、OpenClaw、Hermes 与工具基础设施","aliases":["Codex","OpenClaw","Hermes","MCP","Computer Use","Hook"],"navigation_summary":"工具接入、宿主能力、真实调用、故障恢复与回滚","questions":["工具、宿主和服务的当前能力边界是什么？","配置存在、工具枚举和真实调用应如何分别验收？","失败时有哪些恢复与回滚来源？"]}
+]
