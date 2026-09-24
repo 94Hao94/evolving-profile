@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 HISTORY_TOOL_NAMES={f'mcp__{controller}__{operation}'
  for controller in ('evolving_profile_controller','hindsight_controller')
- for operation in ('recall','research','read_research')}
+ for operation in ('recall','research','read_research','read_source','find_sources')}
 HOME=Path.home()
 ROOT=Path(__file__).resolve().parent.parent
 STATE_ROOT=Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT', str(HOME/'.evolving-profile')))
@@ -21,7 +21,7 @@ from topic_catalog import TopicCatalog,knowledge_review,redact_unreviewed_page
 from lib.memory_policy import classify_memory_policy
 API=os.environ.get('EVOLVING_PROFILE_API_URL','http://127.0.0.1:12088')
 CONTROLLER=os.environ.get('EVOLVING_PROFILE_CONTROLLER_URL','http://127.0.0.1:12079')
-BANK='personal-memory'
+BANK=os.environ.get('EVOLVING_PROFILE_BANK_ID','personal-memory')
 PAGE_FILE=STATE_ROOT/'control-plane/recall-observability.html'
 GUIDANCE_V1_SRC=ROOT/'guidance'
 GUIDANCE_V1_CONFIG=STATE_ROOT/'guidance-v1/guidance-v1.json'
@@ -132,64 +132,29 @@ def _catalog_probe(prompt):
    return {'status':'catalog_observed','candidate_count':len(topics),'matched_entities':entities,
            'entity_count':sum(len(row.get('entities') or []) for row in topics),'catalog_coverage':'partial_navigation_projection',
            'hints':[{k:row.get(k) for k in fields} for row in topics]}
-  compact=''.join(str(prompt or '').casefold().split())
-  historical_signal=any(term in compact for term in ('之前','过去','历史','记得','曾经','上次','上回','以前','去年','回顾','后来','那次','当时','已经拍板','咱们定过','当初','继续','怎么处理','怎么修','怎么办'))
-  if not historical_signal:
-   return {'status':'catalog_miss','candidate_count':0,'matched_entities':[],'entity_count':0,'catalog_coverage':'partial_navigation_projection','hints':[]}
-  path=f'/v1/default/banks/{urllib.parse.quote(BANK,safe="")}/memories/recall'
-  request=urllib.request.Request(API+path,data=json.dumps({'query':prompt,'budget':'low','max_tokens':400}).encode(),headers={'Content-Type':'application/json','X-Memory-Client':'evolving-profile-memory-map'},method='POST')
-  with urllib.request.urlopen(request,timeout=3) as response:value=json.loads(response.read())
-  bank_entities=value.get('entities') or {};query=str(prompt or '').casefold()
-  def useful_entity(name):
-   entity=str(name or '').strip();compact_entity=re.sub(r'\s+','',entity)
-   return entity not in {'助手','用户','用户','user','assistant'} and (len(entity)>=3 or (len(compact_entity)>=2 and re.fullmatch(r'[\u4e00-\u9fff]+',compact_entity)))
-  matched=[str(row.get('canonical_name') or name) for name,row in bank_entities.items() if useful_entity(row.get('canonical_name') or name) and str(row.get('canonical_name') or name).casefold() in query]
-  hints=[]
-  for row in (value.get('results') or [])[:5]:
-   kind=row.get('type') or row.get('fact_type') or 'memory';kind_label={'world':'事实','experience':'经历','observation':'观察'}.get(str(kind),str(kind))
-   topic=('、'.join(matched[:3])+'相关'+kind_label+'记录') if matched else ('与当前问题语义相关的'+kind_label+'记录')
-   hints.append({'memory_id':row.get('id'),'type':kind,'topic':topic,'mentioned_at':row.get('mentioned_at'),'occurred_start':row.get('occurred_start'),'occurred_end':row.get('occurred_end'),'document_id':row.get('document_id'),'state':row.get('state','unknown')})
-  return {'status':'bank_fallback_observed','candidate_count':len(value.get('results') or []),'matched_entities':matched[:12],'entity_count':len(bank_entities),'catalog_coverage':'catalog_miss_raw_bank_fallback','hints':hints}
+  return {'status':'catalog_miss','candidate_count':0,'matched_entities':[],'entity_count':0,'catalog_coverage':'partial_navigation_projection','hints':[]}
  except Exception as error:
   return {'status':'unavailable','candidate_count':None,'matched_entities':[],'error_type':type(error).__name__}
 
 def memory_check(prompt=''):
- policy=classify_memory_policy(prompt)
- instruction_text=re.sub(r'```[\s\S]*?```|~~~[\s\S]*?~~~|"[^"\n]*"|“[^”]*”|‘[^’]*’|「[^」]*」|`[^`]*`',' ',str(prompt or ''))
- text=''.join(instruction_text.casefold().split())
- live_terms=('本机现在','当前安装','用终端查','实时状态','现场状态','电脑上python','以命令运行结果为准','以命令结果为准')
- supplied_text_terms=('翻译这句话','只翻译','译成英文','译成中文','只解释','只对以下','下面两条','把这句话','按当前粘贴','只看上述','不涉及我的经历','所有素材都在这次附件','不涉及已发生的项目','代码就在工作区','这是通识问题','刚写的方案','正在解释','依据刚才这次实测')
- source_terms=('原文','出处','来源','逐字','引用','read_source')
- source_actions=('核对','查找','找出','回读','读取','确认','给出')
- research_terms=('时间线','多个实体','多实体','跨项目','完整链路','几次','串起','对照','梳理','综合','分别回读','多个任务','十个任务','几轮改动')
- complex_terms=('关联','冲突','因果','原因和结果','经过','反例')
- history_terms=('之前','过去','历史','记得','偏好','曾经','上次','上回','以前','去年','回顾','recall','bank','记忆','已经拍板','咱们定过','当初')
- forbidden=not policy['history_allowed']
- historical=any(term in text for term in history_terms) or any(term in text for term in ('后来','那次','当时','又','还按之前','继续'))
- explanation_current=any(term in text for term in ('解释','科普','技术原理','当前代码里的区别')) and not historical
- contextual_calculation=bool(re.search(r'\d+(?:乘以|加|减|除以|[×x*+\-/])\d+',text)) and any(term in text for term in ('当前问题','再加','计算','等于'))
- arithmetic=bool(re.fullmatch(r'(?:请?计算)?\d+(?:\.\d+)?[×x*+\-/]\d+(?:\.\d+)?[？?]?',text,re.I)) or contextual_calculation
- language_edit=bool(re.search(r'(?:以下|下面|这段|这句话|上述|所给)(?:段落|文字|文本|句子|内容)?',text) and re.search(r'病句|润色|翻译|译成|校对|改写|改成|替换|只做修改',text) and not re.search(r'回顾|检索|查找|查询|核对历史|找原话',text))
- live_local=bool(re.search(r'本机|这台电脑|电脑上',text) and re.search(r'当前|此刻|现在|实时',text) and re.search(r'系统命令|命令结果|终端|读取|查看|检查',text))
- self_contained_override=arithmetic or language_edit or live_local
- trivial=self_contained_override or ((any(term in text for term in supplied_text_terms) or any(term in text for term in live_terms) or explanation_current or bool(re.search(r'(?:分别)?(?:是)?什么意思|英文单词',text))) and not historical)
- if forbidden:probe={'status':'forbidden','candidate_count':None,'matched_entities':[],'entity_count':0,'hints':[]}
- elif trivial:probe={'status':'skipped_self_contained','candidate_count':None,'matched_entities':[],'entity_count':0,'hints':[]}
+ from system_probe import plan_history
+ plan=plan_history(prompt)
+ policy=plan['memory_policy']
+ if not policy['history_allowed']:
+  probe={'status':'forbidden','candidate_count':None,'hints':[]}
+ elif plan['minimum_action']=='skip':
+  probe={'status':'skipped_self_contained','candidate_count':None,'hints':[]}
+ elif 'catalog' in policy['denied_tools']:
+  probe={'status':'forbidden_tool','candidate_count':None,'hints':[]}
  else:probe=_catalog_probe(prompt)
- source_lookup=(bool(re.search(r'[0-9a-f]{8}-[0-9a-f-]{27,}',text)) or (any(term in text for term in source_terms) and any(term in text for term in source_actions))) and not trivial
- multi_object_count=sum(term in text for term in ('crm','飞书','学校','小黛','trainer','openclaw','hermes','高校','政企'))
- complex_history=any(term in text for term in ('时间线','跨项目','完整链路','几次','串起')) or (multi_object_count>=2 and any(term in text for term in ('梳理','综合','分别回读','工作方式','做事习惯'))) or ((any(term in text for term in research_terms) or sum(term in text for term in complex_terms)>=2 or multi_object_count>=2) and historical)
- if forbidden or trivial:route='skip';reason='用户明确限制历史读取，或当前问题所需信息已完整包含在本轮输入/实时工具中。'
- elif complex_history and 'research' not in policy['denied_tools']: route='research'; reason='问题同时包含历史依赖与多对象、时间线、冲突或关联闭包；应建立可分页证据工作区。'
- elif source_lookup: route='read_source' if re.search(r'[0-9a-f]{8}-[0-9a-f-]{27,}',text) else 'agent_decides'; reason='问题可能要求核对原文或出处；没有稳定来源定位时由当前Agent先发现候选，再决定是否回读。'
- else:
-  route='agent_decides'
-  reason=('文本包含历史依赖信号，当前Agent应结合完整任务与目录判断是否recall；弱规则不作硬裁决。' if historical else
-          '目录提供导航线索；当前Agent结合完整任务判断当前上下文是否足够，目录命中与未命中都不是事实结论。')
- signals={'guidance':('偏好','表达','交付','验收'),'mental-models':('心智模型','模型','框架'),'world':('事实','状态','版本','当前'),'experience':('经历','之前','过去','上次','回顾'),'entities':('实体','关系','时间线','冲突','因果'),'observations':('观察','候选','归纳'),'sources':('原文','出处','来源','逐字','引用')};matched=[node for node,tokens in signals.items() if any(token in text for token in tokens)]
- suggested_tools=[] if (forbidden or trivial) else ((['recall'] if historical else [])+(['catalog_search'] if probe.get('candidate_count') else []))
- suggested_tools=[tool for tool in dict.fromkeys(suggested_tools) if tool not in policy['denied_tools']]
- return {'schema':'evolving-profile.memory-check.v2','query':prompt,'decision':route,'recommended_route':route,'reason':reason,'matched_nodes':matched,'catalog_probe':{k:v for k,v in probe.items() if k!='hints'},'catalog_hints':probe.get('hints') or [],'suggested_tools':suggested_tools,'memory_policy':policy,'confidence':1.0 if route in {'skip','read_source','research'} else None,'confidence_semantics':'deterministic_boundary_only; agent_decides_has_no_probability','requires_receipt':True,'agent_may_override':True}
+ text=str(prompt).casefold()
+ nodes=[]
+ if plan['history_dependency']=='complex':nodes.append('entities')
+ if any(term in text for term in ('原文','来源','出处')):nodes.append('sources')
+ return {**plan,'schema':'evolving-profile.memory-check.v3',
+         'matched_nodes':nodes,'catalog_probe':{k:v for k,v in probe.items() if k!='hints'},
+         'catalog_hints':probe.get('hints') or [],'confidence':None,
+         'confidence_semantics':'heuristic_hint_not_probability','requires_receipt':True}
 def guidance_v1_models():
  try:
   if str(GUIDANCE_V1_SRC) not in sys.path:sys.path.insert(0,str(GUIDANCE_V1_SRC))
@@ -286,7 +251,7 @@ def _hook_output_rows():
  # projection in a short-lived jq process so nested candidate/source payloads
  # never accumulate in this long-lived status server.
  paths=sorted((root/'production').glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:300]
- jq_filter=('{raw_user_prompt,session_id,turn_id,hook_invocation_id,memory_action,history_decision,history_decision_evidence,candidate_count,injected_count,memory_needs,'
+ jq_filter=('{raw_user_prompt,session_id,turn_id,hook_invocation_id,memory_action,history_decision,history_decision_evidence,candidate_count,injected_count,memory_needs,system_probe,history_plan,'
    'memory_effectiveness:{actual_injected_count:(.memory_effectiveness.actual_injected_count // .memory_effectiveness.injected_count // .injected_count),'
    'injected_ids:(.memory_effectiveness.injected_ids // [] | .[:100]),'
    'source_reads:(.memory_effectiveness.source_reads // [] | .[:20]),'
@@ -300,7 +265,7 @@ def _hook_output_rows():
    if raw:
     rows.append({'_raw_prompt':raw,'session_id':row.get('session_id'),'turn_id':row.get('turn_id'),'hook_invocation_id':row.get('hook_invocation_id'),
       'memory_action':row.get('memory_action'),'history_decision':row.get('history_decision'),'history_decision_evidence':row.get('history_decision_evidence'),'candidate_count':row.get('candidate_count'),'memory_needs':row.get('memory_needs') or {},
-      'memory_effectiveness':row.get('memory_effectiveness') or {}})
+      'memory_effectiveness':row.get('memory_effectiveness') or {},'system_probe':row.get('system_probe'),'history_plan':row.get('history_plan')})
   except Exception: pass
  return rows
 
@@ -322,61 +287,163 @@ def _global_mcp_activity_rows(limit=4000):
   except (ValueError,TypeError):continue
  return rows
 
-def _time_window_tool_activity(prompt_at, route_receipts=None, window_minutes=3, global_activity=None):
- """Aggregate post-Prompt MCP tool events without attributing them to this Prompt."""
- try:
-  anchor=datetime.fromisoformat(str(prompt_at).replace('Z','+00:00'))
-  if anchor.tzinfo is None: anchor=anchor.replace(tzinfo=timezone.utc)
- except (TypeError,ValueError,OverflowError):
-  return {'state':'not_observed','event_count':0,'by_tool':{},'events':[],
-          'boundary':'post_prompt_window_only_not_prompt_attributed','reason':'prompt_time_unavailable'}
- minutes=max(1,min(60,int(window_minutes or 5)));delta=timedelta(minutes=minutes)
- start=anchor;end=anchor+delta;events=[]
- sources=list(global_activity or [])
- for receipt in route_receipts or []: sources.extend(receipt.get('tool_events') or [])
- for event in sources:
-   if not isinstance(event,dict) or not event.get('at'):continue
-   try:at=datetime.fromisoformat(str(event.get('at')).replace('Z','+00:00'))
-   except (TypeError,ValueError,OverflowError):continue
-   if at.tzinfo is None:at=at.replace(tzinfo=timezone.utc)
-   if start<=at<=end:
-    raw=str(event.get('tool') or 'unknown');tool=raw.rsplit('__',1)[-1]
-    if tool not in {'recall','research','read_research','read_source','find_sources'}:continue
-    events.append({'tool':tool,'at':event.get('at'),'returned_count':event.get('returned_count'),'candidate_count':event.get('candidate_count'),'research_id':event.get('research_id'),'memory_id':event.get('memory_id'),'memory_ids':list(event.get('memory_ids') or [])[:50]})
+def _as_utc(value):
+ try:parsed=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+ except (TypeError,ValueError,OverflowError):return None
+ return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+def _bound_to_prompt(event, prompt_binding, prompt_ingress, fallback_binding=None):
+ """Require an exact check/hook ID and reject it after a newer same-session Prompt."""
+ event=dict(event or {});fallback_binding=dict(fallback_binding or {})
+ event_id=str(event.get('hook_invocation_id') or event.get('check_id') or event.get('tool_call_id') or fallback_binding.get('hook_invocation_id') or '')
+ prompt_id=str((prompt_binding or {}).get('hook_invocation_id') or '')
+ if not prompt_id or event_id!=prompt_id:return False
+ session_id=str(event.get('session_id') or fallback_binding.get('session_id') or '')
+ prompt_session=str((prompt_binding or {}).get('session_id') or '')
+ if session_id and prompt_session and session_id!=prompt_session:return False
+ event_at=_as_utc(event.get('at'))
+ if event_at and session_id:
+  latest=None;latest_at=None
+  for row in prompt_ingress or []:
+   if str(row.get('session_id') or '')!=session_id:continue
+   at=_as_utc(row.get('at'))
+   if at is not None and at<=event_at and (latest_at is None or at>latest_at):
+    latest=row;latest_at=at
+  if latest and str(latest.get('hook_invocation_id') or '')!=prompt_id:return False
+ return True
+
+def _event_key(event):
+ return (str(event.get('check_id') or event.get('hook_invocation_id') or ''),
+         str(event.get('tool') or ''),str(event.get('research_id') or ''),
+         str(event.get('memory_id') or ''),tuple(event.get('memory_ids') or []),
+         int(event.get('returned_count') or 0),str(event.get('at') or ''))
+
+def _activity_counts(events):
  by_tool={}
  for event in events:
-  bucket=by_tool.setdefault(event['tool'],{'calls':0,'returned':0,'latest_at':None})
+  tool=str(event.get('tool') or 'unknown');bucket=by_tool.setdefault(tool,{'calls':0,'returned':0,'latest_at':None})
   bucket['calls']+=1;bucket['returned']+=int(event.get('returned_count') or 0)
   bucket['latest_at']=max(bucket['latest_at'] or event['at'],event['at'])
- return {'state':'observed' if events else 'not_observed','window_minutes':minutes,'start':start.isoformat(),'end':end.isoformat(),
-         'event_count':len(events),'by_tool':by_tool,'events':sorted(events,key=lambda item:item['at'])[-20:],
-         'boundary':'post_prompt_window_only_not_prompt_attributed'}
+ return by_tool
 
-def _time_window_guidance_activity(prompt_at, entry_receipts=None, deliveries=None, window_minutes=3, global_activity=None):
- """Aggregate post-Prompt guidance receipts without claiming exact binding."""
- try:
-  anchor=datetime.fromisoformat(str(prompt_at).replace('Z','+00:00'))
-  if anchor.tzinfo is None: anchor=anchor.replace(tzinfo=timezone.utc)
- except (TypeError,ValueError,OverflowError):
-  return {'state':'not_observed','window_minutes':window_minutes,'returned_count':0,'boundary':'post_prompt_window_only_not_prompt_attributed'}
- minutes=max(1,min(60,int(window_minutes or 5)));end=anchor+timedelta(minutes=minutes);records=[]
+def _time_window_tool_activity(prompt_at, route_receipts=None, window_minutes=2, global_activity=None,
+                               prompt_binding=None, prompt_ingress=None):
+ """Separate same-Prompt MCP calls from anonymous global events in the same time window."""
+ anchor=_as_utc(prompt_at)
+ if anchor is None:
+  return {'state':'not_observed','event_count':0,'by_tool':{},'events':[],
+          'unattributed_activity':{'state':'not_observed','event_count':0,'by_tool':{}},
+          'boundary':'same_prompt_binding_only','reason':'prompt_time_unavailable'}
+ minutes=max(1,min(60,int(window_minutes or 2)));start=anchor;end=anchor+timedelta(minutes=minutes)
+ binding=dict(prompt_binding or {})
+ if not binding:
+  binding=dict(next(((receipt.get('prompt_binding') or {}) for receipt in route_receipts or []
+                     if (receipt.get('prompt_binding') or {}).get('hook_invocation_id')),{}))
+ exact=[];unattributed=[];seen_exact=set();seen_unattributed=set()
+ allowed={'recall','research','read_research','read_source','find_sources'}
+ def in_window(event):
+  at=_as_utc(event.get('at'))
+  return at is not None and start<=at<=end
+ def compact(event):
+  raw=str(event.get('tool') or 'unknown');tool=raw.rsplit('__',1)[-1]
+  return {'tool':tool,'at':event.get('at'),'check_id':event.get('check_id') or event.get('hook_invocation_id'),
+          'returned_count':event.get('returned_count'),'candidate_count':event.get('candidate_count'),
+          'research_id':event.get('research_id'),'memory_id':event.get('memory_id'),
+          'memory_ids':list(event.get('memory_ids') or [])[:50]}
+ for receipt in route_receipts or []:
+  receipt_binding=receipt.get('prompt_binding') or {}
+  receipt_id=str(receipt_binding.get('hook_invocation_id') or '')
+  if receipt_id and binding.get('hook_invocation_id') and receipt_id!=str(binding['hook_invocation_id']):continue
+  for event in receipt.get('tool_events') or []:
+   if not isinstance(event,dict) or not in_window(event):continue
+   normalized=compact(event)
+   if normalized['tool'] not in allowed:continue
+   value={**event,'tool':normalized['tool']}
+   key=_event_key(value)
+   if _bound_to_prompt(value,binding,prompt_ingress,receipt_binding):
+    if key not in seen_exact:exact.append(normalized);seen_exact.add(key)
+   elif key not in seen_unattributed:
+    unattributed.append({'tool':normalized['tool'],'at':normalized['at'],'returned_count':normalized['returned_count']});seen_unattributed.add(key)
+ for event in global_activity or []:
+  if not isinstance(event,dict) or not in_window(event):continue
+  normalized=compact(event)
+  if normalized['tool'] not in allowed:continue
+  key=_event_key({**event,'tool':normalized['tool']})
+  if _bound_to_prompt(event,binding,prompt_ingress):
+   if key not in seen_exact:exact.append(normalized);seen_exact.add(key)
+  elif key not in seen_unattributed:
+   unattributed.append({'tool':normalized['tool'],'at':normalized['at'],'returned_count':normalized['returned_count']});seen_unattributed.add(key)
+ return {'state':'observed' if exact else 'not_observed','window_minutes':minutes,'start':start.isoformat(),'end':end.isoformat(),
+         'event_count':len(exact),'by_tool':_activity_counts(exact),'events':sorted(exact,key=lambda item:item['at'])[-20:],
+         'unattributed_activity':{'state':'observed' if unattributed else 'not_observed','window_minutes':minutes,
+          'start':start.isoformat(),'end':end.isoformat(),'event_count':len(unattributed),'by_tool':_activity_counts(unattributed),
+          'boundary':'global_window_activity_not_bound_to_this_prompt; candidate_details_omitted'},
+         'boundary':'same_prompt_binding_only'}
+
+def _time_window_guidance_activity(prompt_at, entry_receipts=None, deliveries=None, window_minutes=2,
+                                   global_activity=None, prompt_binding=None, prompt_ingress=None):
+ """Show guidance deliveries only when tied to this Prompt; aggregate the rest without IDs."""
+ anchor=_as_utc(prompt_at)
+ if anchor is None:
+  return {'state':'not_observed','window_minutes':window_minutes,'returned_count':0,
+          'unattributed_activity':{'state':'not_observed','event_count':0,'returned_count':0},
+          'boundary':'same_prompt_binding_only'}
+ minutes=max(1,min(60,int(window_minutes or 2)));end=anchor+timedelta(minutes=minutes)
+ records=[];unattributed=[];seen=set()
  sources=list(entry_receipts or [])+list(deliveries or [])
- sources.extend(row for row in (global_activity or []) if 'get_task_guidance' in str(row.get('tool') or ''))
+ sources.extend(row for row in (global_activity or [])
+                if str(row.get('tool') or '').rsplit('__',1)[-1] in {'get_task_guidance','get_preference','read_guidance'})
  for row in sources:
   raw=row.get('at')
   if raw is None:continue
-  try:
-   at=datetime.fromtimestamp(float(raw),timezone.utc) if isinstance(raw,(int,float)) else datetime.fromisoformat(str(raw).replace('Z','+00:00'))
-  except (TypeError,ValueError,OverflowError):continue
-  if at.tzinfo is None:at=at.replace(tzinfo=timezone.utc)
-  if anchor<=at<=end:
-   guidance=(row.get('rendered_guidance') or row.get('result') or {}) if isinstance(row,dict) else {}
-   ids=[]
-   for key in ('included','stable_profile','guidance_items','model_sections'):
-    ids.extend(item.get('id') or item.get('section_id') for item in (guidance.get(key) or []) if isinstance(item,dict))
-   records.append({'at':at.isoformat(),'guidance_count':int(row.get('guidance_count') or row.get('entry_context_included_count') or row.get('included_count') or 0),'deferred_count':int(row.get('deferred_count') or 0),'ids':list(dict.fromkeys(value for value in ids if value))[:50],'host_state':row.get('host_state') or row.get('delivery_stage') or 'observed'})
+  at=datetime.fromtimestamp(float(raw),timezone.utc) if isinstance(raw,(int,float)) else _as_utc(raw)
+  if at is None or not anchor<=at<=end:continue
+  tool=str(row.get('tool') or 'guidance').rsplit('__',1)[-1]
+  row_binding={'session_id':row.get('session_id'),'turn_id':row.get('turn_id'),
+               'hook_invocation_id':row.get('hook_invocation_id') or row.get('tool_call_id')}
+  value={**row,'tool':tool,'at':at.isoformat()}
+  if not _bound_to_prompt(value,prompt_binding,prompt_ingress,row_binding):
+   unattributed.append({'tool':tool,'at':at.isoformat(),
+                        'guidance_count':int(row.get('guidance_count') or row.get('entry_context_included_count') or row.get('included_count') or 0),
+                        'deferred_count':int(row.get('deferred_count') or 0)})
+   continue
+  key=_event_key(value)
+  if key in seen:continue
+  seen.add(key)
+  guidance=(row.get('rendered_guidance') or row.get('result') or {}) if isinstance(row,dict) else {}
+  ids=[]
+  for field in ('included','stable_profile','guidance_items','model_sections'):
+   ids.extend(item.get('id') or item.get('section_id') for item in (guidance.get(field) or []) if isinstance(item,dict))
+  records.append({'tool':tool,'at':at.isoformat(),
+   'guidance_count':int(row.get('guidance_count') or row.get('entry_context_included_count') or row.get('included_count') or 0),
+   'deferred_count':int(row.get('deferred_count') or 0),'ids':list(dict.fromkeys(value for value in ids if value))[:50],
+   'host_state':row.get('host_state') or row.get('delivery_stage') or 'observed'})
  all_ids=list(dict.fromkeys(value for item in records for value in item.get('ids') or []))
- return {'state':'observed' if records else 'not_observed','window_minutes':minutes,'start':anchor.isoformat(),'end':end.isoformat(),'event_count':len(records),'returned_count':sum(item['guidance_count'] for item in records),'deferred_count':sum(item['deferred_count'] for item in records),'ids':all_ids[:100],'events':sorted(records,key=lambda item:item['at'])[-20:],'boundary':'post_prompt_window_only_not_prompt_attributed'}
+ unattributed_by_tool={}
+ for item in unattributed:
+  bucket=unattributed_by_tool.setdefault(item['tool'],{'calls':0,'returned':0,'deferred':0,'latest_at':None})
+  bucket['calls']+=1;bucket['returned']+=item['guidance_count'];bucket['deferred']+=item['deferred_count']
+  bucket['latest_at']=max(bucket['latest_at'] or item['at'],item['at'])
+ return {'state':'observed' if records else 'not_observed','window_minutes':minutes,'start':anchor.isoformat(),'end':end.isoformat(),
+  'event_count':len(records),'returned_count':sum(item['guidance_count'] for item in records),
+  'deferred_count':sum(item['deferred_count'] for item in records),'ids':all_ids[:100],
+  'events':sorted(records,key=lambda item:item['at'])[-20:],
+  'unattributed_activity':{'state':'observed' if unattributed else 'not_observed','window_minutes':minutes,
+   'start':anchor.isoformat(),'end':end.isoformat(),'event_count':len(unattributed),
+   'returned_count':sum(item['guidance_count'] for item in unattributed),'deferred_count':sum(item['deferred_count'] for item in unattributed),
+   'by_tool':unattributed_by_tool,'boundary':'global_window_activity_not_bound_to_this_prompt; candidate_details_omitted'},
+  'boundary':'same_prompt_binding_only'}
+
+def _route_receipt_for_prompt(receipt, prompt_binding, prompt_ingress):
+ if not receipt:return None
+ value=dict(receipt);binding=dict(value.get('prompt_binding') or {})
+ events=[];unattributed_count=0
+ for event in value.get('tool_events') or []:
+  if _bound_to_prompt(event,prompt_binding,prompt_ingress,binding):events.append(event)
+  else:unattributed_count+=1
+ value['tool_events']=events
+ if unattributed_count:value['unattributed_tool_event_count']=unattributed_count
+ return value
 
 def _hydrate_time_window_content(activity,limit=16):
  value=dict(activity or {});ids=[]
@@ -658,6 +725,7 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
     'model_section_count':guidance.get('model_section_count',0),'deferred_count':guidance.get('deferred_count',0),
     'host_state':guidance.get('host_state'),'model_attention':guidance.get('model_attention'),
     'coverage':guidance.get('coverage'),'task':guidance.get('task') or {},
+    'stable_profile_count':guidance.get('stable_profile_count',0),'preference_candidate_count':guidance.get('preference_candidate_count',0),
     'guidance_items':[{'id':x.get('id'),'text':str(x.get('text') or '')[:1200]} for x in (guidance.get('guidance_items') or [])[:8] if isinstance(x,dict)],
     'model_sections':[{'section_id':x.get('section_id'),'text':str(x.get('text') or '')[:800]} for x in (guidance.get('model_sections') or [])[:8] if isinstance(x,dict)],
    }
@@ -666,6 +734,7 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
    hook_matches=[x for x in hooks if id(x) not in used_hook and x.get('_raw_prompt')==prompt]
   for x in hook_matches: used_hook.add(id(x))
   memory=[]; history_observed=False; source_observed=False; hook_history_decision=None; hook_history_decision_evidence=None
+  system_probe=next((item.get('system_probe') for item in hook_matches if item.get('system_probe')),None)
   for h in hook_matches:
    eff=h.get('memory_effectiveness') or {}
    injected=eff.get('actual_injected_count',eff.get('injected_count'))
@@ -697,6 +766,12 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
   historical_audit=None
   if trace and str((trace or {}).get('event') or '')=='recall':
    recall_projection=_project_recall_trace(trace);historical_audit={**recall_projection,'state':historical_state,'recall':recall_projection,'research':[]}
+  if system_probe and system_probe.get('calls'):
+   historical_state={'returned':'observed','empty':'executed_empty','unavailable':'unknown'}.get(system_probe.get('state'),'unknown')
+   historical_audit={'route':'system_probe_recall','mode':'system_probe','state':historical_state,
+    'controller_state':'system_probe_direct','candidate_count':system_probe.get('candidate_count'),
+    'returned_to_host_count':system_probe.get('returned_count'),'items':system_probe.get('items') or [],
+    'delivery_state':system_probe.get('delivery_stage'),'boundary':'system_probe_not_agent_expansion'}
   if research_matches:
    tool_names={str(page.get('tool_name') or '') for item in research_matches for page in (item.get('pages') or [])}
    agent_recall=any(name.endswith('__recall') for name in tool_names)
@@ -714,14 +789,21 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
    captured=_captured_history_for_turn(STATE_ROOT/'memory-os/capture/capture.sqlite3',row.get('session_id'),row.get('turn_id'))
    if captured:
     historical_audit=captured;historical_state='observed'
-  route_receipt=next((item for item in route_receipts if str((item.get('prompt_binding') or {}).get('hook_invocation_id') or '')==str(row.get('hook_invocation_id') or '')),None)
-  time_window_activity=_time_window_tool_activity(row.get('at'),route_receipts,window_minutes=3,global_activity=global_activity)
-  time_window_guidance_activity=_time_window_guidance_activity(row.get('at'),entry_receipts,delivery,window_minutes=3,global_activity=global_activity)
+  prompt_binding={'session_id':row.get('session_id'),'turn_id':row.get('turn_id'),'hook_invocation_id':row.get('hook_invocation_id')}
+  raw_route_receipt=next((item for item in route_receipts if str((item.get('prompt_binding') or {}).get('hook_invocation_id') or '')==str(row.get('hook_invocation_id') or '')),None)
+  route_receipt=_route_receipt_for_prompt(raw_route_receipt,prompt_binding,ingress)
+  time_window_activity=_time_window_tool_activity(row.get('at'),[route_receipt] if route_receipt else [],window_minutes=2,
+      global_activity=global_activity,prompt_binding=prompt_binding,prompt_ingress=ingress)
+  time_window_guidance_activity=_time_window_guidance_activity(row.get('at'),[entry_record] if entry_record else [],
+      [guidance] if guidance else [],window_minutes=2,global_activity=global_activity,
+      prompt_binding=prompt_binding,prompt_ingress=ingress)
   evidence_decision=_evidence_decision(row.get('hook_invocation_id'))
   history_decision = hook_history_decision or ('needed' if historical_state in ('observed','executed_empty','executed_no_result') else 'unknown')
   history_decision_evidence = hook_history_decision_evidence or ('recall_trace' if trace else 'hook_memory_effectiveness' if history_observed else 'missing_history_receipt')
   navigation=entry_record.get('navigation_map') or None
-  selected.append({'prompt_id':str(fp or hashlib.sha256(prompt.encode()).hexdigest()[:16])+':'+str(row.get('at') or ''),'at':row.get('at'),'user_prompt':prompt,'prompt_origin':row.get('prompt_origin'),'session_id':row.get('session_id'),'turn_id':row.get('turn_id'),'hook_invocation_id':row.get('hook_invocation_id'),'source':row.get('source'),'instruction_receipt':manual,'navigation_map':navigation,'guidance_receipt':guidance,'task_state':entry_record.get('task_state') or (guidance or {}).get('task_state'),'evidence_decision':evidence_decision,'hook_receipts':memory,'historical_audit':historical_audit,'memory_route_receipt':route_receipt,'time_window_activity':time_window_activity,'time_window_guidance_activity':time_window_guidance_activity,'history_decision':history_decision,'history_decision_evidence':history_decision_evidence,'routes':{'entry_guidance':'observed_entry_adapter','multi_dimensional_preference':'observed' if guidance or memory else 'not_observed','historical_memory':historical_state,'source_read':'observed' if source_observed else 'unknown'}})
+  row['system_probe']=system_probe
+  history_plan = next((item.get('history_plan') for item in hook_matches if item.get('history_plan')), None)
+  selected.append({'prompt_id':str(fp or hashlib.sha256(prompt.encode()).hexdigest()[:16])+':'+str(row.get('at') or ''),'at':row.get('at'),'user_prompt':prompt,'prompt_origin':row.get('prompt_origin'),'session_id':row.get('session_id'),'turn_id':row.get('turn_id'),'hook_invocation_id':row.get('hook_invocation_id'),'source':row.get('source'),'instruction_receipt':manual,'navigation_map':navigation,'guidance_receipt':guidance,'system_probe':system_probe,'history_plan':history_plan,'task_state':entry_record.get('task_state') or (guidance or {}).get('task_state'),'evidence_decision':evidence_decision,'hook_receipts':memory,'historical_audit':historical_audit,'memory_route_receipt':route_receipt,'time_window_activity':time_window_activity,'time_window_guidance_activity':time_window_guidance_activity,'history_decision':history_decision,'history_decision_evidence':history_decision_evidence,'routes':{'entry_guidance':'observed_entry_adapter','multi_dimensional_preference':'observed' if guidance or memory else 'not_observed','historical_memory':historical_state,'source_read':'observed' if source_observed else 'unknown'}})
  items=([row for row in selected if row.get('prompt_id')==detail_id] if detail_id else selected[offset:offset+max(1,min(50,int(limit)))])
  next_cursor=str(offset+len(items)) if offset+len(items)<len(selected) else None
  return {'schema':'guidance.user-prompt-list.v1','items':items,'count':len(items),'total':len(selected),'has_more':next_cursor is not None,'next_cursor':next_cursor,'host':host}

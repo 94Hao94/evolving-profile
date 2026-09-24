@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import re
 import sys
 import uuid
 import datetime
@@ -17,7 +18,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
-GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", "$HOME/.evolving-profile/runtime/guidance")
+GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", "/Users/apple/.evolving-profile/runtime/guidance")
 if GUIDANCE_V1_SRC not in sys.path:
     sys.path.insert(0, GUIDANCE_V1_SRC)
 from evidence_workspace import discover, search, read_page, source_witness, record_stdout, DEFAULT_ROOT
@@ -27,13 +28,14 @@ from evidence_gap import record_decision
 from task_state import TaskStateStore
 
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
-BANK = "personal-memory"
-VERSION = "1.7.0-generalization"
+BANK = os.environ.get("EVOLVING_PROFILE_BANK_ID", "personal-memory")
+VERSION = "1.8.0-thread-audit"
 CURRENT_TOOL_CALL = None
-GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", "$HOME/.evolving-profile/guidance-v1/guidance-v1.json")
+GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", "/Users/apple/.evolving-profile/guidance-v1/guidance-v1.json")
 TOPIC_CATALOG_PATH = Path(os.environ.get("EVOLVING_PROFILE_TOPIC_CATALOG", str(Path.home()/'.evolving-profile/catalog/topics.sqlite3')))
 EVIDENCE_DECISION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_EVIDENCE_DECISION_ROOT", str(Path.home()/'.evolving-profile/audit/evidence-decisions')))
 TASK_STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_TASK_STATE_ROOT", str(Path.home()/'.evolving-profile/task-state')))
+THREAD_SESSION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_THREAD_SESSION_ROOT", str(Path.home()/'.codex/sessions')))
 CHECK_TOOL = {
     'name':'memory_check',
     'description':'低成本目录导航。确定性禁用/自足/复杂/已知来源边界可返回skip/research/read_source，其余返回agent_decides并提供主题线索和建议工具；弱规则不替当前Agent裁决。不注入事实。',
@@ -93,6 +95,68 @@ FIND_SOURCES_TOOL = {
         'cursor':{'type':'string','description':'仅继续同一查询的 next_cursor，不改词或角色。'}},'required':['terms']},
     'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
 }
+THREAD_AUDIT_TOOL = {
+    'name':'audit_thread_history',
+    'description':'只读审计一个Codex线程的原始回放；返回用户消息、回合数、工具调用、失败数和时间覆盖。source=codex_thread_history，不是Bank Recall/Research；用于EP工具不可用时的明确fallback或实时线程审计。',
+    'inputSchema':{'type':'object','additionalProperties':False,'properties':{
+        'thread_id':{'type':'string','minLength':20,'maxLength':80},
+        'max_turns':{'type':'integer','minimum':1,'maximum':200,'default':100},
+        'max_user_messages':{'type':'integer','minimum':1,'maximum':200,'default':100},
+        'max_chars':{'type':'integer','minimum':200,'maximum':6000,'default':2500}},
+        'required':['thread_id']},
+    'annotations':{'readOnlyHint':True,'openWorldHint':False,'idempotentHint':True},
+}
+
+
+def audit_thread_history(args):
+    thread_id=str(args.get('thread_id') or '').strip()
+    if not re.fullmatch(r'[0-9a-f-]{20,80}',thread_id,re.I):
+        raise ValueError('thread_id must be a Codex thread identifier')
+    max_turns=max(1,min(200,int(args.get('max_turns',100))))
+    max_user_messages=max(1,min(200,int(args.get('max_user_messages',100))))
+    max_chars=max(200,min(6000,int(args.get('max_chars',2500))))
+    matches=sorted(THREAD_SESSION_ROOT.rglob(f'rollout-*-{thread_id}.jsonl'))
+    user_messages=[];turn_ids=set();tool_calls=[];timestamps=[];files=[]
+    for path in matches[:8]:
+        files.append(str(path));
+        try: lines=path.read_text(encoding='utf-8',errors='replace').splitlines()
+        except OSError: continue
+        for line in lines:
+            try: row=json.loads(line)
+            except (ValueError,TypeError): continue
+            timestamp=str(row.get('timestamp') or '')
+            if timestamp: timestamps.append(timestamp)
+            payload=row.get('payload') or {}
+            if row.get('type')=='response_item':
+                turn_id=str(payload.get('turn_id') or '')
+                if turn_id: turn_ids.add(turn_id)
+                if payload.get('type')=='message' and payload.get('role')=='user':
+                    parts=[]
+                    for block in payload.get('content') or []:
+                        if isinstance(block,dict) and isinstance(block.get('text'),str):parts.append(block['text'])
+                    text='\n'.join(parts).strip()
+                    if text and len(user_messages)<max_user_messages:
+                        user_messages.append({'at':timestamp,'turn_id':turn_id,'text':text[:max_chars]})
+                if payload.get('type') in {'custom_tool_call','mcpToolCall'}:
+                    tool_calls.append({'at':timestamp,'turn_id':turn_id,'server':payload.get('server'),'name':payload.get('name') or payload.get('tool'),'status':payload.get('status') or 'unknown'})
+            elif row.get('type')=='event_msg':
+                item=payload.get('item') or {}
+                turn_id=str(payload.get('turn_id') or '')
+                if turn_id: turn_ids.add(turn_id)
+                if item.get('type') in {'McpToolCall','mcpToolCall','CommandExecution'}:
+                    tool_calls.append({'at':timestamp,'turn_id':turn_id,'server':item.get('server'),'name':item.get('name') or item.get('tool') or item.get('type'),'status':item.get('status') or 'unknown'})
+    failed=sum(1 for item in tool_calls if item.get('status') in {'failed','error'})
+    coverage={'files_scanned':len(files),'turn_count':len(turn_ids),'user_message_count':len(user_messages),
+              'tool_call_count':len(tool_calls),'failed_tool_call_count':failed,
+              'from':min(timestamps) if timestamps else None,'to':max(timestamps) if timestamps else None,
+              'complete':bool(matches and not failed),'boundary':'thread_replay_only_not_bank_evidence'}
+    value={'schema':'evolving-profile.thread-audit.v1','source':'codex_thread_history','thread_id':thread_id,
+           'status':'observed' if matches else 'not_found','files':files,'coverage':coverage,
+           'user_messages':user_messages,'tool_calls':tool_calls[-200:],
+           'ep_recall_called':any(str(x.get('name') or '').endswith('recall') for x in tool_calls),
+           'ep_research_called':any(str(x.get('name') or '').endswith(('research','read_research')) for x in tool_calls),
+           'bank_status':'not_checked'}
+    return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
 RESEARCH_TOOL = {
     'name':'research',
     'description':'复杂历史知识路线。单次recall不足、多主题时间线或关联闭包时建立可分页证据工作区，由当前Agent继续分面、翻页和原文核对；默认不生成长期模型，也不是简单任务或每轮必经步骤。',
@@ -120,7 +184,7 @@ SOURCE_TOOL = {
 TOOL = {
     "name": "recall",
     "description": (
-        "历史知识路线。仅在当前上下文缺少历史事实、经历、实体关系或出处时查询 Evolving Profile，返回受预算限制的候选预览和原文定位，不生成或发布长期模型。"
+        "历史知识路线。当前任务可能受已有事实、经历、关系、旧决定或经验影响时主动查询Evolving Profile，不等用户明确点名工具。返回受预算限制的候选预览和原文定位，不生成或发布长期模型。"
         "用当前对话已确定的背景补全查询，不猜测指代；可将多时间、多对象问题拆成 facets。"
         "开放盘点、完整历史、多跳优先使用research；单点查找用recall。仍有缺口时按不同要点分面查找或research，不只改写同一句检索词。"
         "因果问题必须把动机、障碍、结果分槽；若动机候选只是执行记录、助手建议或嵌套转录，先用find_sources检索目的/选择词和对象词，再read_source核对，不能用障碍倒推动机。"
@@ -146,14 +210,92 @@ TOOL = {
 
 
 for _tool in (TOOL,RESEARCH_TOOL,RESEARCH_PAGE_TOOL,SOURCE_TOOL,FIND_SOURCES_TOOL):
-    _tool['inputSchema']['properties']['check_id']={'type':'string','description':'可选：当前Hook提供的消息级check_id；用于关联本次真实工具返回，不能用turn_id代替或自行编造。'}
+    _tool['inputSchema']['properties']['check_id']={'type':'string','description':'请传当前Hook为本条用户Prompt提供的消息级check_id；不要复用上一轮ID，也不要用turn_id代替。缺失或过期时工具仍执行，但观测回执会标成未归因。'}
+
+
+def _returned_count(value, tool):
+    if not isinstance(value,dict):return 0
+    tool=str(tool or '')
+    if tool.endswith(('get_preference','get_task_guidance','read_guidance','read_guidance_unit')):
+        guidance=value.get('guidance_view') or value
+        ids=[]
+        for key in ('included','stable_profile','guidance_items','model_sections','entries'):
+            for item in guidance.get(key) or []:
+                if isinstance(item,dict):
+                    item_id=item.get('id') or item.get('section_id')
+                    if item_id:ids.append(str(item_id))
+        if ids:return len(set(ids))
+    memories=value.get('memories') or []
+    if isinstance(memories,list) and memories:return len(memories)
+    if tool.endswith('read_source'):
+        source=value.get('source') or {}
+        return 1 if (value.get('memory') or {}).get('id') and isinstance(source,dict) and isinstance(source.get('text'),str) and source.get('text') else 0
+    for key in ('sources','results','items','spans'):
+        rows=value.get(key)
+        if isinstance(rows,list):return len(rows)
+    return 0
+
+
+def _prompt_binding_for_check_id(check_id,event_at,home=None):
+    check_id=str(check_id or '').strip()
+    if not check_id:return {'state':'unbound_missing_check_id'}
+    home=Path(home) if home is not None else Path.home()
+    ingress_path=home/'.evolving-profile/audit/prompt-ingress.jsonl'
+    rows=[]
+    try:
+        from collections import deque
+        recent=deque(maxlen=4000)
+        with ingress_path.open('r',encoding='utf-8') as stream:
+            recent.extend(stream)
+        for line in recent:
+            try:
+                row=json.loads(line)
+                if isinstance(row,dict):rows.append(row)
+            except (ValueError,TypeError):continue
+    except OSError:
+        return {'state':'unknown_prompt_ingress','check_id':check_id}
+    bound=next((row for row in reversed(rows) if str(row.get('hook_invocation_id') or '')==check_id),None)
+    if not bound:return {'state':'unknown_check_id','check_id':check_id}
+    session_id=str(bound.get('session_id') or '')
+    try:event_time=datetime.datetime.fromisoformat(str(event_at).replace('Z','+00:00'))
+    except (TypeError,ValueError,OverflowError):return {'state':'unknown_event_time','check_id':check_id}
+    if event_time.tzinfo is None:event_time=event_time.replace(tzinfo=datetime.timezone.utc)
+    latest=None;latest_time=None
+    for row in rows:
+        if str(row.get('session_id') or '')!=session_id:continue
+        try:row_time=datetime.datetime.fromisoformat(str(row.get('at') or '').replace('Z','+00:00'))
+        except (TypeError,ValueError,OverflowError):continue
+        if row_time.tzinfo is None:row_time=row_time.replace(tzinfo=datetime.timezone.utc)
+        if row_time<=event_time and (latest_time is None or row_time>latest_time):latest=row;latest_time=row_time
+    value={'state':'prompt_bound','check_id':check_id,'session_id':session_id,'turn_id':bound.get('turn_id'),
+           'hook_invocation_id':bound.get('hook_invocation_id')}
+    if latest and str(latest.get('hook_invocation_id') or '')!=check_id:
+        value.update(state='stale_prompt_binding',latest_turn_id=latest.get('turn_id'),
+                     latest_hook_invocation_id=latest.get('hook_invocation_id'))
+    return value
 
 def reply(message_id, result=None, error=None):
+    call=dict(CURRENT_TOOL_CALL or {})
+    tool=str(call.get('name') or '')
+    args=call.get('arguments') or {}
+    check_id=str(args.get('check_id') or '')
+    event_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
+    binding={'state':'unbound_missing_check_id'}
     if result and isinstance(result,dict):
         for block in result.get('content',[]):
             if block.get('type')=='text':
                 try:
                     value=json.loads(block['text'])
+                    if isinstance(value,dict) and CURRENT_TOOL_CALL:
+                        binding=_prompt_binding_for_check_id(check_id,event_at)
+                        value['observability_binding']=binding
+                        if tool in {'recall','research','read_research','read_source','find_sources',
+                                    'get_preference','get_task_guidance','read_guidance','read_guidance_unit'}:
+                            value['returned_count']=_returned_count(value,tool)
+                        if binding.get('state')=='stale_prompt_binding':
+                            value['observability_warning']='check_id belongs to an earlier Prompt; this result was returned but was not attached to its older Prompt receipt.'
+                        elif binding.get('state') in {'unbound_missing_check_id','unknown_check_id','unknown_prompt_ingress'}:
+                            value['observability_warning']='result returned; Prompt-level attribution is unverified because a current check_id could not be confirmed.'
                     if isinstance(value,dict) and 'adapter_version' in value:
                         value['adapter_config_generation']=os.environ.get('EVOLVING_PROFILE_CONFIG_GENERATION','unspecified')
                     safe=mask_value(value)
@@ -165,24 +307,31 @@ def reply(message_id, result=None, error=None):
         payload["error"] = error
     else:
         payload["result"] = result
-    # Always keep a bounded global activity ledger, even when the caller did
-    # not provide a Prompt check_id. The console uses it only for a short
-    # post-Prompt observation window and never treats it as exact attribution.
+    # Keep a bounded activity ledger. Exact Prompt identity is copied from
+    # prompt-ingress only after validating that the supplied check_id is still
+    # the latest Prompt for that session at tool-call time.
     try:
         if CURRENT_TOOL_CALL and result and isinstance(result,dict) and result.get('content'):
             value=json.loads(result['content'][0].get('text','{}'))
-            tool=str(CURRENT_TOOL_CALL.get('name') or '')
             guidance=(value.get('guidance_view') or value) if isinstance(value,dict) else {}
             guidance_items=[]
             for key in ('included','stable_profile','guidance_items','model_sections'):
                 guidance_items.extend(item.get('id') or item.get('section_id') for item in (guidance.get(key) or []) if isinstance(item,dict))
+            guidance_items=list(dict.fromkeys(str(item) for item in guidance_items if item))
+            memories=value.get('memories') or []
+            discovered=value.get('discovered_reference_count')
+            if discovered is None:discovered=value.get('candidate_count')
             activity_root=Path.home()/'.evolving-profile/audit/mcp-tool-activity.jsonl'
             activity_root.parent.mkdir(parents=True,exist_ok=True)
-            event={'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'tool':tool,
-                   'check_id':str((CURRENT_TOOL_CALL.get('arguments') or {}).get('check_id') or ''),
-                   'research_id':value.get('research_id'),'returned_count':len(value.get('memories') or []),
-                   'memory_ids':[item.get('id') for item in (value.get('memories') or []) if isinstance(item,dict) and item.get('id')][:50],
-                   'memory_id':(value.get('memory') or {}).get('id'),'guidance_ids':list(dict.fromkeys(x for x in guidance_items if x))[:100],
+            event={'at':event_at,'tool':tool,'check_id':check_id,
+                   'session_id':binding.get('session_id'),'turn_id':binding.get('turn_id'),
+                   'hook_invocation_id':binding.get('hook_invocation_id'),'binding_state':binding.get('state'),
+                   'latest_hook_invocation_id':binding.get('latest_hook_invocation_id'),
+                   'research_id':value.get('research_id'),'candidate_count':discovered,
+                   'returned_count':_returned_count(value,tool),
+                   'source_read_count':1 if tool.endswith('read_source') and _returned_count(value,tool) else 0,
+                   'memory_ids':[item.get('id') for item in memories if isinstance(item,dict) and item.get('id')][:50],
+                   'memory_id':(value.get('memory') or {}).get('id'),'guidance_ids':guidance_items[:100],
                    'guidance_count':len(guidance_items),'deferred_count':len(guidance.get('deferred') or []),'delivery':value.get('delivery') or {}}
             with activity_root.open('a',encoding='utf-8') as stream:
                 stream.write(json.dumps(event,ensure_ascii=False)+'\n')
@@ -191,19 +340,26 @@ def reply(message_id, result=None, error=None):
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
     try:
-        if CURRENT_TOOL_CALL and result and isinstance(result,dict) and result.get('content'):
-            args=CURRENT_TOOL_CALL.get('arguments') or {};check_id=str(args.get('check_id') or '')
-            if check_id:
+        if CURRENT_TOOL_CALL and result and isinstance(result,dict) and result.get('content') and check_id and binding.get('state')=='prompt_bound':
                 value=json.loads(result['content'][0].get('text','{}'))
                 root=Path(os.environ.get('EVOLVING_PROFILE_ROUTE_RECEIPT_ROOT',str(Path.home()/'.evolving-profile/audit/memory-route-receipts')))
                 target=root/(hashlib.sha256(check_id.encode()).hexdigest()+'.json')
                 try: receipt=json.loads(target.read_text(encoding='utf-8'))
                 except (OSError,ValueError,TypeError): receipt={'schema':'evolving-profile.memory-check.v1','check_id':check_id,'prompt_binding':{}}
+                old_binding=receipt.get('prompt_binding') or {}
+                if old_binding and (str(old_binding.get('hook_invocation_id') or '')!=check_id or
+                                    str(old_binding.get('session_id') or '')!=str(binding.get('session_id') or '')):
+                    raise ValueError('route_receipt_binding_mismatch')
+                receipt['prompt_binding']={'session_id':binding.get('session_id'),'turn_id':binding.get('turn_id'),
+                                           'hook_invocation_id':binding.get('hook_invocation_id')}
                 events=list(receipt.get('tool_events') or [])
-                events.append({'tool':CURRENT_TOOL_CALL.get('name'),'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                               'route':value.get('route') or value.get('mode') or CURRENT_TOOL_CALL.get('name'),
-                               'research_id':value.get('research_id'),'candidate_count':value.get('discovered_reference_count') or value.get('candidate_count'),
-                               'returned_count':len(value.get('memories') or []),'next_offset':value.get('next_offset'),
+                events.append({'tool':tool,'at':event_at,'check_id':check_id,
+                               'session_id':binding.get('session_id'),'turn_id':binding.get('turn_id'),
+                               'hook_invocation_id':binding.get('hook_invocation_id'),'binding_state':binding.get('state'),
+                               'route':value.get('route') or value.get('mode') or tool,
+                               'research_id':value.get('research_id'),'candidate_count':value.get('discovered_reference_count') if value.get('discovered_reference_count') is not None else value.get('candidate_count'),
+                               'returned_count':_returned_count(value,tool),'next_offset':value.get('next_offset'),
+                               'source_read_count':1 if tool.endswith('read_source') and _returned_count(value,tool) else 0,
                                'memory_id':(value.get('memory') or {}).get('id'),
                                'memory_ids':[item.get('id') for item in (value.get('memories') or []) if isinstance(item,dict) and item.get('id')][:50],
                                'delivery':value.get('delivery') or {}})
@@ -530,7 +686,7 @@ for line in sys.stdin:
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL] + ([PREFERENCE_TOOL, TASK_GUIDANCE_TOOL, RUNTIME_GUIDANCE_TOOL] if TASK_GUIDANCE_TOOL and PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
+            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL] + ([PREFERENCE_TOOL, TASK_GUIDANCE_TOOL, RUNTIME_GUIDANCE_TOOL] if TASK_GUIDANCE_TOOL and PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
         elif method == "tools/call":
             params = request.get("params") or {}
             CURRENT_TOOL_CALL={'name':params.get('name'),'arguments':params.get('arguments') or {}}
@@ -547,7 +703,10 @@ for line in sys.stdin:
             elif params.get('name') == 'read_guidance':
                 reply(message_id,read_guidance(params.get('arguments') or {}))
             elif params.get('name') in ('get_preference','get_task_guidance'):
-                reply(message_id,task_guidance(params.get('arguments') or {}))
+                guidance_args=params.get('arguments') or {}
+                if params.get('name')=='get_preference' and not str(guidance_args.get('check_id') or '').strip():
+                    raise ValueError('get_preference requires the current Prompt check_id for auditable attribution')
+                reply(message_id,task_guidance(guidance_args))
             elif params.get('name') == 'refresh_runtime_guidance':
                 reply(message_id,runtime_guidance(params.get('arguments') or {}))
             elif params.get('name') == 'read_guidance_unit':
@@ -568,6 +727,8 @@ for line in sys.stdin:
                 reply(message_id, read_source(params.get("arguments") or {}))
             elif params.get('name') == 'find_sources':
                 reply(message_id,find_sources(params.get('arguments') or {}))
+            elif params.get('name') == 'audit_thread_history':
+                reply(message_id, audit_thread_history(params.get('arguments') or {}))
             elif params.get('name') in ('research','read_research'):
                 reply(message_id,research(params.get('arguments') or {},page=params['name']=='read_research'))
             elif params.get("name") == "recall":

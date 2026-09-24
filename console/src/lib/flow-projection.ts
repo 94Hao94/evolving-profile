@@ -11,6 +11,8 @@ export type FlowPrompt = {
   at: string;
   user_prompt: string;
   source?: string;
+  system_probe?: { actor?: string; state?: string; calls?: number; returned_count?: number; candidate_count?: number | null; context_tokens?: number; max_tokens?: number; token_counter?: string; reason?: string; error_type?: string; delivery_stage?: string; admission?: { mode?: string; admitted_count?: number; rejected_count?: number; focus_terms?: string[]; reason?: string } } | null;
+  history_plan?: { recommended_route?: string; history_dependency?: string; minimum_action?: string; reason?: string; required_slots?: string[]; context_source?: string; boundary?: string; fallback_route?: string | null; fallback_trigger?: string | null; candidate_policy?: string } | null;
   task_state?: { current_objective?:string; current_message?:string; continuation?:boolean; continuation_context?:string|null; source?:string; authority?:string } | null;
   evidence_decision?: { need?:string; known_from_current_context?:boolean; unresolved_slots?:string[]; chosen_route?:string; sufficiency?:string; conflicts?:string[]; source_ids?:string[]; next_action?:string|null; stop_reason?:string|null; boundary?:string } | null;
   history_decision?: "needed" | "not_needed" | "unknown" | "agent_decides";
@@ -25,7 +27,7 @@ export type FlowPrompt = {
     catalog_probe?: { status?: string; candidate_count?: number | null; matched_entities?: string[]; catalog_coverage?: string };
     catalog_hints?: Array<{ topic_id?: string; title?: string; abstract?: string; overview?: string; entities?: string[]; time_range?: {start?:string|null;end?:string|null}; source_count?:number; source_count_semantics?:string; coverage?:{sampled?:number;total?:number|null;semantics?:string}; pending_changes?:number|null; conflicts?:string[]|null; pending_changes_status?:string; conflict_status?:string; content_status?:string; refreshed_at?:string|null; boundary?:string; memory_id?: string; type?: string; topic?: string; mentioned_at?: string | null; occurred_start?: string | null; occurred_end?: string | null; state?: string }>;
     agent_may_override?: boolean;
-    tool_events?: Array<{ tool?: string; at?: string; route?: string; research_id?: string | null; query?: string | null; candidate_count?: number | null; returned_count?: number | null; next_offset?: number | null; memory_id?: string | null; memory_ids?: string[]; delivery?: { host_visibility?: string; answer_use?: string } }>;
+    tool_events?: Array<{ tool?: string; at?: string; route?: string; check_id?: string | null; session_id?: string | null; turn_id?: string | null; hook_invocation_id?: string | null; research_id?: string | null; query?: string | null; candidate_count?: number | null; returned_count?: number | null; next_offset?: number | null; memory_id?: string | null; memory_ids?: string[]; delivery?: { host_visibility?: string; answer_use?: string } }>;
   } | null;
   time_window_activity?: {
     state?: "observed" | "not_observed";
@@ -34,7 +36,8 @@ export type FlowPrompt = {
     end?: string;
     event_count?: number;
     by_tool?: Record<string, { calls?: number; returned?: number; latest_at?: string | null }>;
-    events?: Array<{ tool?: string; at?: string; returned_count?: number | null; research_id?: string | null; memory_id?: string | null; memory_ids?: string[] }>;
+    events?: Array<{ tool?: string; at?: string; check_id?: string | null; returned_count?: number | null; research_id?: string | null; memory_id?: string | null; memory_ids?: string[] }>;
+    unattributed_activity?: { state?: "observed" | "not_observed"; event_count?: number; by_tool?: Record<string, { calls?: number; returned?: number; latest_at?: string | null }>; boundary?: string } | null;
     items?: FlowEvidenceItem[];
     boundary?: string;
   } | null;
@@ -47,6 +50,7 @@ export type FlowPrompt = {
     returned_count?: number;
     deferred_count?: number;
     ids?: string[];
+    unattributed_activity?: { state?: "observed" | "not_observed"; event_count?: number; returned_count?: number; deferred_count?: number; by_tool?: Record<string, { calls?: number; returned?: number; deferred?: number; latest_at?: string | null }>; boundary?: string } | null;
     boundary?: string;
   } | null;
   instruction_receipt?: {
@@ -81,8 +85,8 @@ export type FlowPrompt = {
   historical_audit?: {
     route?: string;
     state?: "observed" | "executed_empty" | "executed_no_result" | "not_observed" | "unknown";
-    mode?: "hook_auto_recall" | "candidate_discovery" | "research";
-    controller_state?: "admission_applied" | "not_in_candidate_path" | "not_used";
+    mode?: "hook_auto_recall" | "candidate_discovery" | "research" | "system_probe";
+    controller_state?: "admission_applied" | "not_in_candidate_path" | "not_used" | "system_probe_direct";
     candidate_count?: number | null;
     qualified_count?: number | null;
     rejected_count?: number | null;
@@ -166,6 +170,8 @@ export function projectFlowAudit(prompt: FlowPrompt) {
       delivery: history?.delivery_state ?? "not_observed",
       evidenceDecision: prompt.evidence_decision ?? null,
     },
+    systemProbe: prompt.system_probe ?? null,
+    historyPlan: prompt.history_plan ?? null,
     timeWindowActivity: prompt.time_window_activity ?? null,
     timeWindowGuidanceActivity: prompt.time_window_guidance_activity ?? null,
   };

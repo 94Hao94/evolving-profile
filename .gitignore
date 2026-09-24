@@ -1,41 +1,10 @@
-# Local credentials and configuration
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.p12
-*.pfx
-
-# Python dependencies and caches
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-*.egg-info/
-
-# Frontend dependencies and build output
+.DS_Store
 node_modules/
 .next/
-.next-*/
-standalone/
+*.log
+__pycache__/
+*.pyc
+*.pyo
+.venv/
 dist/
 build/
-*.tsbuildinfo
-
-# Local memory data and reports
-.evolving-profile/
-*.sqlite
-*.sqlite3
-*.sqlite3-*
-*.db
-*.log
-coverage/
-.coverage
-
-# macOS metadata
-.DS_Store
-._*

@@ -20,6 +20,38 @@ DEFAULT_ROOT=Path.home()/'.evolving-profile/memory-os/research'
 CANDIDATE_PREVIEW_CHARS=1200
 
 
+def explicit_anchor_terms(query):
+    """Return high-signal entity phrases for a conservative delivery gate."""
+    text=str(query or '').casefold()
+    terms=[]
+    question_stop={'我','我和','我跟','用户','什么','有什么关系','什么关系','关系','有哪些','都有什么','怎么','为什么','是否','有没有','相关','历史记录','相关记录','当前问题'}
+    for phrase in re.findall(r'[“\"]([^”\"]{2,40})[”\"]', text):
+        normalized=re.sub(r'^(?:用户问|问题是|当前问题|原问题)\s*', '', phrase).strip()
+        broad_profile=bool(re.search(
+            r'(?:都有什么|有哪些|什么了解|了解我|盘点|偏好|工作方式|长期|全部|概括).*(?:我|用户)|'
+            r'(?:我|用户).*(?:都有什么|有哪些|什么了解|了解|盘点|偏好|工作方式|长期|全部|概括)',
+            normalized,
+        ))
+        named_entity=bool(re.search(r'[\u4e00-\u9fff]{2,}(?:学校|大学|学院|老师|公司|医院)', normalized))
+        if broad_profile:
+            continue
+        # Relationship questions are wrappers around one or more entities.
+        # Keep the concrete entity and drop “我跟/有什么关系”, otherwise the
+        # full sentence becomes an impossible literal gate.
+        if re.search(r'(?:我和|我跟|用户与|用户和).*(?:关系|关联)', normalized):
+            core=re.sub(r'^(?:我和|我跟|用户与|用户和)', '', normalized)
+            core=re.split(r'什么关系|关系|关联', core, maxsplit=1)[0].strip()
+            latin=re.findall(r'[a-z][a-z0-9_.+-]{1,}', core)
+            chinese=[part for part in re.findall(r'[\u4e00-\u9fff]{2,12}', core) if part not in question_stop]
+            terms.extend(latin+chinese)
+            continue
+        if normalized not in question_stop and (named_entity or len(normalized)<=16):
+            terms.append(normalized)
+    for phrase in re.findall(r'[\u4e00-\u9fff]{2,12}(?:学校|大学|学院|老师|公司|医院)', text):
+        if phrase not in {'客户学校','相关学校','当前学校'}: terms.append(phrase)
+    return list(dict.fromkeys(terms))[:12]
+
+
 def source_witness(text,quote=None):
     """Locate literal quotations in role-delimited legacy text, not authenticate it.
 
@@ -101,6 +133,7 @@ def discover(bank,query,api,root=DEFAULT_ROOT,page_size=8):
         # Do not store response.text, llm_calls, model thoughts or copied facts.
         calls=(response.get('trace') or {}).get('tool_calls') or []
         state.update(status='discovered_not_verified',memory_ids=ids,invalid_reference_ids=bad,
+            explicit_anchor_terms=explicit_anchor_terms(query),
             tool_call_count=len(calls),usage=response.get('usage'),seconds=time.monotonic()-start)
         _save(path,state)
     except Exception as error:
@@ -170,6 +203,7 @@ def search(bank,query,api,root=DEFAULT_ROOT,facets=None,budget='high',max_tokens
     for r in receipts:
         for mid in r['record_ids']:record_facets.setdefault(mid,[]).append(r['query'])
     state.update(status='discovered_not_verified',memory_ids=ids,record_facets=record_facets,
+        explicit_anchor_terms=explicit_anchor_terms(query),
         facet_receipts=receipts,query_completion='complete' if success==len(receipts) else 'partial',
         invalid_reference_ids=[v for r in receipts for v in r.get('invalid_reference_ids',[])],
         seconds=time.monotonic()-start,tool_call_count=len(receipts))
@@ -205,10 +239,23 @@ def read_page(bank,research_id,offset,api,root=DEFAULT_ROOT,page_size=8):
             return selected,None
         except Exception as error:return None,{'id':mid,'status':'source_unavailable','error_type':type(error).__name__}
     with ThreadPoolExecutor(max_workers=4) as pool:rows=list(pool.map(fetch,ids[offset:end]))
-    memories=[r for r,e in rows if r];unavailable=[e for r,e in rows if e]
+    memories=[];unavailable=[e for r,e in rows if e]
+    anchors=[str(value).casefold() for value in state.get('explicit_anchor_terms') or []]
+    scope_rejected=[]
+    for row,error in rows:
+        if not row:continue
+        if anchors:
+            metadata=json.dumps(row.get('metadata') or {},ensure_ascii=False).casefold()
+            candidate=(str(row.get('text') or '')+' '+metadata).casefold()
+            if not any(anchor in candidate for anchor in anchors):
+                scope_rejected.append({'id':row.get('id'),'status':'scope_mismatch','required_anchors':anchors})
+                continue
+        memories.append(row)
     result={'research_id':rid,'mode':'official_discovery_evidence_only','query':state['query'],
-        'discovered_reference_count':len(ids),'offset':offset,'next_offset':end if end<len(ids) else None,
+        'discovered_reference_count':len(ids),'raw_discovered_reference_count':len(ids),'offset':offset,'next_offset':end if end<len(ids) else None,
         'memories':memories,'unavailable':unavailable,'invalid_reference_ids':state['invalid_reference_ids'],
+        'scope_filter':{'mode':'explicit_anchor_gate' if anchors else 'not_applied','anchors':anchors,
+                        'rejected_count':len(scope_rejected),'rejected':scope_rejected[:20]},
         'semantic_coverage':'not_independently_verified','source_state_checked_at':dt.datetime.now(dt.timezone.utc).isoformat(),
         'claim_verification':'not_performed','discovery_seconds':state['seconds'],'tool_call_count':state['tool_call_count'],
         'delivery':{'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'},

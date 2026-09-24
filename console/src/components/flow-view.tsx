@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 type NodeId = "entry" | "map" | "guidance" | "history" | "answer";
-type ToolStatus = "observed" | "not_observed";
+type ToolStatus = "observed" | "window_observed" | "not_observed";
 type MemoryMapNode = {
   id: string;
   label: string;
@@ -106,6 +106,10 @@ function displayToolLabel(tool?: string) {
   return tool?.includes("get_task_guidance") || tool?.includes("get_preference") ? "Get Preference" : tool ?? "工具";
 }
 
+export function observationWindowMinutes(value?: number | null) {
+  return value ?? 2;
+}
+
 export function routeConfidenceLabel(route: {
   recommended_route?: string;
   confidence?: number | null;
@@ -160,8 +164,10 @@ export function guidanceNodeValue(audit: ReturnType<typeof projectFlowAudit> | n
 export function historyToolStatus(
   route: string | undefined,
   tool: "recall" | "research" | "read_source",
+  windowActivity?: FlowPrompt["time_window_activity"],
 ): ToolStatus {
-  return route?.includes(tool) ? "observed" : "not_observed";
+  if (route?.includes(tool)) return "observed";
+  return windowActivity?.by_tool?.[tool]?.calls ? "window_observed" : "not_observed";
 }
 
 function EvidenceList({
@@ -226,7 +232,7 @@ function ToolRail({
   }, {});
   const normalized = route ?? "";
   const toolState = (tool: "recall" | "research" | "read_source"): ToolStatus =>
-    historyToolStatus(normalized, tool);
+    historyToolStatus(normalized, tool, windowActivity);
   const tools = [
     { id: "recall" as const, label: "recall", caption: "候选召回", icon: Search },
     { id: "research" as const, label: "research", caption: "复杂关联", icon: GitBranch },
@@ -234,6 +240,7 @@ function ToolRail({
   ];
   const statusText: Record<ToolStatus, string> = {
     observed: "调用回执已记录",
+    window_observed: "时间窗观测到活动",
     not_observed: "未取得调用回执",
   };
   return (
@@ -244,7 +251,7 @@ function ToolRail({
           工具轨道
         </div>
         <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-          缺少依据时才触发
+          历史可补充依据时主动读取
         </span>
       </div>
       {toolEvents.length > 0 && (
@@ -267,7 +274,7 @@ function ToolRail({
       {windowActivity?.state === "observed" && (
         <div className="mb-3 rounded-lg border border-amber-200/80 bg-amber-50/70 p-2.5 text-[11px] dark:border-amber-900/60 dark:bg-amber-950/20">
           <div className="font-semibold text-amber-900 dark:text-amber-200">
-            Prompt 后时间窗观测 · {windowActivity.window_minutes ?? 3} 分钟内
+            Prompt 后时间窗观测 · {observationWindowMinutes(windowActivity.window_minutes)} 分钟内
           </div>
           <div className="mt-1 text-muted-foreground">
             仅表示该时间段内观察到的活动，不归因于当前 Prompt。
@@ -284,29 +291,38 @@ function ToolRail({
               </span>
             ))}
           </div>
+          {windowActivity.unattributed_activity?.event_count ? (
+            <div className="mt-2 rounded-md border border-amber-300/80 bg-amber-100/60 px-2 py-1.5 text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-100">
+              另有 {windowActivity.unattributed_activity.event_count} 次活动无法绑定到当前 Prompt；只计数，不展示候选内容。
+            </div>
+          ) : null}
           {windowActivity.items?.length ? <div className="mt-2 space-y-1.5">{windowActivity.items.slice(0, 8).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground"><span className="mr-1 font-medium text-foreground">{item.type ?? "memory"}</span>{displayEvidence(item)}</div>)}</div> : null}
         </div>
       )}
       {windowActivity?.state === "not_observed" && (
         <div className="mb-3 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-2.5 text-[11px] text-muted-foreground dark:border-slate-700 dark:bg-slate-900/30">
-          Prompt 后 {windowActivity.window_minutes ?? 3} 分钟内未观测到工具回执；这不等于工具一定没有调用。
+          Prompt 后 {observationWindowMinutes(windowActivity.window_minutes)} 分钟内未观测到工具回执；这不等于工具一定没有调用。
         </div>
       )}
       {windowGuidanceActivity?.state === "observed" && (
         <div className="mb-3 rounded-lg border border-violet-200/80 bg-violet-50/70 p-2.5 text-[11px] dark:border-violet-900/60 dark:bg-violet-950/20">
-          <div className="font-semibold text-violet-900 dark:text-violet-200">Prompt 后 Get Preference 观测 · {windowGuidanceActivity.window_minutes ?? 3} 分钟内</div>
+          <div className="font-semibold text-violet-900 dark:text-violet-200">Prompt 后 Get Preference 观测 · {observationWindowMinutes(windowGuidanceActivity.window_minutes)} 分钟内</div>
           <div className="mt-1 text-muted-foreground">时间窗内返回 {windowGuidanceActivity.returned_count ?? 0} 项指导，待补读 {windowGuidanceActivity.deferred_count ?? 0} 项；不归因于当前 Prompt。</div>
+          {windowGuidanceActivity.unattributed_activity?.event_count ? <div className="mt-1 rounded-md border border-violet-300/80 bg-violet-100/60 px-2 py-1.5 text-violet-900 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-100">另有 {windowGuidanceActivity.unattributed_activity.event_count} 次指导活动无法绑定到当前 Prompt；只计数，不展示条目。</div> : null}
           {preferenceItems.length ? <div className="mt-2 space-y-1.5">{preferenceItems.slice(0, 6).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground">{displayEvidence(item)}</div>)}</div> : null}
         </div>
       )}
       <div className="grid grid-cols-3 gap-2">
         {tools.map(({ id, label, caption, icon: Icon }) => {
-          const state = toolState(id);
+          const state = historyToolStatus(normalized, id, windowActivity);
+          const windowSummary = windowActivity?.by_tool?.[id];
           const count =
             state === "observed"
               ? candidates != null
                 ? `${candidates} 个候选`
                 : `${returned ?? items.length} 条预览`
+              : state === "window_observed"
+                ? `${windowSummary?.calls ?? 0} 次（时间窗）`
               : "无法确认是否调用";
           return (
             <div
@@ -322,9 +338,9 @@ function ToolRail({
                 {count}
               </div>
               <div
-                className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${state === "observed" ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-200"}`}
+                className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${state === "observed" ? "bg-emerald-600 text-white" : state === "window_observed" ? "bg-amber-500 text-white" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-200"}`}
               >
-                {state === "observed" ? (
+                {state === "observed" || state === "window_observed" ? (
                   <Check className="h-3 w-3" />
                 ) : (
                   <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
@@ -515,6 +531,7 @@ export function FlowView() {
       same_turn_host_receipt: "同回合宿主回执",
       admission_applied: "入口准入",
       not_in_candidate_path: "Agent 自主调用",
+      system_probe_direct: "系统有界探测",
       not_used: "本轮未调用",
     })[value ?? ""] ?? "状态待确认";
   const coverageLabel = (value?: string) =>
@@ -525,7 +542,7 @@ export function FlowView() {
         : "指导覆盖待确认";
   const historyValue =
     !audit || audit.history.decision === "agent_decides"
-      ? "自动召回已关闭 · 本页面未取得工具回执"
+      ? "未取得本轮历史调用回执 · 不代表不需要历史"
       : audit.history.value === "unknown"
         ? "历史链路未核实 · 缺少 recall/research 回执"
         : audit.history.value === "not_observed"
@@ -536,7 +553,7 @@ export function FlowView() {
               ? "已执行但未形成结果回执"
               : `${audit.history.value} · 候选 ${audit.history.metrics.candidates ?? "—"} · 本页 ${audit.history.metrics.returned ?? "—"}`;
   const isLegacyAutoHistory = audit?.history.mode === "hook_auto_recall";
-  const historyTitle = isLegacyAutoHistory ? "历史记录 · Hook 自动召回" : "Codex 按需历史读取";
+  const historyTitle = isLegacyAutoHistory ? "历史记录 · Hook 自动召回" : "历史读取 · 系统探测与 Agent 下钻";
   const nodes: Array<{ id: NodeId; title: string; value: string; tone: string }> = [
     {
       id: "entry",
@@ -776,7 +793,7 @@ export function FlowView() {
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em]">
                     路径 A
                   </div>
-                  上下文已足够 → 直接回答或执行
+                  已有可靠证据或任务自足 → 回答或执行
                 </div>
                 <button
                   onClick={() => { setActive("history"); setNodeOpen(true); }}
@@ -790,8 +807,20 @@ export function FlowView() {
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">{nodes[3].value}</div>
                   <div className="mt-2 text-xs text-muted-foreground">
-                    缺少依据时查询 · 不足时翻页或回读原文
+                    单点 Recall · 综合盘点可直接 Research · 关键结论回读原文
                   </div>
+                  {audit?.systemProbe && <div className="mt-2 rounded border border-emerald-200 p-2 text-xs">
+                    <div>系统探测：{({ returned: "已返回候选", empty: "本次为空", unavailable: "不可用", skipped: "已跳过" } as Record<string,string>)[audit.systemProbe.state ?? ""] ?? "未知"}</div>
+                    <div>{audit.systemProbe.calls ?? 0} 次请求 · 送出 {audit.systemProbe.returned_count ?? 0} 条{audit.systemProbe.context_tokens != null ? ` · ${audit.systemProbe.context_tokens}/${audit.systemProbe.max_tokens} token` : ""}</div>
+                    {audit.systemProbe.admission && <div className="mt-1 text-muted-foreground">候选门控：{audit.systemProbe.admission.mode ?? "—"} · 通过 {audit.systemProbe.admission.admitted_count ?? 0} · 排除 {audit.systemProbe.admission.rejected_count ?? 0}</div>}
+                    <div className="mt-1 text-muted-foreground">Agent 主动调用单独显示；候选不代表问题已覆盖。</div>
+                  </div>}
+                  {audit?.historyPlan && <div className="mt-2 rounded border border-sky-200 bg-sky-50/50 p-2 text-xs dark:border-sky-900/60 dark:bg-sky-950/20">
+                    <div className="font-semibold text-sky-800 dark:text-sky-200">任务形状路由：{audit.historyPlan.recommended_route ?? "unknown"} · {audit.historyPlan.history_dependency ?? "unknown"}</div>
+                    <div className="mt-1 text-muted-foreground">{audit.historyPlan.reason ?? "未记录路由理由"}</div>
+                    {!!audit.historyPlan.required_slots?.length && <div className="mt-1">证据槽位：{audit.historyPlan.required_slots.join(" · ")}</div>}
+                    {audit.historyPlan.fallback_route && <div className="mt-1 text-muted-foreground">空结果或范围不足时升级：{audit.historyPlan.fallback_route}</div>}
+                  </div>}
                   {audit && (
                     <div className="mt-3 space-y-1.5 border-t border-emerald-200/70 pt-2 dark:border-emerald-900/60">
                       <div className="flex flex-wrap gap-1.5 text-[10px]">
