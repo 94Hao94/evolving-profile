@@ -256,6 +256,8 @@ export function PreferenceView() {
                 }}
                 preserveNodeColor
                 linkColorFn={(link) => link.color ?? "#64748b"}
+                linkOpacity={0.18}
+                linkWidth={0.7}
                 clusterKeyFn={(node) => (selection === "all" || selection === "fusion" ? node.group ?? null : null)}
                 clusterColorFn={(group) => group === "fusion" ? FUSION_COLOR : preferenceDimensionColor(group as PreferenceDimension)}
                 clusterLabelFn={(group) => group === "fusion" ? copy.fusion + " " + models.length : preferenceDimensionLabel(group as PreferenceDimension, language) + " " + countByDimension[group as PreferenceDimension]}

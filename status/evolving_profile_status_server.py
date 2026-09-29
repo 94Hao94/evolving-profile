@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 HISTORY_TOOL_NAMES={f'mcp__{controller}__{operation}'
  for controller in ('evolving_profile_controller','hindsight_controller')
- for operation in ('recall','research','read_research','read_source','find_sources')}
+ for operation in ('recall','research','read_research','read_source','find_sources','scenario_gate','read_scenario_summary','read_context_summary')}
 HOME=Path.home()
 ROOT=Path(__file__).resolve().parent.parent
 STATE_ROOT=Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT', str(HOME/'.evolving-profile')))
@@ -21,7 +21,7 @@ from topic_catalog import TopicCatalog,knowledge_review,redact_unreviewed_page
 from lib.memory_policy import classify_memory_policy
 API=os.environ.get('EVOLVING_PROFILE_API_URL','http://127.0.0.1:12088')
 CONTROLLER=os.environ.get('EVOLVING_PROFILE_CONTROLLER_URL','http://127.0.0.1:12079')
-BANK=os.environ.get('EVOLVING_PROFILE_BANK_ID','personal-memory')
+BANK='personal-memory'
 PAGE_FILE=STATE_ROOT/'control-plane/recall-observability.html'
 GUIDANCE_V1_SRC=ROOT/'guidance'
 GUIDANCE_V1_CONFIG=STATE_ROOT/'guidance-v1/guidance-v1.json'
@@ -92,8 +92,8 @@ def memory_map_snapshot():
             {'id':'L1','name':'主题概览','purpose':'重排、导航和路线选择','body_limit':'medium'},
             {'id':'L2','name':'证据详情','purpose':'按需读取事实、经历和原始来源','body_limit':'on_demand'}],
   'nodes':[
-   {'id':'guidance','label':'多维度偏好','lane':'guidance','count':len(units),'route':'get_task_guidance','freshness':'active','summary':'五个行为维度的条件化指导；仅作 advisory reference','topic_scope':'reviewed_active_units','time_range':None,'source_count':sum(len(x.get('evidence_refs') or []) for x in units),'state_summary':'active_reviewed'},
-   {'id':'mental-models','label':'融合心智模型','lane':'guidance','count':len(models),'route':'get_task_guidance → read_guidance_unit','freshness':'active','summary':'跨维度稳定主题摘要；需要来源时下沉到 Bank','topic_scope':'active_model_sections','time_range':None,'source_count':None,'state_summary':'active'},
+   {'id':'guidance','label':'多维度偏好','lane':'guidance','count':len(units),'route':'get_preference','freshness':'active','summary':'五个行为维度的条件化指导；仅作 advisory reference','topic_scope':'reviewed_active_units','time_range':None,'source_count':sum(len(x.get('evidence_refs') or []) for x in units),'state_summary':'active_reviewed'},
+   {'id':'mental-models','label':'融合心智模型','lane':'guidance','count':len(models),'route':'get_preference → read_preference_unit','freshness':'active','summary':'跨维度稳定主题摘要；需要来源时下沉到 Bank','topic_scope':'active_model_sections','time_range':None,'source_count':None,'state_summary':'active'},
    {'id':'world','label':'事实','lane':'facts','count':fact_counts.get('world'),'route':'recall','freshness':'live_stats' if fact_counts else 'unknown','summary':'状态、版本、主体和关系事实','topic_scope':'query_scoped_catalog_hints','time_range':'returned_per_hint','source_count':None,'state_summary':'live_validity_checked_on_read'},
    {'id':'experience','label':'经历','lane':'facts','count':fact_counts.get('experience'),'route':'recall','freshness':'live_stats' if fact_counts else 'unknown','summary':'发生过的事件、过程、结果和失败经验','topic_scope':'query_scoped_catalog_hints','time_range':'returned_per_hint','source_count':None,'state_summary':'live_validity_checked_on_read'},
    {'id':'entities','label':'实体与关系','lane':'graph','count':link_counts.get('entity'),'route':'research','freshness':'live_stats' if link_counts else 'unknown','summary':'多实体、时间线和关系闭包的扩展入口','topic_scope':'query_scoped_entities','time_range':'returned_per_hint','source_count':None,'state_summary':'live'},
@@ -321,8 +321,9 @@ def _event_key(event):
 def _activity_counts(events):
  by_tool={}
  for event in events:
-  tool=str(event.get('tool') or 'unknown');bucket=by_tool.setdefault(tool,{'calls':0,'returned':0,'latest_at':None})
+  tool=str(event.get('tool') or 'unknown');bucket=by_tool.setdefault(tool,{'calls':0,'returned':0,'candidates':0,'latest_at':None})
   bucket['calls']+=1;bucket['returned']+=int(event.get('returned_count') or 0)
+  bucket['candidates']+=int(event.get('candidate_count') or 0)
   bucket['latest_at']=max(bucket['latest_at'] or event['at'],event['at'])
  return by_tool
 
@@ -340,7 +341,7 @@ def _time_window_tool_activity(prompt_at, route_receipts=None, window_minutes=2,
   binding=dict(next(((receipt.get('prompt_binding') or {}) for receipt in route_receipts or []
                      if (receipt.get('prompt_binding') or {}).get('hook_invocation_id')),{}))
  exact=[];unattributed=[];seen_exact=set();seen_unattributed=set()
- allowed={'recall','research','read_research','read_source','find_sources'}
+ allowed={'recall','research','read_research','read_source','find_sources','scenario_gate','read_scenario_summary','read_context_summary'}
  def in_window(event):
   at=_as_utc(event.get('at'))
   return at is not None and start<=at<=end
@@ -349,7 +350,12 @@ def _time_window_tool_activity(prompt_at, route_receipts=None, window_minutes=2,
   return {'tool':tool,'at':event.get('at'),'check_id':event.get('check_id') or event.get('hook_invocation_id'),
           'returned_count':event.get('returned_count'),'candidate_count':event.get('candidate_count'),
           'research_id':event.get('research_id'),'memory_id':event.get('memory_id'),
-          'memory_ids':list(event.get('memory_ids') or [])[:50]}
+          'memory_ids':list(event.get('memory_ids') or [])[:50],
+                   'scenario_ids':list(event.get('scenario_ids') or [])[:20],
+                   'scenario_navigation_roles':list(event.get('scenario_navigation_roles') or [])[:20],
+                   'scope_hypothesis_count':event.get('scope_hypothesis_count'),
+                   'scope_route_policy':event.get('scope_route_policy') or {},
+          'scenario_decision':event.get('scenario_decision')}
  for receipt in route_receipts or []:
   receipt_binding=receipt.get('prompt_binding') or {}
   receipt_id=str(receipt_binding.get('hook_invocation_id') or '')
@@ -392,7 +398,7 @@ def _time_window_guidance_activity(prompt_at, entry_receipts=None, deliveries=No
  records=[];unattributed=[];seen=set()
  sources=list(entry_receipts or [])+list(deliveries or [])
  sources.extend(row for row in (global_activity or [])
-                if str(row.get('tool') or '').rsplit('__',1)[-1] in {'get_task_guidance','get_preference','read_guidance'})
+                if str(row.get('tool') or '').rsplit('__',1)[-1] in {'get_preference','read_preference'})
  for row in sources:
   raw=row.get('at')
   if raw is None:continue
@@ -447,23 +453,101 @@ def _route_receipt_for_prompt(receipt, prompt_binding, prompt_ingress):
 
 def _hydrate_time_window_content(activity,limit=16):
  value=dict(activity or {});ids=[]
+ candidate_ids=[];research_ids=[];queries=[];anchors=[]
  for event in value.get('events') or []:
   ids.extend(event.get('memory_ids') or [])
   if event.get('memory_id'):ids.append(event['memory_id'])
+  research_id=str(event.get('research_id') or '')
+  if research_id and re.fullmatch(r'[a-zA-Z0-9_-]{1,80}',research_id):
+   research_ids.append(research_id)
+   try:
+    research_path=STATE_ROOT/'memory-os/research'/(research_id+'.json')
+    research=json.loads(research_path.read_text(encoding='utf-8'))
+    candidate_ids.extend(str(item) for item in (research.get('memory_ids') or []) if item)
+    queries.append({'research_id':research_id,'query':research.get('query'),
+                    'candidate_count':len(research.get('memory_ids') or []),
+                    'anchors':research.get('explicit_anchor_terms') or []})
+   except (OSError,ValueError,TypeError):pass
  ids=list(dict.fromkeys(str(item) for item in ids if item))[:max(1,min(30,int(limit)))]
+ candidate_ids=[item for item in dict.fromkeys(candidate_ids) if item not in ids]
+ candidate_count=len(candidate_ids)
+ candidate_ids=candidate_ids[:max(1,min(30,int(limit)))]
  items=[]
  for memory_id in ids:
   try:memory=get(API,f'/v1/default/banks/{urllib.parse.quote(BANK,safe="")}/memories/{urllib.parse.quote(memory_id,safe="")}',3)
   except Exception:continue
   if memory.get('id'):
    items.append({'id':memory.get('id'),'type':memory.get('type') or memory.get('fact_type'),'text':str(memory.get('text') or memory.get('content') or '')[:500]})
- value['items']=items;return value
+ candidate_items=[]
+ for memory_id in candidate_ids:
+  try:memory=get(API,f'/v1/default/banks/{urllib.parse.quote(BANK,safe="")}/memories/{urllib.parse.quote(memory_id,safe="")}',3)
+  except Exception:continue
+  if memory.get('id')==memory_id and memory.get('state')=='valid':
+   candidate_items.append({'id':memory.get('id'),'type':memory.get('type') or memory.get('fact_type'),
+    'text':str(memory.get('text') or memory.get('content') or '')[:500],'candidate_only':True})
+ event_candidates=max([int(event.get('candidate_count') or 0) for event in value.get('events') or []] or [0])
+ value['items']=items;value['candidate_items']=candidate_items;value['candidate_count']=max(event_candidates,candidate_count)
+ value['candidate_queries']=queries;value['candidate_preview_count']=len(candidate_items)
+ value['candidate_research_ids']=list(dict.fromkeys(research_ids));return value
 
 def _evidence_decision(check_id):
  if not check_id:return None
  path=STATE_ROOT/'audit/evidence-decisions'/(hashlib.sha256(str(check_id).encode()).hexdigest()+'.json')
  try:return json.loads(path.read_text(encoding='utf-8'))
  except (OSError,ValueError,TypeError):return None
+
+def _candidate_events(row):
+ events=list((row.get('memory_route_receipt') or {}).get('tool_events') or [])
+ activity=row.get('time_window_activity') or {}
+ if activity.get('boundary')=='same_prompt_binding_only':events+=list(activity.get('events') or [])
+ seen=set();result=[]
+ for event in events:
+  key=(event.get('tool'),event.get('research_id'),event.get('at'))
+  if key not in seen:seen.add(key);result.append(event)
+ return result
+
+def candidate_groups_for_prompt(row):
+ groups=[]
+ if row.get('system_probe') and row['system_probe'].get('calls'):
+  groups.append({'id':'system_probe','actor':'system_probe','count':row['system_probe'].get('candidate_count')})
+ for event in _candidate_events(row):
+  rid=event.get('research_id')
+  if rid and not any(group['id']==rid for group in groups):
+   groups.append({'id':rid,'actor':'agent_mcp','count':event.get('candidate_count')})
+ return groups
+
+def candidate_audit_page(row,group,offset=0,limit=10):
+ from lib.candidate_audit import page,mark_delivery
+ if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=20:
+  raise ValueError('invalid_candidate_pagination')
+ if group=='system_probe':
+  probe=row.get('system_probe') or (row.get('memory_route_receipt') or {}).get('system_probe') or {}
+  snapshots=probe.get('candidate_audit') or []
+  value=page(snapshots,offset=offset,limit=limit,actor='system_probe')
+  if not snapshots and probe.get('candidate_count'):
+   value.update(total=probe['candidate_count'],snapshot_status='historical_snapshot_missing')
+  value['query']=(row.get('memory_route_receipt') or {}).get('query') or row.get('user_prompt')
+  return value
+ events=_candidate_events(row)
+ allowed={str(event.get('research_id')) for event in events if event.get('research_id')}
+ if group not in allowed or not re.fullmatch(r'[a-zA-Z0-9_-]{1,80}',group):
+  return {'actor':'agent_mcp','items':[],'total':0,'snapshot_status':'not_bound_to_prompt'}
+ try:state=json.loads((STATE_ROOT/'memory-os/research'/(group+'.json')).read_text())
+ except (OSError,ValueError):return {'actor':'agent_mcp','items':[],'total':0,'snapshot_status':'source_receipt_unavailable'}
+ snapshots={item['id']:item for item in state.get('candidate_audit') or []}
+ all_rows=[snapshots.get(mid,{'id':mid,'text':'','reason':'historical_snapshot_missing',
+                            'delivery':'not_returned','snapshot_stage':'missing'}) for mid in state.get('memory_ids') or []]
+ check_id=row.get('hook_invocation_id') or (row.get('memory_route_receipt') or {}).get('check_id')
+ delivered=[item for event in state.get('delivery_events') or []
+            if check_id and event.get('check_id')==check_id and event.get('binding_state','prompt_bound')=='prompt_bound'
+            for item in event.get('delivered_items') or []]
+ value=page(mark_delivery(all_rows,delivered),offset=offset,limit=limit,actor='agent_mcp')
+ value['query']=state.get('query')
+ value['discovered_count']=len(state.get('memory_ids') or [])
+ missing=sum(item.get('snapshot_stage')!='discovery' for item in all_rows)
+ value['missing_discovery_snapshot_count']=missing
+ if missing:value['snapshot_status']='partial_history' if snapshots else 'historical_snapshot_missing'
+ return value
 
 def _sanitize_route_receipt(value):
  result=dict(value or {});probe=dict(result.get('catalog_probe') or {})
@@ -639,7 +723,7 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
  try: offset=max(0,int(cursor or 0))
  except Exception: offset=0
  ingress=_prompt_ingress_rows();hooks=_hook_output_rows();needle_terms=[part for part in _norm_prompt(query_text).split() if part]
- # UserPromptSubmit's forced get_task_guidance call is recorded in the
+ # UserPromptSubmit's forced get_preference call is recorded in the
  # entry-adapter receipt lane, separately from full guidance deliveries.
  entry_receipts=[]
  entry_root=STATE_ROOT/'audit/guidance-entry-receipts'
@@ -808,10 +892,12 @@ def guidance_prompt_list(limit=20,cursor='0',host='all',detail_id=None,query_tex
  next_cursor=str(offset+len(items)) if offset+len(items)<len(selected) else None
  return {'schema':'guidance.user-prompt-list.v1','items':items,'count':len(items),'total':len(selected),'has_more':next_cursor is not None,'next_cursor':next_cursor,'host':host}
 
-def guidance_prompt_detail(prompt_id):
+def guidance_prompt_detail(prompt_id,candidate_group=None,offset=0,limit=10):
  all_rows=guidance_prompt_list(1,0,'all',detail_id=prompt_id).get('items') or []
  for row in all_rows:
   if row.get('prompt_id')!=prompt_id:continue
+  if candidate_group is not None:
+   return candidate_audit_page(row,candidate_group,offset,limit)
   # The list projection intentionally omits large deferred/admission trees.
   # Rehydrate only this selected Prompt from its immutable receipt.
   hook_id=str(row.get('hook_invocation_id') or '')
@@ -838,7 +924,7 @@ def guidance_prompt_detail(prompt_id):
    admission=dict(trace.get('relevance_admission') or {})
    row['historical_audit']['admission_items']=[_compact_trace_item(item) for item in list(admission.get('qualified_items') or [])[:20] if isinstance(item,dict)]
    row['historical_audit']['deferred_items']=[_compact_trace_item(item) for item in list(admission.get('deferred_items') or [])[:20] if isinstance(item,dict)]
-  row['time_window_activity']=_hydrate_time_window_content(row.get('time_window_activity'))
+  row['candidate_groups']=candidate_groups_for_prompt(row)
   return row
  return {'status':'not_found','prompt_id':prompt_id}
 
@@ -1007,7 +1093,7 @@ def guidance_instruction_status():
    except Exception: pass
   latest_entry=entry_rows[0] if entry_rows else None
   return {'instruction_version':VERSION,'content_sha256':content_sha256(),'core':CORE_TEXT,'detail':LONG_TEXT,'host_latest':hosts,
-   'entry_guidance':{'required':True,'tool_name':'get_task_guidance','invocation_mode':'codex_UserPromptSubmit_entry_adapter',
+   'entry_guidance':{'required':True,'tool_name':'get_preference','invocation_mode':'codex_UserPromptSubmit_entry_adapter',
                      'checks_observed':len(entry_rows),'latest':latest_entry,'model_context_visibility':'unknown',
                      'answer_use':'not_measured'},
    'model_context_visibility':'unknown','agent_followed_instruction':'not_measured','boundary':'服务器准备、入口适配层检查、宿主上下文可见、实际工具调用和资料使用分别记账。'}
@@ -2397,7 +2483,9 @@ class H(BaseHTTPRequestHandler):
    elif path=='/api/guidance/prompts':
     query=urllib.parse.parse_qs(parsed.query);limit=int((query.get('limit') or ['20'])[0]);cursor=(query.get('cursor') or ['0'])[0];host=(query.get('host') or ['all'])[0];search=(query.get('q') or [''])[0];body,etag=api_payload(path+':'+str(limit)+':'+str(cursor)+':'+str(host)+':'+str(search),guidance_prompt_list(limit,cursor,host,query_text=search));ctype='application/json; charset=utf-8'
    elif re.fullmatch(r'/api/guidance/prompts/[^/]+',path):
-    prompt_id=urllib.parse.unquote(path.rsplit('/',1)[-1]);body,etag=api_payload(path,guidance_prompt_detail(prompt_id));ctype='application/json; charset=utf-8'
+    prompt_id=urllib.parse.unquote(path.rsplit('/',1)[-1]);query=urllib.parse.parse_qs(parsed.query)
+    group=(query.get('candidate_group') or [None])[0];offset=int((query.get('offset') or ['0'])[0]);limit=int((query.get('limit') or ['10'])[0])
+    body,etag=api_payload(path+':'+str(group)+':'+str(offset)+':'+str(limit),guidance_prompt_detail(prompt_id,group,offset,limit));ctype='application/json; charset=utf-8'
    elif re.fullmatch(r'/api/guidance/audit/[^/]+',path):
     prompt_id=urllib.parse.unquote(path.rsplit('/',1)[-1]);body,etag=api_payload(path,guidance_prompt_audit(prompt_id));ctype='application/json; charset=utf-8'
    elif path=='/api/traces':body,etag=api_payload(path,{'items':request_snapshot().get('traces',[])});ctype='application/json; charset=utf-8'

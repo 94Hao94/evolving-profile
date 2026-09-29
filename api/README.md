@@ -91,7 +91,7 @@ Configure via environment variables:
 ```bash
 export EVOLVING_PROFILE_API_DATABASE_URL=postgresql://user:pass@localhost:5432/hindsight
 export EVOLVING_PROFILE_API_LLM_PROVIDER=groq
-export EVOLVING_PROFILE_API_LLM_API_KEY=YOUR_API_KEY
+export EVOLVING_PROFILE_API_LLM_API_KEY=YOUR_PROVIDER_API_KEY
 
 evolving-profile-api
 ```

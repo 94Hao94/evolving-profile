@@ -10,8 +10,11 @@ import json
 import math
 import os
 import re
+from pathlib import Path
 
-VERSION='recall-first.v1-20260917'
+VERSION='recall-first.v2-20260922'
+DEFAULT_CANDIDATE_LIMIT = 6
+MAX_CANDIDATE_LIMIT = 20
 INTENTS={
  'current_draft':('我改','我修改','改好的','当前底稿','用户修改','用户改','甲方修改','不要改回','原稿','最新版本','权威底稿','最小必要','修订'),
  'consistency':('附表','附件','预算','费用','金额','正文','一致','同步','联动','多文件','多文档','整体都调','所有文件'),
@@ -253,7 +256,7 @@ def semantic_rank(units, task, embed_many):
 def compact_unit(unit,why):
     result={k:unit.get(k) for k in ('id','revision','primary_category','nature','text','scope','applies_when','exceptions','effect_on_action')}
     result['content_sha256']=sha256(json.dumps({key:unit.get(key) for key in ('text','applies_when','exceptions','effect_on_action')},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
-    result['source_locator']={'tool':'read_guidance_unit','id':unit['id'],'revision':unit['revision'],'evidence_count':len(unit.get('evidence_refs') or [])}
+    result['source_locator']={'tool':'read_preference_unit','id':unit['id'],'revision':unit['revision'],'evidence_count':len(unit.get('evidence_refs') or [])}
     result['evidence_manifest']=[{key:ref.get(key) for key in ('memory_id','document_id','chunk_id','stored_role','origin','source_revision')}
                                  for ref in (unit.get('evidence_refs') or [])[:3]]
     result['preference_audit']={k:(unit.get('preference_audit') or {}).get(k) for k in ('state','validity_kind')}
@@ -262,6 +265,8 @@ def compact_unit(unit,why):
 
 def select(repo,request,char_budget=None):
     task=request.get('task') or {};max_tokens=max(500,min(8000,int(request.get('max_tokens') or 3000)))
+    requested_limit=request.get('max_candidates',DEFAULT_CANDIDATE_LIMIT)
+    candidate_limit=max(1,min(MAX_CANDIDATE_LIMIT,int(requested_limit)))
     budget=char_budget if char_budget is not None else max_tokens*2
     result={'selection_revision':repo.active_revision(),'selector_version':VERSION,'stable_profile':[],'preference_candidates':[],'included':[],'model_sections':[],'already_loaded_valid':[],'deferred':[],'held':[],'errors':[],'next_cursor':None,'coverage':'complete_active_set','foreground_model_calls':0,'long_term_model_created':False,'decision_policy':{'guidance_is_advisory':True,'current_prompt_wins':True,'preference_cannot_authorize_or_force_execution':True}}
     if request.get('memory_policy')=='forbidden':result['coverage']='not_requested';return result
@@ -291,7 +296,7 @@ def select(repo,request,char_budget=None):
         from semantic_recall import LocalGuidanceEmbeddingClient, SemanticRecallService
         base=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_API_BASE','http://127.0.0.1:12088')
         bank=os.getenv('EVOLVING_PROFILE_GUIDANCE_BANK_ID','personal-memory')
-        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE','$HOME/.evolving-profile/guidance-v1/semantic-vectors.json')
+        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE',str(Path.home()/'.evolving-profile/guidance-v1/semantic-vectors.json'))
         semantic_service=SemanticRecallService(
             LocalGuidanceEmbeddingClient(f'{base.rstrip("/")}/v1/default/banks/{bank}/internal/guidance-embeddings'),cache
         )
@@ -324,7 +329,8 @@ def select(repo,request,char_budget=None):
         except Exception as exc:
             semantic_status='degraded:'+type(exc).__name__
     next_offset=None;used=0
-    for index,(u,why) in enumerate(ranked[start:],start):
+    page=ranked[start:start+candidate_limit]
+    for index,(u,why) in enumerate(page,start):
         item=compact_unit(u,why)
         cost=len(json.dumps(item,ensure_ascii=False,separators=(',',':')))
         if (u['id'],u['revision'],item['content_sha256']) in loaded:result['already_loaded_valid'].append({'id':u['id'],'revision':u['revision'],'content_sha256':item['content_sha256']});continue
@@ -332,7 +338,7 @@ def select(repo,request,char_budget=None):
             result['included'].append(item);used+=cost
         else:
             if next_offset is None:next_offset=index
-            result['deferred'].append({'id':u['id'],'revision':u['revision'],'reason':'budget_requires_next_page','requires_read_before_dependent_action':True})
+            result['deferred'].append({'id':u['id'],'revision':u['revision'],'text':u.get('text',''),'applies_when':u.get('applies_when',[]),'exceptions':u.get('exceptions',[]),'effect_on_action':u.get('effect_on_action',''),'reason':'budget_requires_next_page','requires_read_before_dependent_action':True})
     refs={(u['id'],u['revision']) for u in result['included']+result['already_loaded_valid']}
     result['preference_candidates']=[{**item,'status':'candidate_requires_agent_judgment'} for item in result['included']]
     allowed={(u['id'],u['revision']) for u in repo.active_units() if (u.get('preference_audit') or {}).get('state') in {'approved','restricted'}}
@@ -344,8 +350,15 @@ def select(repo,request,char_budget=None):
             cost=len(json.dumps(item,ensure_ascii=False,separators=(',',':')))
             if used+cost<=budget:result['model_sections'].append(item);used+=cost
             else:result['deferred'].append({'id':m['id'],'revision':m['revision'],'section_id':section.get('section_id'),'reason':'model_body_budget'})
+    if start + candidate_limit < len(ranked):
+        overflow_offset = start + candidate_limit
+        if next_offset is None:next_offset = overflow_offset
+        result['deferred'].extend({'id':u['id'],'revision':u['revision'],'reason':'candidate_limit_requires_next_page','requires_read_before_dependent_action':True} for u,_ in ranked[overflow_offset:])
+    # Unread entries carry locators only; their bodies must not bypass the
+    # candidate or token limits by appearing a second time as deferred text.
+    result['deferred']=[{k:v for k,v in row.items() if k in {'id','revision','section_id','reason','requires_read_before_dependent_action'}} for row in result['deferred']]
     if result['deferred']:result['coverage']='partial_page_with_deferred'
     if next_offset is not None:result['next_cursor']=base64.urlsafe_b64encode(json.dumps({'offset':next_offset,'query_revision':query_hash,'selection_revision':repo.active_revision()}).encode()).decode().rstrip('=')
-    result['budget']={'requested_max_tokens':max_tokens,'soft':True,'candidate_scope':'all_reviewed_units','body_serialized_chars':used,'candidate_count':len(ranked),'semantic_recall':semantic_status}
+    result['budget']={'requested_max_tokens':max_tokens,'soft':True,'candidate_scope':'all_reviewed_units','body_serialized_chars':used,'candidate_count':len(ranked),'candidate_limit':candidate_limit,'semantic_recall':semantic_status}
     result['budget']['estimated_response_tokens']=len(json.dumps(result,ensure_ascii=False,separators=(',',':')))//2
     return result

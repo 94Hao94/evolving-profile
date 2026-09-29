@@ -1,4 +1,4 @@
-export const DATA_SUB_TABS = ["world", "experience", "entities", "preferences"] as const;
+export const DATA_SUB_TABS = ["world", "experience", "entities", "preferences", "context"] as const;
 
 export type DataSubTab = (typeof DATA_SUB_TABS)[number];
 

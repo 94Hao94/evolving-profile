@@ -220,9 +220,14 @@ def _dedup_key(unit: dict) -> str:
     return text + "\x1f" + conditions
 
 
-def get_task_guidance(repo: GuidanceRepository, request: dict, char_budget: int | None = None) -> dict:
+def get_preference(repo: GuidanceRepository, request: dict, char_budget: int | None = None) -> dict:
     from recall_first import select
     return select(repo, request, char_budget)
+
+
+# Internal compatibility for older unit-test helpers and persisted replay code.
+# It is intentionally not exposed as an MCP tool name.
+get_task_guidance = get_preference
 
 
 def legacy_get_task_guidance(repo: GuidanceRepository, request: dict, char_budget: int | None = None) -> dict:

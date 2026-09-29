@@ -7,11 +7,12 @@ export type FlowEvidenceItem = {
 };
 
 export type FlowPrompt = {
+  candidate_groups?: Array<{id:string;actor:string;count?:number|null}>;
   prompt_id: string;
   at: string;
   user_prompt: string;
   source?: string;
-  system_probe?: { actor?: string; state?: string; calls?: number; returned_count?: number; candidate_count?: number | null; context_tokens?: number; max_tokens?: number; token_counter?: string; reason?: string; error_type?: string; delivery_stage?: string; admission?: { mode?: string; admitted_count?: number; rejected_count?: number; focus_terms?: string[]; reason?: string } } | null;
+  system_probe?: { actor?: string; state?: string; calls?: number; returned_count?: number; text_returned_count?:number;locator_returned_count?:number;candidate_count?: number | null; context_tokens?: number; max_tokens?: number; token_counter?: string; reason?: string; error_type?: string; delivery_stage?: string; admission?: { mode?: string; admitted_count?: number; rejected_count?: number; focus_terms?: string[]; reason?: string } } | null;
   history_plan?: { recommended_route?: string; history_dependency?: string; minimum_action?: string; reason?: string; required_slots?: string[]; context_source?: string; boundary?: string; fallback_route?: string | null; fallback_trigger?: string | null; candidate_policy?: string } | null;
   task_state?: { current_objective?:string; current_message?:string; continuation?:boolean; continuation_context?:string|null; source?:string; authority?:string } | null;
   evidence_decision?: { need?:string; known_from_current_context?:boolean; unresolved_slots?:string[]; chosen_route?:string; sufficiency?:string; conflicts?:string[]; source_ids?:string[]; next_action?:string|null; stop_reason?:string|null; boundary?:string } | null;
@@ -27,7 +28,13 @@ export type FlowPrompt = {
     catalog_probe?: { status?: string; candidate_count?: number | null; matched_entities?: string[]; catalog_coverage?: string };
     catalog_hints?: Array<{ topic_id?: string; title?: string; abstract?: string; overview?: string; entities?: string[]; time_range?: {start?:string|null;end?:string|null}; source_count?:number; source_count_semantics?:string; coverage?:{sampled?:number;total?:number|null;semantics?:string}; pending_changes?:number|null; conflicts?:string[]|null; pending_changes_status?:string; conflict_status?:string; content_status?:string; refreshed_at?:string|null; boundary?:string; memory_id?: string; type?: string; topic?: string; mentioned_at?: string | null; occurred_start?: string | null; occurred_end?: string | null; state?: string }>;
     agent_may_override?: boolean;
-    tool_events?: Array<{ tool?: string; at?: string; route?: string; check_id?: string | null; session_id?: string | null; turn_id?: string | null; hook_invocation_id?: string | null; research_id?: string | null; query?: string | null; candidate_count?: number | null; returned_count?: number | null; next_offset?: number | null; memory_id?: string | null; memory_ids?: string[]; delivery?: { host_visibility?: string; answer_use?: string } }>;
+    route_required?: boolean;
+    route_started?: boolean;
+    tool_called?: boolean;
+    returned_count?: number;
+    delivery_state?: string;
+    unresolved?: string[];
+    tool_events?: Array<{ tool?: string; at?: string; route?: string; check_id?: string | null; session_id?: string | null; turn_id?: string | null; hook_invocation_id?: string | null; research_id?: string | null; query?: string | null; candidate_count?: number | null; returned_count?: number | null; next_offset?: number | null; memory_id?: string | null; memory_ids?: string[]; scenario_ids?: string[]; scenario_navigation_roles?: Array<[string,string]>; scenario_type?: string | null; scenario_tier?: string | null; scenario_episode_id?: string | null; scenario_episode_title?: string | null; scenario_episode_count?: number | null; scenario_episodes?: Array<{episode_id?:string;title?:string;title_authority?:string;start_message_id?:string;start_user_message_id?:string;end_message_id?:string;source_message_count?:number;source_revision?:string;status?:string}>; scenario_summary_status?: string | null; scenario_summary_text?: string | null; scenario_summary_truncated?: boolean; scope_hypothesis_count?: number | null; scope_route_policy?: {state?:string;required_next_action?:string;defer_bank_retrieval_until_scope_check?:boolean}; scenario_decision?: string | null; delivery?: { host_visibility?: string; answer_use?: string } }>;
   } | null;
   time_window_activity?: {
     state?: "observed" | "not_observed";
@@ -35,11 +42,15 @@ export type FlowPrompt = {
     start?: string;
     end?: string;
     event_count?: number;
-    by_tool?: Record<string, { calls?: number; returned?: number; latest_at?: string | null }>;
-    events?: Array<{ tool?: string; at?: string; check_id?: string | null; returned_count?: number | null; research_id?: string | null; memory_id?: string | null; memory_ids?: string[] }>;
+    by_tool?: Record<string, { calls?: number; returned?: number; candidates?: number; latest_at?: string | null }>;
+    events?: Array<{ tool?: string; at?: string; check_id?: string | null; returned_count?: number | null; candidate_count?: number | null; research_id?: string | null; memory_id?: string | null; memory_ids?: string[] }>;
     unattributed_activity?: { state?: "observed" | "not_observed"; event_count?: number; by_tool?: Record<string, { calls?: number; returned?: number; latest_at?: string | null }>; boundary?: string } | null;
     items?: FlowEvidenceItem[];
     boundary?: string;
+    candidate_count?: number;
+    candidate_research_ids?: string[];
+    candidate_items?: Array<FlowEvidenceItem & { candidate_only?: boolean }>;
+    candidate_queries?: Array<{ query?: string; candidate_count?: number; anchors?: string[] }>;
   } | null;
   time_window_guidance_activity?: {
     state?: "observed" | "not_observed";
@@ -103,6 +114,27 @@ export type FlowPrompt = {
 export function projectFlowAudit(prompt: FlowPrompt) {
   const receipt = prompt.guidance_receipt;
   const history = prompt.historical_audit;
+  const promptToolEvents = prompt.memory_route_receipt?.tool_events ?? [];
+  const boundHistory = promptToolEvents.filter(event =>
+    ["recall", "research", "read_research", "read_source", "find_sources", "read_scenario_summary"].includes(event.tool ?? ""));
+  const actualEvents = boundHistory.length ? boundHistory :
+    prompt.time_window_activity?.boundary === "same_prompt_binding_only" ? prompt.time_window_activity.events ?? [] : [];
+  const observedToolEvents = promptToolEvents.length ? promptToolEvents : actualEvents;
+  const measuredResults = observedToolEvents.filter(event => typeof event.returned_count === "number");
+  const actualRoute = actualEvents.length ? [...new Set(actualEvents.map(event => event.tool))].join("+") : null;
+  const actualReturned = actualEvents.reduce((sum, event) => sum + (event.returned_count ?? 0), 0);
+  const plannedRoute = prompt.history_plan?.recommended_route ?? prompt.memory_route_receipt?.recommended_route;
+  const routeRequired = Boolean(
+    prompt.history_plan?.minimum_action === "recall_probe" ||
+    prompt.history_plan?.history_dependency === "likely" ||
+    plannedRoute === "recall" || plannedRoute === "research"
+  );
+  const routeStarted = actualEvents.length > 0;
+  const routeStatus = routeRequired && !routeStarted
+    ? "ep_history_verification_incomplete"
+    : routeStarted
+      ? (actualReturned > 0 ? "ep_history_verified_candidate_returned" : "ep_history_tool_called_empty")
+      : "ep_history_not_required";
   const guidanceItems = [
     ...(receipt?.stable_profile ?? []).map((item) => ({ ...item, type: item.type ?? "stable_profile" })),
     ...(receipt?.guidance_items ?? []),
@@ -111,6 +143,14 @@ export function projectFlowAudit(prompt: FlowPrompt) {
   const navigation = prompt.navigation_map;
 
   return {
+    hostEvidence: {
+      entry: prompt.instruction_receipt ? "prepared" : "unknown",
+      mcp: observedToolEvents.length ? "observed" : "unknown",
+      history: actualEvents.length ? "observed" : "not_observed",
+      result: measuredResults.length
+        ? measuredResults.some(event => (event.returned_count ?? 0) > 0) ? "returned" : "returned_empty"
+        : "unknown",
+    },
     entry: {
       value: receipt?.host_state ?? prompt.routes?.entry_guidance ?? "not_observed",
       source: prompt.source ?? "unknown",
@@ -152,16 +192,17 @@ export function projectFlowAudit(prompt: FlowPrompt) {
       },
     },
     history: {
-      value: history?.route ?? prompt.routes?.historical_memory ?? "not_observed",
-      state: history?.state ?? prompt.routes?.historical_memory ?? "unknown",
-      decision: prompt.history_decision ?? ((history?.state ?? prompt.routes?.historical_memory ?? "unknown") === "unknown" ? "unknown" : "needed"),
+      value: actualRoute ?? history?.route ?? prompt.routes?.historical_memory ?? "not_observed",
+      state: actualRoute ? (actualReturned ? "observed" : "executed_empty") : history?.state ?? prompt.routes?.historical_memory ?? "unknown",
+      calls: actualEvents.length,
+      decision: actualRoute ? "needed" : prompt.history_decision ?? ((history?.state ?? prompt.routes?.historical_memory ?? "unknown") === "unknown" ? "unknown" : "needed"),
       decisionEvidence: prompt.history_decision_evidence ?? "not_observed",
       routeReceipt: prompt.memory_route_receipt ?? null,
       mode: history?.mode ?? (history?.route === "recall" || history?.route === "recall_and_research" ? "hook_auto_recall" : "not_observed"),
       controller: history?.controller_state ?? (history?.route === "recall" || history?.route === "recall_and_research" ? "admission_applied" : "not_used"),
       metrics: {
         candidates: history?.candidate_count ?? null,
-        returned: history?.returned_to_host_count ?? null,
+        returned: actualRoute ? actualReturned : history?.returned_to_host_count ?? null,
         unread: history?.unread_candidate_count ?? null,
         rejected: history?.rejected_count ?? null,
       },
@@ -169,6 +210,15 @@ export function projectFlowAudit(prompt: FlowPrompt) {
       delivered: history?.delivery_state === "observed" ? history?.returned_to_host_count ?? null : null,
       delivery: history?.delivery_state ?? "not_observed",
       evidenceDecision: prompt.evidence_decision ?? null,
+      routeAudit: {
+        route_required: routeRequired,
+        route_started: routeStarted,
+        tool_called: routeStarted,
+        returned_count: actualReturned,
+        delivery_state: routeStarted ? (actualReturned > 0 ? "returned" : "returned_empty") : "not_started",
+        unresolved: routeRequired && !routeStarted ? ["EP历史工具尚未调用，不能把本地文件搜索或候选提示算作历史核验"] : [],
+        status: routeStatus,
+      },
     },
     systemProbe: prompt.system_probe ?? null,
     historyPlan: prompt.history_plan ?? null,

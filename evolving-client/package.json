@@ -1,0 +1,47 @@
+{
+  "name": "@evolving-profile/client",
+  "version": "0.8.4",
+  "description": "TypeScript client for Evolving Profile memory services",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "generate": "npx @hey-api/openapi-ts",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "test:deno": "deno test --no-check --allow-env --allow-net --unstable-sloppy-imports --preload=tests/deno_setup.ts tests/main_operations.test.ts"
+  },
+  "keywords": [
+    "evolving-profile",
+    "memory",
+    "api",
+    "client",
+    "typescript"
+  ],
+  "author": "Evolving Profile",
+  "license": "MIT",
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.88.0",
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "src",
+    "generated",
+    "README.md"
+  ]
+}

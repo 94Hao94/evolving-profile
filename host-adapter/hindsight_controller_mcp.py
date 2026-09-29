@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
-GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", "$HOME/.evolving-profile/runtime/guidance")
+GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path.home() / ".evolving-profile/runtime/guidance"))
 if GUIDANCE_V1_SRC not in sys.path:
     sys.path.insert(0, GUIDANCE_V1_SRC)
 from evidence_workspace import discover, search, read_page, source_witness, record_stdout, DEFAULT_ROOT
@@ -25,10 +25,10 @@ from source_safety import mask_text, mask_value
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
 BANK = "personal-memory"
 VERSION = "1.5.0-route-intelligence"
-GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", "$HOME/.evolving-profile/guidance-v1/guidance-v1.json")
+GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json"))
 CHECK_TOOL = {
     'name':'memory_check',
-    'description':'兼容审计工具，不是记忆启动入口，也不应在get_task_guidance之前强制调用。新实质任务先依据启动说明判断：多维度偏好用get_task_guidance，历史事实用recall/research。仅当宿主已经提供真实check_id、需要补记本轮是否查历史，或兼容旧验收时调用；不得编造或复用ID。此工具不读写Bank，不决定是否允许回答。',
+    'description':'兼容审计工具，不是记忆启动入口，也不应在get_preference之前强制调用。新实质任务先依据启动说明判断：多维度偏好用get_preference，历史事实用recall/research。仅当宿主已经提供真实check_id、需要补记本轮是否查历史，或兼容旧验收时调用；不得编造或复用ID。此工具不读写Bank，不决定是否允许回答。',
     'inputSchema':{'type':'object','additionalProperties':False,'properties':{
         'check_id':{'type':'string'},'full_prompt':{'type':'string','minLength':1},
         'need':{'type':'string','enum':['required','not_needed','unavailable']},
@@ -36,21 +36,20 @@ CHECK_TOOL = {
     'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False},
 }
 GUIDANCE_TOOL = {
-    'name':'read_guidance',
+    'name':'read_preference',
     'description':'读取Evolving Profile已有的经审阅多维度偏好/协作参考及Bank原文依赖；适用于用户偏好、协作方式和执行要求的核对。逐次核对来源有效性与原文版本，不读取Codex原生memory。只是有适用范围的小视图，不是所有偏好或全部心智模型；需结合recall/research补齐其他历史证据。',
     'inputSchema':{'type':'object','properties':{},'additionalProperties':False},
     'annotations':{'readOnlyHint':True,'destructiveHint':False,'openWorldHint':False},
 }
 GUIDANCE_UNIT_TOOL = {
-    'name':'read_guidance_unit','description':'按GuidanceUnit稳定ID和可选revision读取完整正文、条件、例外、行动影响、来源引用及版本状态。只读；用于补读deferred项或核对已加载版本。',
+    'name':'read_preference_unit','description':'按PreferenceUnit稳定ID和可选revision读取完整正文、条件、例外、行动影响、来源引用及版本状态。只读；用于补读deferred项或核对已加载版本。',
     'inputSchema':{'type':'object','additionalProperties':False,'properties':{'id':{'type':'string','minLength':1},'revision':{'type':'string'}},'required':['id']},
     'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
 }
 try:
-    from mcp_runtime import TASK_GUIDANCE_TOOL, PREFERENCE_TOOL, MEMORY_INSTRUCTIONS_TOOL, GUIDANCE_INSTRUCTIONS, load_repository, get_task_guidance_response, read_guidance_unit, read_memory_instructions, record_instruction
+    from mcp_runtime import PREFERENCE_TOOL, MEMORY_INSTRUCTIONS_TOOL, GUIDANCE_INSTRUCTIONS, load_repository, get_preference_response, read_preference_unit, read_memory_instructions, record_instruction
     from runtime_recovery import refresh_runtime_guidance
 except Exception as guidance_v1_import_error:
-    TASK_GUIDANCE_TOOL = None
     PREFERENCE_TOOL = None
     MEMORY_INSTRUCTIONS_TOOL = {'name':'read_memory_instructions','description':'记忆使用说明当前不可用。','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}
     GUIDANCE_INSTRUCTIONS = "当前用户要求优先；需要历史事实时查询 Bank 并回读来源。"
@@ -196,7 +195,7 @@ def official_json(path,body=None,timeout=15):
 
 
 def guidance_value(args):
-    if args:raise ValueError('read_guidance takes no arguments; use returned scopes to judge applicability')
+    if args:raise ValueError('read_preference takes no arguments; use returned scopes to judge applicability')
     from profile_view import load_view
     try:view=load_view(BANK,get=lambda path:official_json(path,timeout=0.8))
     except Exception as error:
@@ -208,19 +207,19 @@ def guidance_value(args):
         'boundary':'释义而非逐字原话；按范围选用，当前Prompt优先。仅核验所列来源，不保证已发现独立新纠正；需补查其他原文。未可用不等于用户没有偏好。'}
     return result
 
-def read_guidance(args):
+def read_preference(args):
     return {'content':[{'type':'text','text':json.dumps(guidance_value(args),ensure_ascii=False)}],'isError':False}
 
-def task_guidance(args):
-    if TASK_GUIDANCE_TOOL is None:
+def preference(args):
+    if PREFERENCE_TOOL is None:
         return {'content':[{'type':'text','text':json.dumps({'coverage':'unavailable','errors':['guidance_runtime_import_'+str(_GUIDANCE_V1_IMPORT_ERROR)]},ensure_ascii=False)}],'isError':True}
     repo=load_repository(GUIDANCE_V1_CONFIG)
-    result=get_task_guidance_response(repo,args,record=not bool(args.get("entry_adapter")))
+    result=get_preference_response(repo,args,record=not bool(args.get("entry_adapter")))
     result['adapter_version']=VERSION+'+guidance-v1'
     result['delivery']={'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'}
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 def guidance_unit(args):
-    repo=load_repository(GUIDANCE_V1_CONFIG);result=read_guidance_unit(repo,str(args.get('id') or ''),args.get('revision'));result['adapter_version']=VERSION+'+guidance-v1'
+    repo=load_repository(GUIDANCE_V1_CONFIG);result=read_preference_unit(repo,str(args.get('id') or ''),args.get('revision'));result['adapter_version']=VERSION+'+preference-v1'
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 def memory_instructions(args):
     if args:raise ValueError('read_memory_instructions takes no arguments')
@@ -398,7 +397,7 @@ for line in sys.stdin:
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL, RUNTIME_RECOVERY_TOOL] + ([PREFERENCE_TOOL, TASK_GUIDANCE_TOOL] if TASK_GUIDANCE_TOOL and PREFERENCE_TOOL else [])})
+            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL, RUNTIME_RECOVERY_TOOL] + ([PREFERENCE_TOOL] if PREFERENCE_TOOL else [])})
         elif method == "tools/call":
             params = request.get("params") or {}
             if params.get('name') == 'memory_check':
@@ -408,17 +407,17 @@ for line in sys.stdin:
                 except ValueError:value=declare(None,args.get('full_prompt'),args.get('need'),args.get('reason'))
                 value['adapter_version']=VERSION
                 reply(message_id,{'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False})
-            elif params.get('name') == 'read_guidance':
-                reply(message_id,read_guidance(params.get('arguments') or {}))
-            elif params.get('name') in ('get_preference','get_task_guidance'):
-                reply(message_id,task_guidance(params.get('arguments') or {}))
+            elif params.get('name') == 'read_preference':
+                reply(message_id,read_preference(params.get('arguments') or {}))
+            elif params.get('name') == 'get_preference':
+                reply(message_id,preference(params.get('arguments') or {}))
             elif params.get('name') == 'refresh_runtime_guidance':
                 repo=load_repository(GUIDANCE_V1_CONFIG)
                 value=refresh_runtime_guidance(repo,params.get('arguments') or {})
                 value['adapter_version']=VERSION+'+runtime-guidance'
                 value['delivery']={'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'}
                 reply(message_id,{'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False})
-            elif params.get('name') == 'read_guidance_unit':
+            elif params.get('name') == 'read_preference_unit':
                 reply(message_id,guidance_unit(params.get('arguments') or {}))
             elif params.get('name') == 'read_memory_instructions':
                 reply(message_id,memory_instructions(params.get('arguments') or {}))

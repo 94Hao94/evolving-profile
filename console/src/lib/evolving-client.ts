@@ -11,7 +11,10 @@ import {
   sdk,
 } from "@evolving-profile/client";
 
-export const DATAPLANE_URL = process.env.EVOLVING_PROFILE_DATAPLANE_API_URL || "http://localhost:8888";
+// EP4.0's local shadow data plane is the service that owns the live bank API.
+// Keep the environment override for packaged deployments, but do not fall
+// back to the retired 8888 control-plane port on a fresh local install.
+export const DATAPLANE_URL = process.env.EVOLVING_PROFILE_DATAPLANE_API_URL || "http://127.0.0.1:12088";
 const DATAPLANE_API_KEY = process.env.EVOLVING_PROFILE_DATAPLANE_API_KEY || "";
 
 /**

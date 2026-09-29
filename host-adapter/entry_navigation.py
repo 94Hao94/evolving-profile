@@ -94,7 +94,7 @@ def _preference_index(config_path):
         "coverage": "all_reviewed_units_considered_diverse_scope_preview_not_exhaustive",
         "freshness": "live_registry_read_each_prompt",
         "revision": sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12],
-        "read_more": "Get Preference → read_guidance / read_guidance_unit",
+        "read_more": "Get Preference → read_preference / read_preference_unit",
     }
 
 
@@ -178,7 +178,7 @@ def build_navigation_map(config_path, policy, *, catalog_path=None):
             scopes=' / '.join(_clip(item['scope'],18 if corpus_map else 22) for item in row['scopes'])
             example=row['examples'][0]['clue'] if row['examples'] else ''
             lines.append(f"{row['label']} {row['count']} 条｜{scopes or '暂无已审阅条目'}"+(f"；例：{example}" if example and not corpus_map else ''))
-        lines.append("偏好下钻：Get Preference；使用前读完整条件/例外，deferred 用 read_guidance/read_guidance_unit 补读。")
+        lines.append("偏好下钻：Get Preference；使用前读完整条件/例外，deferred 用 read_preference/read_preference_unit 补读。")
     else:
         lines.append("偏好索引：本轮禁止读取。" if prefs["status"] == "forbidden" else "偏好索引：不可用，不代表没有偏好。")
     bank = lanes["bank"]

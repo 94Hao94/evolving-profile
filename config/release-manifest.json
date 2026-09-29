@@ -1,0 +1,11 @@
+{
+  "product": "Evolving Profile",
+  "product_version": "4.0",
+  "release_channel": "development",
+  "build_id": "ep4-dev",
+  "schema_versions": {
+    "runtime_settings": "1",
+    "backup_settings": "1",
+    "retrieval_models": "1"
+  }
+}

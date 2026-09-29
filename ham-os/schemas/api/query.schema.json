@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"ham.query.v1","type":"object","required":["user_request"],"properties":{"user_request":{"type":"string","maxLength":1048576},"latency_class":{"enum":["fast","normal","deep"]},"workload_class_hint":{"enum":["precise","ordinary_semantic","precomputed_handoff","complex_composite","deep_reconstruction"]}}}

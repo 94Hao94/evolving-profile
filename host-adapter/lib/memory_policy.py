@@ -55,8 +55,16 @@ def classify_memory_policy(prompt: str) -> dict:
     )
     history_patterns = (
         r"(?:不要|不用|别|无需|不)(?:再)?(?:使用|调用|检索|查询|查|参考|读取|翻)?(?:任何|所有|我的)?(?:历史|长期|旧的?|以往|以前|过去|之前)(?:的)?(?:记忆|事实|资料|聊天|内容|记录|截图)",
+        r"(?:不要|不用|别|无需|不)(?:再)?(?:使用|调用|检索|查询|查|参考|读取|翻)?(?:我的)?(?:历史|长期|旧的?)(?:资料|记录|内容|检索|读取)?",
         r"(?:关闭|禁用)(?:本轮|这次)?(?:历史|长期)(?:检索|读取|记忆)",
         r"(?:只根据|仅根据|只看|仅看)(?:这句话|当前上下文|当前材料|本轮材料|下面材料|这份材料|新附件)",
+        # A current-document boundary can be stated without the word
+        # "history" (for example, "只分析我贴出的文本").  Treat it as
+        # current-turn-only so a document review does not pull unrelated
+        # durable memories merely because it mentions a contract/project.
+        r"(?:只|仅)(?:分析|依据|基于)(?:我)?(?:贴出|提供|给出)(?:的)?(?:文本|材料|内容)",
+        r"(?:只|仅)分析(?:当前|本轮|这份|下面)(?:文本|材料|内容)",
+        r"(?:不|不要|不用|别)(?:再)?(?:查|看|用|调用)(?:任何|所有|我的)?(?:历史|记忆|旧资料)",
         r"别翻旧账",
     )
     all_forbidden = not positive_correction and any(re.search(pattern, text) for pattern in all_patterns)

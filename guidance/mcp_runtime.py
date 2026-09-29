@@ -6,26 +6,27 @@ import os
 from pathlib import Path
 
 from repository import GuidanceRepository
-from selector import get_task_guidance
+from selector import get_preference
 from receipts import record_mcp_stdout
 from memory_usage_instructions import CORE_TEXT, LONG_TEXT, VERSION as INSTRUCTION_VERSION, content_sha256 as instruction_sha256, record as record_instruction
 from runtime_recovery import refresh_runtime_guidance
+from runtime_settings import load_runtime_settings, module_enabled
 
 GUIDANCE_SETTINGS_PATH = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SETTINGS", str(Path.home() / ".evolving-profile/config/guidance-settings.json")))
 
 def guidance_settings() -> dict:
     try:
         value = json.loads(GUIDANCE_SETTINGS_PATH.read_text(encoding="utf-8"))
-        return {"max_candidates": max(1, min(20, int(value.get("max_candidates", 6))))}
+        return {"max_candidates": max(1, min(20, int(value.get("max_candidates", 6)))), "adaptive_budget": bool(value.get("adaptive_budget", True))}
     except (OSError, ValueError, TypeError):
-        return {"max_candidates": 6}
+        return {"max_candidates": 6, "adaptive_budget": True}
 
 
 GUIDANCE_INSTRUCTIONS = f"[{INSTRUCTION_VERSION} sha256={instruction_sha256()}]\n{CORE_TEXT}"
 
 
-TASK_GUIDANCE_TOOL = {
-    "name": "get_task_guidance",
+PREFERENCE_TOOL = {
+    "name": "get_preference",
     "description": "多维度偏好（Multi-dimensional Preference）路线。遇到实质任务时根据启动说明优先调用；传入用户原始消息、必要前文、任务阶段和约束，读取正式active偏好及其五维归类、融合定位层中的已有心智模型章节。只读；前台模型调用为0，不生成长期模型。返回完整条件、例外、来源、already_loaded_valid、deferred和分页游标。",
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
         "context_ref": {"type": "string"},
@@ -48,11 +49,10 @@ TASK_GUIDANCE_TOOL = {
     }, "required": ["task", "loaded", "memory_policy"]},
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 }
-# Public name used by current hosts. Keep the legacy task-oriented name as an
-# alias so existing adapters and older receipts remain readable.
-PREFERENCE_TOOL = dict(TASK_GUIDANCE_TOOL)
-PREFERENCE_TOOL["name"] = "get_preference"
-PREFERENCE_TOOL["description"] = TASK_GUIDANCE_TOOL["description"].replace("多维度偏好（Multi-dimensional Preference）路线。", "Get Preference（多维度偏好）路线。")
+# Internal compatibility alias. It is not included in tools/list and must not
+# appear in current UI or startup instructions.
+TASK_GUIDANCE_TOOL = PREFERENCE_TOOL
+PREFERENCE_TOOL["description"] = PREFERENCE_TOOL["description"].replace("多维度偏好（Multi-dimensional Preference）路线。", "Get Preference（多维度偏好）路线。")
 # Prompt-level observability is part of the Get Preference contract. Keep the
 # legacy task-guidance alias permissive, but require the public preference
 # route to identify the current UserPromptSubmit receipt.
@@ -98,24 +98,46 @@ def load_repository(config_path: str | Path) -> GuidanceRepository:
     return GuidanceRepository(config["registry"], config["bank_id"])
 
 
-def get_task_guidance_response(repo: GuidanceRepository, request: dict, *, record: bool = True) -> dict:
+def get_preference_response(repo: GuidanceRepository, request: dict, *, record: bool = True) -> dict:
+    runtime = load_runtime_settings()
+    if not module_enabled(runtime, "preferences", "retrieve"):
+        return {
+            "coverage": "disabled_by_runtime_settings",
+            "included": [], "preference_candidates": [], "stable_profile": [],
+            "deferred": [], "already_loaded_valid": [], "next_cursor": None,
+            "disabled_module": "preferences", "disabled_action": "retrieve",
+            "decision_policy": {"guidance_is_advisory": True, "current_prompt_wins": True},
+        }
     configured=guidance_settings()["max_candidates"]
     requested=request.get("max_candidates",configured)
     if type(requested) is not int or not 1 <= requested <= 20:
         raise ValueError("max_candidates must be an integer from 1 to 20")
-    request = {**request, "max_candidates": min(requested,configured)}
-    result = get_task_guidance(repo, request)
+    adaptive = bool(guidance_settings().get("adaptive_budget", True))
+    phase = str((request.get("task") or {}).get("phase") or "").strip().lower()
+    effective = min(requested, configured)
+    if adaptive and phase in {"understand", "analyze"}:
+        effective = min(effective, 4)
+    request = {**request, "max_candidates": effective, "adaptive_budget_applied": adaptive}
+    result = get_preference(repo, request)
+    result.setdefault("budget", {})["adaptive_budget_applied"] = adaptive
+    result["budget"]["requested_candidate_limit"] = requested
+    result["budget"]["effective_candidate_limit"] = effective
     if record:
         state_root = Path(os.environ.get("EVOLVING_PROFILE_STATE_ROOT", str(Path.home() / ".evolving-profile")))
         result["delivery_receipt"] = record_mcp_stdout(state_root / "guidance-v1/receipts", request, result)
     return result
 
 
-def read_guidance_unit(repo: GuidanceRepository, unit_id: str, revision: str | None = None) -> dict:
+def read_preference_unit(repo: GuidanceRepository, unit_id: str, revision: str | None = None) -> dict:
     history = repo.unit_history(unit_id)
     if revision is not None: history = [row for row in history if row.get("revision") == revision]
     if not history: return {"status": "not_found", "id": unit_id, "revision": revision}
     return {"status": "found", "unit": history[0], "history_count": len(repo.unit_history(unit_id))}
+
+
+# Internal compatibility aliases for old replay data; neither is public.
+get_task_guidance_response = get_preference_response
+read_guidance_unit = read_preference_unit
 
 
 def read_memory_instructions() -> dict:

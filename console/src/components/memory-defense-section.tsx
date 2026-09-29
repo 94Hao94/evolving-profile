@@ -198,8 +198,8 @@ export function MemoryDefenseSection({ bankId }: MemoryDefenseSectionProps) {
     <section className="space-y-6">
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
-          <h2 className="text-lg font-semibold">{t("memoryDefenseTitle")}</h2>
-          <p className="text-sm text-muted-foreground">{t("memoryDefenseDescription")}</p>
+          <h2 className="text-lg font-semibold">数据与路由防护</h2>
+          <p className="text-sm text-muted-foreground">敏感数据规则负责 Bank 数据处理；EP 路由防护负责要求历史任务真实调用 Recall/Research。两者作用不同。</p>
         </div>
         <div className="shrink-0 pt-1 scale-125 origin-right">
           <Switch checked={masterEnabled} onCheckedChange={setMaster} />

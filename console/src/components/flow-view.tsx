@@ -5,6 +5,7 @@ import { useLocale } from "next-intl";
 import { projectFlowAudit, type FlowEvidenceItem, type FlowPrompt } from "@/lib/flow-projection";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { NavigationTopicBrowser } from "@/components/navigation-topic-browser";
+import { CandidateAuditBrowser } from "@/components/candidate-audit-browser";
 import { useParams } from "next/navigation";
 import {
   ArrowDown,
@@ -12,6 +13,7 @@ import {
   Check,
   GitBranch,
   History,
+  Network,
   Search,
   Sparkles,
   TerminalSquare,
@@ -103,7 +105,23 @@ function displayEvidence(item: FlowEvidenceItem) {
 }
 
 function displayToolLabel(tool?: string) {
-  return tool?.includes("get_task_guidance") || tool?.includes("get_preference") ? "Get Preference" : tool ?? "工具";
+  if (tool?.includes("get_preference") || tool?.includes("get_task_guidance")) return "Get Preference";
+  if (tool?.includes("read_preference_unit") || tool?.includes("read_guidance_unit")) return "Read Preference Unit";
+  if (tool?.includes("read_preference") || tool?.includes("read_guidance")) return "Read Preference";
+  if (tool?.includes("search_scenario_summary") || tool?.includes("search_scenario_contexts")) return "Search Scenario Summary";
+  if (tool === "read_scenario_summary") return "Scenario Summary";
+  if (tool === "scenario_gate") return "Scenario Gate";
+  return tool ?? "工具";
+}
+
+export function scenarioFreshnessLabel(status?: string | null) {
+  if (status === "span_current_parent_revision_changed")
+    return "本段来源未变 · Session 其他内容已更新";
+  if (status === "stale_source_changed") return "来源范围已变化 · 暂不显示缓存摘要";
+  if (status === "episode_source_unavailable") return "原始来源不可读取 · 暂不显示缓存摘要";
+  if (status === "episode_not_found") return "Episode 定位不存在";
+  if (status === "current") return "来源范围已核对";
+  return "情景来源状态待核实";
 }
 
 export function observationWindowMinutes(value?: number | null) {
@@ -163,11 +181,30 @@ export function guidanceNodeValue(audit: ReturnType<typeof projectFlowAudit> | n
 
 export function historyToolStatus(
   route: string | undefined,
-  tool: "recall" | "research" | "read_source",
+  tool: "recall" | "research" | "read_source" | "read_scenario_summary",
   windowActivity?: FlowPrompt["time_window_activity"],
+  toolEvents?: NonNullable<FlowPrompt["memory_route_receipt"]>["tool_events"],
 ): ToolStatus {
-  if (route?.includes(tool)) return "observed";
-  return windowActivity?.by_tool?.[tool]?.calls ? "window_observed" : "not_observed";
+  if (toolEvents?.some((event) => event.tool === tool)) return "observed";
+  if (route?.includes(tool) && !route.startsWith("system_probe")) return "observed";
+  if (windowActivity?.by_tool?.[tool]?.calls)
+    return windowActivity.boundary === "same_prompt_binding_only" ? "observed" : "window_observed";
+  return "not_observed";
+}
+
+export function historyEmptyStateLabel(history: {
+  decision?: string;
+  timeWindowActivity?: FlowPrompt["time_window_activity"];
+}) {
+  const activity = history.timeWindowActivity;
+  const recall = activity?.by_tool?.recall;
+  if (recall?.calls) {
+    const candidates = activity?.candidate_count ?? recall.candidates ?? 0;
+    return `已记录 Recall 回执：调用 ${recall.calls} 次，返回 ${recall.returned ?? 0} 条；候选发现 ${candidates} 条${recall.returned === 0 ? '，没有候选正文返回给 Agent' : '，内容预览尚未取得'}。`;
+  }
+  if (history.decision === "agent_decides") return "当前页面没有宿主级调用回执，无法判断 Codex 是否调用或读取了历史结果。";
+  if (history.decision === "unknown") return "当前缺少 recall / research / read_source 回执，无法判断是未调用还是回执未投影。";
+  return "页面未取得本轮历史工具回执；这不等于历史库为空。";
 }
 
 function EvidenceList({
@@ -217,7 +254,6 @@ function ToolRail({
   };
 }) {
   const route = history?.route ?? "";
-  const historyState = history?.state ?? "unknown";
   const items = history?.items ?? [];
   const toolEvents = history?.routeReceipt?.tool_events ?? [];
   const windowActivity = history?.timeWindowActivity;
@@ -231,12 +267,11 @@ function ToolRail({
     return counts;
   }, {});
   const normalized = route ?? "";
-  const toolState = (tool: "recall" | "research" | "read_source"): ToolStatus =>
-    historyToolStatus(normalized, tool, windowActivity);
   const tools = [
     { id: "recall" as const, label: "recall", caption: "候选召回", icon: Search },
     { id: "research" as const, label: "research", caption: "复杂关联", icon: GitBranch },
     { id: "read_source" as const, label: "read_source", caption: "原文回读", icon: BookOpen },
+    { id: "read_scenario_summary" as const, label: "Scenario Summary", caption: "情景补读", icon: Network },
   ];
   const statusText: Record<ToolStatus, string> = {
     observed: "调用回执已记录",
@@ -263,9 +298,29 @@ function ToolRail({
                 <span className="font-medium text-foreground">{displayToolLabel(event.tool)}</span>
                 {event.at && <span>{new Date(event.at).toLocaleString("zh-CN")}</span>}
                 {event.returned_count != null && <span>返回 {event.returned_count} 条</span>}
-                {event.research_id && <span className="break-all">research_id {event.research_id}</span>}
+                {event.candidate_count != null && <span>发现候选 {event.candidate_count} 条</span>}
                 {event.memory_id && <span className="break-all">memory_id {event.memory_id}</span>}
                 {event.memory_ids?.length ? <span className="break-all">读取 {event.memory_ids.slice(0, 6).join("、")}</span> : null}
+                {event.scenario_ids?.length ? <span className="break-all">情景 {event.scenario_ids.slice(0, 4).join("、")}</span> : null}
+                {event.scenario_episode_count != null && <span>Episode {event.scenario_episode_count} 段</span>}
+                {event.scenario_episodes?.length ? <span className="break-words">目录 {event.scenario_episodes.slice(0, 4).map((episode) => episode.title || episode.episode_id).filter(Boolean).join("、")}</span> : null}
+                {event.scenario_episode_id && <span className="break-all">已读 {event.scenario_episode_title || event.scenario_episode_id} · {event.scenario_tier || "compact"}</span>}
+                {event.scenario_summary_status && event.scenario_summary_status !== "current" && <span>{scenarioFreshnessLabel(event.scenario_summary_status)}</span>}
+                {event.scenario_summary_text && (
+                  <details className="basis-full border-t border-border/70 pt-1.5">
+                    <summary className="cursor-pointer select-none text-emerald-800 dark:text-emerald-300">
+                      查看已读取情景内容 · {event.scenario_tier || "compact"}
+                    </summary>
+                    <div className="mt-1 whitespace-pre-wrap break-words leading-5 text-muted-foreground">
+                      {event.scenario_summary_text}
+                    </div>
+                    {event.scenario_summary_truncated && <div className="mt-1 text-muted-foreground">回执正文已达到显示上限。</div>}
+                  </details>
+                )}
+                {event.scenario_navigation_roles?.length ? <span>候选角色 {event.scenario_navigation_roles.slice(0, 3).map(([id, role]) => `${role}:${id}`).join("、")}</span> : null}
+                {event.scope_hypothesis_count != null && <span>竞争假设 {event.scope_hypothesis_count} 个</span>}
+                {event.scope_route_policy?.defer_bank_retrieval_until_scope_check && <span className="font-medium text-amber-700 dark:text-amber-300">先核对情景，再检索Bank</span>}
+                {event.scenario_decision ? <span>建议 {event.scenario_decision}</span> : null}
               </div>
             ))}
           </div>
@@ -277,7 +332,7 @@ function ToolRail({
             Prompt 后时间窗观测 · {observationWindowMinutes(windowActivity.window_minutes)} 分钟内
           </div>
           <div className="mt-1 text-muted-foreground">
-            仅表示该时间段内观察到的活动，不归因于当前 Prompt。
+            {windowActivity.boundary === "same_prompt_binding_only" ? "以下调用回执已通过 check_id 绑定到当前 Prompt。" : "仅表示该时间段内观察到的活动，不归因于当前 Prompt。"}
           </div>
           {windowActivity.start && windowActivity.end && (
             <div className="mt-1 text-muted-foreground">
@@ -297,6 +352,14 @@ function ToolRail({
             </div>
           ) : null}
           {windowActivity.items?.length ? <div className="mt-2 space-y-1.5">{windowActivity.items.slice(0, 8).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground"><span className="mr-1 font-medium text-foreground">{item.type ?? "memory"}</span>{displayEvidence(item)}</div>)}</div> : null}
+          {windowActivity.candidate_queries?.map((query, index) => <div key={index} className="mt-2 border-t border-amber-200 pt-2 leading-5 break-words"><div className="font-medium">查询 {index + 1} · 发现 {query.candidate_count ?? "未知"} 条候选</div><div>{query.query}</div>{query.anchors?.length ? <div className="text-muted-foreground">当时的过滤锚点：{query.anchors.join("、")}</div> : null}</div>)}
+          {windowActivity.candidate_items?.length ? (
+            <div className="mt-2 rounded-md border border-amber-300/80 bg-amber-100/50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
+              <div className="font-medium text-amber-900 dark:text-amber-100">后台检索候选预览 · 不属于本次已返回正文（{windowActivity.candidate_count ?? windowActivity.candidate_items.length} 条去重候选）</div>
+              <div className="mt-1 text-[10px] text-amber-800/80 dark:text-amber-200/80">这里只显示检索候选，不代表已注入或被采用。</div>
+              <div className="mt-1.5 space-y-1.5">{windowActivity.candidate_items.slice(0, 8).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 break-words text-muted-foreground"><span className="mr-1 font-medium text-foreground">{item.type ?? "memory"}</span>{displayEvidence(item)}</div>)}</div>
+            </div>
+          ) : null}
         </div>
       )}
       {windowActivity?.state === "not_observed" && (
@@ -307,17 +370,22 @@ function ToolRail({
       {windowGuidanceActivity?.state === "observed" && (
         <div className="mb-3 rounded-lg border border-violet-200/80 bg-violet-50/70 p-2.5 text-[11px] dark:border-violet-900/60 dark:bg-violet-950/20">
           <div className="font-semibold text-violet-900 dark:text-violet-200">Prompt 后 Get Preference 观测 · {observationWindowMinutes(windowGuidanceActivity.window_minutes)} 分钟内</div>
-          <div className="mt-1 text-muted-foreground">时间窗内返回 {windowGuidanceActivity.returned_count ?? 0} 项指导，待补读 {windowGuidanceActivity.deferred_count ?? 0} 项；不归因于当前 Prompt。</div>
+          <div className="mt-1 text-muted-foreground">{windowGuidanceActivity.boundary === "same_prompt_binding_only" ? "本轮已绑定调用" : "时间窗内调用"}累计返回 {windowGuidanceActivity.returned_count ?? 0} 项指导；分页重复项未去重。</div>
           {windowGuidanceActivity.unattributed_activity?.event_count ? <div className="mt-1 rounded-md border border-violet-300/80 bg-violet-100/60 px-2 py-1.5 text-violet-900 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-100">另有 {windowGuidanceActivity.unattributed_activity.event_count} 次指导活动无法绑定到当前 Prompt；只计数，不展示条目。</div> : null}
           {preferenceItems.length ? <div className="mt-2 space-y-1.5">{preferenceItems.slice(0, 6).map((item) => <div key={item.id} className="rounded-md bg-background/80 px-2 py-1.5 leading-4 text-muted-foreground">{displayEvidence(item)}</div>)}</div> : null}
         </div>
       )}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {tools.map(({ id, label, caption, icon: Icon }) => {
-          const state = historyToolStatus(normalized, id, windowActivity);
+          const state = historyToolStatus(normalized, id, windowActivity, toolEvents);
           const windowSummary = windowActivity?.by_tool?.[id];
+          const boundEvents = toolEvents.filter((event) => event.tool === id);
           const count =
-            state === "observed"
+            boundEvents.length
+              ? `${boundEvents.length} 次 · 返回 ${boundEvents.reduce((sum, event) => sum + (event.returned_count ?? 0), 0)} 条`
+              : windowSummary?.calls
+                ? `${windowSummary.calls} 次 · 返回 ${windowSummary.returned ?? 0} 条`
+              : state === "observed"
               ? candidates != null
                 ? `${candidates} 个候选`
                 : `${returned ?? items.length} 条预览`
@@ -384,11 +452,7 @@ function ToolRail({
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-dashed border-emerald-200/80 bg-background/50 px-2.5 py-2 text-[11px] leading-4 text-muted-foreground dark:border-emerald-900/60">
-          {history?.decision === "agent_decides"
-            ? "当前页面没有宿主级调用回执，无法判断 Codex 是否调用或读取了历史结果。"
-            : historyState === "unknown"
-              ? "当前缺少 recall / research / read_source 回执，无法判断是未调用还是回执未投影。"
-              : "页面未取得本轮历史工具回执；这不等于历史库为空。"}
+          {historyEmptyStateLabel({ decision: history?.decision, timeWindowActivity: windowActivity })}
         </div>
       )}
     </div>
@@ -446,7 +510,7 @@ export function FlowView() {
       .then((payload) => {
         const nextRows = payload.items ?? [];
         setRows(nextRows);
-        setSelected(nextRows[0] ?? null);
+        setSelected((previous) => nextRows.find((row: FlowPrompt) => row.prompt_id === previous?.prompt_id) ?? nextRows[0] ?? null);
         setHasMore(Boolean(payload.has_more));
       })
       .catch((cause) => {
@@ -519,13 +583,13 @@ export function FlowView() {
         if (cause.name !== "AbortError") setSelectedDetail(null);
       });
     return () => controller.abort();
-  }, [selected?.prompt_id]);
+  }, [selected?.prompt_id, refreshNonce]);
 
   const audit = useMemo(() => (currentRow ? projectFlowAudit(currentRow) : null), [currentRow]);
   const entryStateLabel = (value?: string) =>
     value === "observed_entry_adapter" ? "入口已检查" : "入口状态待确认";
   const historyStateLabel = (value?: string) =>
-    value?.includes("recall") || value?.includes("research") ? "已读取历史" : "未观测历史工具";
+    value?.startsWith("system_probe") ? "后台系统探测" : value?.includes("recall") || value?.includes("research") ? "已记录历史调用" : "未观测历史工具";
   const controllerLabel = (value?: string) =>
     ({
       same_turn_host_receipt: "同回合宿主回执",
@@ -541,17 +605,21 @@ export function FlowView() {
         ? "本轮所需指导已提供"
         : "指导覆盖待确认";
   const historyValue =
-    !audit || audit.history.decision === "agent_decides"
-      ? "未取得本轮历史调用回执 · 不代表不需要历史"
-      : audit.history.value === "unknown"
-        ? "历史链路未核实 · 缺少 recall/research 回执"
-        : audit.history.value === "not_observed"
-          ? "已确认本轮未调用历史工具"
-          : audit.history.value === "executed_empty"
-            ? `已调用但返回 0 条候选 · 查询 ${audit.history.metrics.candidates ?? "—"}`
-            : audit.history.value === "executed_no_result"
-              ? "已执行但未形成结果回执"
-              : `${audit.history.value} · 候选 ${audit.history.metrics.candidates ?? "—"} · 本页 ${audit.history.metrics.returned ?? "—"}`;
+    audit?.history.calls
+      ? `已观测 · ${audit.history.calls} 次调用 · 返回 ${audit.history.metrics.returned ?? 0} 条`
+    : audit?.systemProbe?.calls
+      ? `已观测系统探测 · ${audit.systemProbe.calls} 次 · 候选 ${audit.systemProbe.candidate_count ?? "未知"} 条`
+    : !audit || audit.history.decision === "agent_decides"
+      ? "未观测 · 点击查看回执"
+    : audit.history.value === "unknown"
+      ? "未核验 · 缺少历史回执"
+    : audit.history.value === "not_observed"
+      ? "已确认未调用历史工具"
+    : audit.history.value === "executed_empty"
+      ? "已调用 · 返回 0 条候选"
+    : audit.history.value === "executed_no_result"
+      ? "已执行 · 未形成结果回执"
+      : `已观测 · ${audit.history.value} · 返回 ${audit.history.metrics.returned ?? "—"} 条`;
   const isLegacyAutoHistory = audit?.history.mode === "hook_auto_recall";
   const historyTitle = isLegacyAutoHistory ? "历史记录 · Hook 自动召回" : "历史读取 · 系统探测与 Agent 下钻";
   const nodes: Array<{ id: NodeId; title: string; value: string; tone: string }> = [
@@ -599,7 +667,7 @@ export function FlowView() {
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">链路</h1>
                 <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-300">
-                  EP 2.2
+                  EP 4.0 开发态
                 </span>
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">从 Prompt 到回答的可观测证据图</p>
@@ -608,6 +676,14 @@ export function FlowView() {
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             {copy.intro} 每一条路径都只展示实际回执；“按需可用”不等于“本轮已调用”。
           </p>
+          {audit && (
+            <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" aria-label="本轮链路回执状态">
+              <span>入口：{audit.hostEvidence.entry === "prepared" ? "回执已保存" : "未核实"}</span>
+              <span>EP MCP：{audit.hostEvidence.mcp === "observed" ? "本轮有工具回执" : "当前聊天未核实"}</span>
+              <span>历史读取：{audit.hostEvidence.history === "observed" ? "本轮有调用" : "本轮无调用回执"}</span>
+              <span>工具结果：{audit.hostEvidence.result === "returned" ? "已返回" : audit.hostEvidence.result === "returned_empty" ? "已返回 0 条" : "未核实"}</span>
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <label className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
@@ -687,9 +763,8 @@ export function FlowView() {
                     <span>
                       {historyStateLabel(
                         row.prompt_id === currentRow?.prompt_id
-                          ? (currentRow.historical_audit?.route ??
-                              currentRow.routes?.historical_memory)
-                          : (row.historical_audit?.route ?? row.routes?.historical_memory)
+                          ? projectFlowAudit(currentRow).history.value
+                          : projectFlowAudit(row).history.value
                       )}
                     </span>
                   </div>
@@ -988,6 +1063,16 @@ export function FlowView() {
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">
                     {audit.history.routeReceipt.reason ?? "未记录理由"}
                   </div>
+                  {audit.history.routeAudit.status === "ep_history_verification_incomplete" && (
+                    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-100/80 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                      EP 历史核验未完成：本轮要求调用 {audit.history.routeReceipt.recommended_route ?? "Recall / Research"}，但尚未观测到实际 EP 工具调用。任何本地文件搜索或候选提示都不计为历史核验。
+                    </div>
+                  )}
+                  {audit.history.routeAudit.status === "ep_history_tool_called_empty" && (
+                    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-100/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                      EP 工具已调用，但返回 0 条；这表示已完成一次 EP 检索，不能据此断言历史中不存在相关内容。
+                    </div>
+                  )}
                   {audit.history.routeReceipt.tool_events?.length ? (
                     <div className="mt-3 space-y-2">
                       {audit.history.routeReceipt.tool_events.map((event, index) => (
@@ -1114,6 +1199,7 @@ export function FlowView() {
           {active === "history" && audit ? (
             <ToolRail history={{ route: audit.history.value, state: audit.history.state, decision: audit.history.decision, metrics: audit.history.metrics, items: audit.history.items, routeReceipt: audit.history.routeReceipt, timeWindowActivity: audit.timeWindowActivity, timeWindowGuidanceActivity: audit.timeWindowGuidanceActivity, preferenceItems: audit.guidance.items, preferenceCount: audit.guidance.count }} />
           ) : null}
+          {active === "history" && currentRow?.candidate_groups?.length ? <CandidateAuditBrowser key={currentRow.prompt_id} promptId={currentRow.prompt_id} groups={currentRow.candidate_groups} /> : null}
           {active === "answer" ? <p className="text-sm leading-6 text-muted-foreground">{copy.answer}</p> : null}
         </DialogContent>
       </Dialog>

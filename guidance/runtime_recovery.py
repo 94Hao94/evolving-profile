@@ -6,7 +6,7 @@ normal task-guidance refresh.
 """
 from __future__ import annotations
 
-from selector import get_task_guidance
+from selector import get_preference
 
 
 def refresh_runtime_guidance(repo, request: dict) -> dict:
@@ -27,7 +27,7 @@ def refresh_runtime_guidance(repo, request: dict) -> dict:
     task.setdefault('resolved_entities', [])
     task.setdefault('unresolved_references', [])
     task['runtime_events'] = [event]
-    result = get_task_guidance(repo, {
+    result = get_preference(repo, {
         'task': task,
         'loaded': request.get('loaded') or [],
         'memory_policy': request.get('memory_policy', 'allowed'),

@@ -12,13 +12,14 @@ import { DocumentsView } from "@/components/documents-view";
 import { EntitiesView } from "@/components/entities-view";
 import { SearchDebugView } from "@/components/search-debug-view";
 import { BankProfileView } from "@/components/bank-profile-view";
-import { EvolvingProfileRuntimeView } from "@/components/evolving-profile-runtime-view";
+import { RuntimeSectionsView } from "@/components/runtime-sections-view";
 import { OperationalOverview } from "@/components/operational-overview";
 import { MemoryDefenseSection } from "@/components/memory-defense-section";
 import { BankStatsView } from "@/components/bank-stats-view";
 import { BankOperationsView } from "@/components/bank-operations-view";
 import { MentalModelsView } from "@/components/mental-models-view";
 import { PreferenceView } from "@/components/preference-view";
+import { ContextMemoryView } from "@/components/context-memory-view";
 import { FlowView } from "@/components/flow-view";
 import { AuditLogsView } from "@/components/audit-logs-view";
 import { LLMRequestsView } from "@/components/llm-requests-view";
@@ -62,8 +63,15 @@ import { ExtractDialog } from "@/components/extract-dialog";
 type NavItem = "recall" | "data" | "documents" | "entities" | "flow" | "profile";
 type BankConfigTab =
   | "general"
+  | "data"
   | "memory-defense"
   | "configuration"
+  | "memory"
+  | "models"
+  | "rag"
+  | "providers"
+  | "scenario"
+  | "backup"
   | "audit-logs"
   | "llm-requests";
 
@@ -319,8 +327,8 @@ export default function BankPage() {
                 </div>
 
                 {/* Sub-tabs */}
-                <div className="mb-6 border-b border-border">
-                  <div className="flex flex-wrap gap-1">
+                <div className="mb-6 overflow-x-auto border-b border-border [scrollbar-width:thin]">
+                  <div className="flex min-w-max gap-1">
                     <button
                       onClick={() => handleBankConfigTabChange("general")}
                       className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold transition-colors sm:px-6 ${
@@ -343,13 +351,13 @@ export default function BankPage() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {t("memoryDefense")}
+                        数据与路由防护
                         {bankConfigTab === "memory-defense" && (
                           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                         )}
                       </button>
                     )}
-                    {bankConfigEnabled && (
+                    {(
                       <button
                         onClick={() => handleBankConfigTabChange("configuration")}
                         className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold transition-colors sm:px-6 ${
@@ -364,6 +372,12 @@ export default function BankPage() {
                         )}
                       </button>
                     )}
+                    <button onClick={() => handleBankConfigTabChange("memory")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "memory" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>EP 记忆</button>
+                    <button onClick={() => handleBankConfigTabChange("models")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "models" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>检索与判断模型</button>
+                    <button onClick={() => handleBankConfigTabChange("rag")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "rag" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>外部 RAG</button>
+                    <button onClick={() => handleBankConfigTabChange("providers")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "providers" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>Provider 与 Fallback</button>
+                    <button onClick={() => handleBankConfigTabChange("scenario")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "scenario" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>情景摘要</button>
+                    <button onClick={() => handleBankConfigTabChange("backup")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "backup" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>备份</button>
                     <button
                       onClick={() => handleBankConfigTabChange("audit-logs")}
                       className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold transition-colors sm:px-6 ${
@@ -420,11 +434,17 @@ export default function BankPage() {
                       <MemoryDefenseSection bankId={bankId} />
                     </div>
                   )}
-                  {bankConfigTab === "configuration" && bankConfigEnabled && (
+                  {bankConfigTab === "configuration" && (
                     <div className="space-y-6">
-                      <EvolvingProfileRuntimeView />
+                      <RuntimeSectionsView section="runtime" />
                     </div>
                   )}
+                  {bankConfigTab === "memory" && <RuntimeSectionsView section="memory" />}
+                  {bankConfigTab === "models" && <RuntimeSectionsView section="models" />}
+                  {bankConfigTab === "rag" && <RuntimeSectionsView section="rag" />}
+                  {bankConfigTab === "providers" && <RuntimeSectionsView section="providers" />}
+                  {bankConfigTab === "scenario" && <RuntimeSectionsView section="scenario" />}
+                  {bankConfigTab === "backup" && <RuntimeSectionsView section="backup" />}
                   {bankConfigTab === "audit-logs" &&
                     (auditLogEnabled ? (
                       <div>
@@ -538,6 +558,15 @@ export default function BankPage() {
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                       )}
                     </button>
+                    <button
+                      onClick={() => handleDataSubTabChange("context")}
+                      className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold transition-colors sm:px-6 ${
+                        subTab === "context" ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {locale.startsWith("zh") ? "情景摘要" : "Scenario Summary"}
+                      {subTab === "context" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                    </button>
                   </div>
                 </div>
 
@@ -560,6 +589,7 @@ export default function BankPage() {
                   )}
                   {subTab === "entities" && <EntitiesView />}
                   {subTab === "preferences" && <PreferenceView />}
+                  {subTab === "context" && <ContextMemoryView bankId={bankId} />}
                 </div>
               </div>
             )}

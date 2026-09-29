@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from mcp_runtime import load_repository
-from selector import get_task_guidance
+from selector import get_preference
 
 
 def replay(receipts: list[dict], repo, limit: int = 50) -> dict:
@@ -26,7 +26,7 @@ def replay(receipts: list[dict], repo, limit: int = 50) -> dict:
             "resolved_entities": [],
             "unresolved_references": [],
         }
-        result = get_task_guidance(repo, {"task": task, "loaded": [], "memory_policy": "allowed"}, char_budget=10000)
+        result = get_preference(repo, {"task": task, "loaded": [], "memory_policy": "allowed"}, char_budget=10000)
         cases.append({"prompt_id": row.get("prompt_id"), "prompt": prompt,
                       "expected": [], "selected": [item.get("id") for item in result.get("included", [])],
                       "selection_revision": result.get("selection_revision"), "coverage": result.get("coverage"),

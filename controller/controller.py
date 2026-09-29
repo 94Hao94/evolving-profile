@@ -5860,7 +5860,7 @@ def qualify_stable_mental_model(query: str, item: dict[str, Any], *, task_contex
     # The cognition model can contain a generic-looking “冲突与未决项”
     # section.  It remains a learning/teaching framework and must not enter a
     # delivery or acceptance question merely because both mention a boundary.
-    if (str(metadata.get("mental_model_id") or "") == "user-cognition-learning"
+    if (str(metadata.get("mental_model_id") or "") == "liuzhongyang-cognition-learning"
             and not any(term in compact_query for term in ("学习", "复习", "背诵", "术语", "知识", "讲解", "教学", "训练", "因果"))):
         return False, {
             "reason": "认知学习模型只用于学习、解释和训练问题；当前交付/验收任务不采用其通用未决项。",

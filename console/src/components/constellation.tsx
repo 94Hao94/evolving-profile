@@ -35,6 +35,10 @@ export interface ConstellationProps {
   onNodeClick?: (node: GraphNode) => void;
   nodeColorFn?: (node: GraphNode) => string;
   linkColorFn?: (link: GraphLink) => string;
+  /** Optional baseline opacity for sparse graphs; dense fact graphs keep the default ramp. */
+  linkOpacity?: number;
+  /** Optional baseline width for sparse graphs; hover emphasis remains unchanged. */
+  linkWidth?: number;
   /**
    * Optional override for the on-screen dot radius (in CSS pixels, pre-zoom).
    * When omitted, radius is derived from link count (default star-field behavior).
@@ -241,6 +245,8 @@ export function Constellation({
   onNodeClick,
   nodeColorFn,
   linkColorFn,
+  linkOpacity,
+  linkWidth,
   nodeSizeFn,
   nodeHeatFn,
   heatLegendLabel,
@@ -529,8 +535,8 @@ export function Constellation({
       }
       ctx.globalAlpha = 1;
     } else {
-      const baseAlpha = 0.06 + Math.min(zoom * 0.04, 0.1);
-      ctx.lineWidth = 0.4;
+      const baseAlpha = linkOpacity ?? (0.06 + Math.min(zoom * 0.04, 0.1));
+      ctx.lineWidth = linkWidth ?? 0.4;
 
       for (const link of linksWithIndices) {
         if (linksDrawn >= maxLinks) break;
@@ -840,7 +846,7 @@ export function Constellation({
     ctx.restore();
 
     animRef.current = requestAnimationFrame(animate);
-  }, [isDark, preparedNodes, linksWithIndices, linksByNode, clusters, t]);
+  }, [isDark, preparedNodes, linksWithIndices, linksByNode, clusters, linkOpacity, linkWidth, t]);
 
   // ----- Label drawing helper -----
   function drawLabel(
