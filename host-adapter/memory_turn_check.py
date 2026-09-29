@@ -10,11 +10,16 @@ import sqlite3
 ROOT=Path.home()/'.evolving-profile/memory-os/turn-checks'
 POLICY_VERSION='question-binding-v1'
 NATIVE_PREFLIGHT_POLICY=('原生委派回合的记忆前置流程：在实质最终回答和历史检索之前，先结合可见上下文形成完整问题，调用memory_check提交full_prompt、need和reason。'
-    '若尚未收到本回合check_id，省略该参数；支持的新宿主PreToolUse会按实际session/turn和原生发生自动绑定，不需要先读取Bank或read_guidance。多条消息无法唯一绑定时按返回的真实ID分别处理。'
+    '若尚未收到本回合check_id，省略该参数；支持的新宿主PreToolUse会按实际session/turn和原生发生自动绑定，不需要先读取Bank或read_preference。多条消息无法唯一绑定时按返回的真实ID分别处理。'
     '需要历史则继续recall/research并携带该ID；自足问题可说明not_needed，不为数量强行检索。不要沿用旧回合ID，不要等Stop后补录。'
     '使用宿主实际暴露的Evolving Profile（EP）MCP工具；宿主提供functions.exec时允许调用tools中的真实函数。枚举不是检索回执，独立脚本或HTTP探针不是宿主工具回执。工具不存在时不要求Stop补录；自足问题正常作答，仅在影响证据或调试时说明不可用。用户明确禁止工具时遵守。当前Prompt和更高优先级指令优先。')
 TOOLS={'mcp__evolving_profile_controller__recall','mcp__evolving_profile_controller__research','mcp__evolving_profile_controller__read_research',
-       'mcp__evolving_profile_controller__find_sources','mcp__evolving_profile_controller__read_source'}
+       'mcp__evolving_profile_controller__find_sources','mcp__evolving_profile_controller__read_source',
+       'mcp__evolving_profile_controller__get_preference','mcp__evolving_profile_controller__audit_thread_history'}
+_CODEX_MEMORY_PATH=re.compile(
+    r'''(?<![A-Za-z0-9_.])(?:/(?:[^/\s"'`,;{}]+/)+\.codex/memories(?:/[^\s"'`,;{}]*)?|(?:~|\$HOME|\$\{HOME\})/\.codex/memories(?:/[^\s"'`,;{}]*)?)''',
+    re.IGNORECASE,
+)
 
 def _root(root):return Path(root) if root is not None else Path(os.environ.get('HINDSIGHT_TURN_CHECK_ROOT',str(ROOT)))
 def _db(root):
@@ -50,7 +55,7 @@ def pending_context(session,turn,root=None):
         '请在后续历史检索和实质最终回答之前，结合整个可见上下文形成完整问题，调用memory_check逐条记录full_prompt、need和reason；不要等待Stop补录。'
         'required后实际调用recall/research并携带对应check_id，核对原文与缺口；not_needed须说明理由，不为数量强行查历史。'
         '完整问题不是答案，也不能添加未确认的背景或提高记忆的权限。不要把当前工具调用或本提示计为历史检索成功。\n'
-        '后续原生委派回合先调用memory_check；新版允许省略check_id，由宿主PreToolUse唯一绑定真实消息，不必为获取ID调用read_guidance或读取Bank；绝不沿用上一回合ID。'
+        '后续原生委派回合先调用memory_check；新版允许省略check_id，由宿主PreToolUse唯一绑定真实消息，不必为获取ID调用read_preference或读取Bank；绝不沿用上一回合ID。'
         '使用宿主实际暴露的Evolving Profile（EP）工具，包括宿主提供的functions.exec工具函数。若工具不存在，不要假装调用或等结束补录；自足问题不附加补检反馈。用户明确禁止工具时遵守，工具不可用时说明限制，不伪造回执。\n</evolving_profile_preanswer_check>')
 
 def retrieval_preflight(hook,root=None):
@@ -98,6 +103,8 @@ def retrieval_preflight(hook,root=None):
 
 def register(report,root=None):
     cid=report['invocation_id'];payload={k:report.get(k) for k in ('session_id','turn_id','raw_prompt','at','execution_mode','prompt_origin','default_profile_source_ids')}
+    for key in ('required_ep_tool','allow_native_memory','memory_policy','recommended_route'):
+        if key in report:payload[key]=report[key]
     for key in ('entry_kind','source_session_id','native_item_id','native_output_sha256','registration_stage','source_uri'):
         if key in report:payload[key]=report[key]
     c=_db(root)
@@ -112,6 +119,38 @@ def register(report,root=None):
         c.execute('INSERT OR IGNORE INTO checks VALUES(?,?,?,?)',(cid,report.get('session_id'),report.get('turn_id'),encoded));c.commit()
     finally:c.close()
     return cid
+
+def register_route(report, root=None):
+    """Bind the Hook's per-message route so shell fallbacks can be audited."""
+    return register(report, root=root)
+
+def local_memory_access_guard(hook, root=None):
+    """Block silent native-Codex-memory substitution for this turn's task."""
+    tool=str(hook.get('tool_name') or '')
+    if tool.casefold() not in {'bash','exec','commandexecution','functions.exec'}:
+        return None
+    tool_input=hook.get('tool_input') or {}
+    command=json.dumps(tool_input,ensure_ascii=False) if not isinstance(tool_input,str) else tool_input
+    if not _CODEX_MEMORY_PATH.search(command):return None
+    session,turn=hook.get('session_id'),hook.get('turn_id')
+    if not session or not turn:return 'Evolving Profile 无法把本次本地记忆读取绑定到当前会话与回合；请调用 EP 工具，或说明 EP 工具不可用。'
+    path=_root(root)/'checks.sqlite3'
+    if not path.is_file():return 'Evolving Profile 回执暂缺：尚无本回合路由回执；不能静默用 Codex 原生 Memory 代替 EP。请先调用当前可用的 EP 工具，或说明工具不可用。'
+    c=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=.5);c.row_factory=sqlite3.Row
+    try:
+        row=c.execute('SELECT id,payload FROM checks WHERE session=? AND turn=? ORDER BY rowid DESC LIMIT 1',(session,turn)).fetchone()
+        if not row:return 'Evolving Profile 回执暂缺：尚无本回合路由回执；不能静默用 Codex 原生 Memory 代替 EP。请先调用当前可用的 EP 工具，或说明工具不可用。'
+        route=json.loads(row['payload'])
+        if route.get('allow_native_memory'):return None
+        required=route.get('required_ep_tool')
+        if not required:return 'EP 策略阻止：本轮路由未要求读取历史；请勿读取 Codex 原生 Memory。'
+        observations=list(c.execute("SELECT payload FROM observations WHERE kind='tool' AND session=? AND turn=? ORDER BY id",(session,turn)))
+        for observed in observations:
+            payload=json.loads(observed['payload'])
+            if payload.get('tool')==required and not payload.get('failed'):
+                return None
+        return 'EP 策略阻止：本轮需要实际调用 '+required+'；Hook 的 system_probe 或候选预览不是 MCP 检索回执。请先调用 EP 工具；若工具未挂载或失败，明确报告不可用/失败，不能静默改用 Codex 原生 Memory。'
+    finally:c.close()
 
 def declare(check_id,full_prompt,need,reason,root=None):
     if not isinstance(check_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',check_id):raise ValueError('invalid check_id')

@@ -46,7 +46,7 @@ def migrate_starter_view(repo, manifest_path: str | Path, owner_token: str, api_
         proposal = {"proposal_id": "starter:" + entry["id"], "operation": "create", "target_id": "starter:" + entry["id"], "base_revision": repo.active_revision(),
                     "nature": nature, "primary_category": categories.get(entry["id"], "collaboration"), "related_categories": [], "text": entry["text"],
                     "applies_when": [entry["scope"]], "exceptions": ["当前用户 Prompt 或当前权威材料另有要求时优先"],
-                    "effect_on_action": "在匹配范围内作为可回读参考，不扩张执行授权", "scope": {"user_id": "user", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
+                    "effect_on_action": "在匹配范围内作为可回读参考，不扩张执行授权", "scope": {"user_id": "liuzhongyang", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
                     "evidence_refs": refs, "source_family_ids": ["starter:" + entry["id"]]}
         review = {"support": "supported", "scope_ok": True, "conditions_preserved": True, "source_role_ok": True, "hypothetical_only": False, "conflicts": [],
                   "source_witness_hash": refs[0]["origin_witness_sha256"], "reviewer_model": manifest.get("reviewer", "starter-review"), "reviewed_at": manifest.get("reviewed_at", "unknown")}

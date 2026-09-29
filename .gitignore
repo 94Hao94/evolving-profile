@@ -1,6 +1,14 @@
 .DS_Store
 node_modules/
 .next/
+.next-*/
+console/.next-*/
+console/standalone/
+console/output/
+console/.playwright-cli/
+evolving-client/dist/
+api/.ruff_cache/
+ham-os/.venv/
 *.log
 __pycache__/
 *.pyc

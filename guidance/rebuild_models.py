@@ -15,49 +15,49 @@ from observation_rebuild import atomic, load_env
 
 
 LEGACY_MODEL_TARGETS = [
-    ("user-ai-operating-system", "AI使用、记忆权威与个人认知基础设施"),
-    ("user-work-project-architecture", "工作与项目推进的边界模型"),
-    ("user-business-architecture", "业务分析、建议与决策模型"),
-    ("user-cognition-learning", "学习、解释与陌生概念适配模型"),
-    ("user-collaboration-delivery", "协作、执行、验收与交付模型"),
+    ("liuzhongyang-ai-operating-system", "AI使用、记忆权威与个人认知基础设施"),
+    ("liuzhongyang-work-project-architecture", "工作与项目推进的边界模型"),
+    ("liuzhongyang-business-architecture", "业务分析、建议与决策模型"),
+    ("liuzhongyang-cognition-learning", "学习、解释与陌生概念适配模型"),
+    ("liuzhongyang-collaboration-delivery", "协作、执行、验收与交付模型"),
 ]
 MODEL_CATEGORIES={
- "user-ai-operating-system":{"collaboration","reasoning"},
- "user-work-project-architecture":{"collaboration","delivery"},
- "user-business-architecture":{"reasoning","communication"},
- "user-cognition-learning":{"learning","communication"},
- "user-collaboration-delivery":{"collaboration","delivery"},
+ "liuzhongyang-ai-operating-system":{"collaboration","reasoning"},
+ "liuzhongyang-work-project-architecture":{"collaboration","delivery"},
+ "liuzhongyang-business-architecture":{"reasoning","communication"},
+ "liuzhongyang-cognition-learning":{"learning","communication"},
+ "liuzhongyang-collaboration-delivery":{"collaboration","delivery"},
 }
 MODEL_FLOWS={
- "user-ai-operating-system":"确认当前权威材料与权限边界→选择多维度偏好或历史知识路线→仅取本轮必要证据→执行→分别记录工具输出、宿主接收和实际使用。",
- "user-work-project-architecture":"锁定项目对象、阶段和真实需求方→核对当前事实与历史变化→按适用指导组织推进→验证成果对项目目标的实际贡献。",
- "user-business-architecture":"先明确决策问题和证据缺口→比较事实、估算与假设→形成按推荐度排序的建议→保留反例和不确定性供决策。",
- "user-cognition-learning":"判断概念陌生度与困难程度→先给核心机制→补具体例子→特别抽象时再给有边界的类比→检查能否迁移使用。",
- "user-collaboration-delivery":"确认目标、授权和交付格式→连续推进并处理同类问题→以真实可见结果和来源验收→报告已完成、未知、残留风险和回退。",
+ "liuzhongyang-ai-operating-system":"确认当前权威材料与权限边界→选择多维度偏好或历史知识路线→仅取本轮必要证据→执行→分别记录工具输出、宿主接收和实际使用。",
+ "liuzhongyang-work-project-architecture":"锁定项目对象、阶段和真实需求方→核对当前事实与历史变化→按适用指导组织推进→验证成果对项目目标的实际贡献。",
+ "liuzhongyang-business-architecture":"先明确决策问题和证据缺口→比较事实、估算与假设→形成按推荐度排序的建议→保留反例和不确定性供决策。",
+ "liuzhongyang-cognition-learning":"判断概念陌生度与困难程度→先给核心机制→补具体例子→特别抽象时再给有边界的类比→检查能否迁移使用。",
+ "liuzhongyang-collaboration-delivery":"确认目标、授权和交付格式→连续推进并处理同类问题→以真实可见结果和来源验收→报告已完成、未知、残留风险和回退。",
 }
 
 SECTION_TOPICS={
- "user-ai-operating-system":[
+ "liuzhongyang-ai-operating-system":[
   ("authority-and-scope",("权威","当前","权限","范围","授权","Prompt","来源"),"先确定当前用户要求、权威来源、记忆权限和任务范围，历史资料只能作为参考，不能扩张授权。"),
   ("memory-routing",("记忆","Hindsight","召回","注入","候选","宿主","MCP","偏好"),"根据当前缺口选择多维度偏好或历史事实路线；候选、工具返回、宿主接收、实际注入和答案使用分别记账。"),
   ("agent-boundaries",("Agent","主Agent","专用Agent","分工","委派","技能","工具"),"主Agent保留需求理解和核心架构判断，专用Agent只接收与任务直接相关的偏好、边界和验收标准。"),
  ],
- "user-work-project-architecture":[
+ "liuzhongyang-work-project-architecture":[
   ("objective-and-constraints",("目标","约束","范围","阶段","需求","项目","跑偏"),"先锁定项目对象、阶段、目标、约束、交付物和验收标准，并在执行中持续对照。"),
   ("continuation-and-handoff",("继续","续接","上下文","交接","远距离","活动任务","Full Prompt"),"短句续接时结合活动任务证据、必要远距离上下文和当前Prompt；交接必须携带文件、状态、验证和责任边界。"),
   ("change-impact",("修改","关联","遗漏","同类","整体","范围","影响"),"修改前识别关联范围和不应改变的部分，完成后整体复查同类问题和遗漏。"),
  ],
- "user-business-architecture":[
+ "liuzhongyang-business-architecture":[
   ("evidence-and-conflict",("证据","来源","冲突","事实","假设","估算","unresolved","superseded"),"区分事实、估算与假设；遇到冲突按当前要求、权威来源、主体关系范围和时间裁决，证据不足保留unresolved。"),
   ("analysis-and-recommendation",("分析","建议","决策","推荐","排序","权衡","反证"),"明确决策问题和证据缺口，比较替代解释和反证，形成按推荐度排序的建议。"),
   ("business-language",("客户","学校","业务","正式","术语","逻辑","材料"),"正式材料以真实业务阶段和需求方视角组织，不让模板术语或技术堆砌替代业务逻辑。"),
  ],
- "user-cognition-learning":[
+ "liuzhongyang-cognition-learning":[
   ("mechanism-first",("机制","解释","概念","理解","因果"),"先重建核心机制和因果链，再补充细节。"),
   ("examples-and-analogy",("例子","类比","通俗","陌生","技术","业务读者"),"根据陌生度补具体例子；特别抽象时再使用有边界的类比，并面向业务读者解释图和流程。"),
   ("transfer-check",("迁移","复述","检验","复习","应用"),"最后检查能否复述、迁移或在新场景中使用，而不是只确认看过。"),
  ],
- "user-collaboration-delivery":[
+ "liuzhongyang-collaboration-delivery":[
   ("execution-control",("执行","推进","授权","不要停","完成","连续","分工"),"确认授权和边界后连续推进，主任务不因中间检查而丢失；超出授权时停止扩张。"),
   ("artifact-quality",("交付","成品","格式","表格","图片","图表","可读","分页","链接"),"交付物按真实使用场景检查格式、可读性、分页、图表、链接和细节入口。"),
   ("verification-and-recovery",("验收","测试","回归","可见","回读","恢复","回退","状态页"),"用真实可见结果、回读来源和端到端链路验收；失败证据、unknown和回退条件必须保留。"),

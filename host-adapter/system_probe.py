@@ -81,7 +81,21 @@ def plan_history(prompt, task=None):
     thread_audit = bool(re.search(r'codex://threads/[0-9a-z-]+', current, re.I)) and bool(
         re.search(r'对话|线程|找.{0,8}问题|检查|审计|调用|回执|先别修复|找明白', current)
     )
-    live_audit = thread_audit or bool(re.search(r'最新(?:的)?prompt|本轮|这一轮|刚才(?:这)?一轮|刚才.{0,8}对话|几条对话|调用效果|调用记录|工具回执|链路页|有没有调用|是否调用|检验.*(?:recall|research)|检查.*(?:recall|research)|(?:上一轮|上轮|前一轮).*(?:链路|调用|工具|回执|审计)', current))
+    # Audit language is often phrased as a defect report rather than a
+    # question: "应该调用但没有调用，继续测试". Treat that as a live
+    # observability request so we inspect the current hook/tool receipts
+    # instead of launching an ordinary historical recall against those words.
+    audit_text = re.sub(r'\s+', '', current)
+    quoted_transform = bool(re.match(r'^\s*(?:把|将|请?)', current)) and bool(
+        re.search(r'[“\"].+[”\"]', current)
+    ) and bool(re.search(r'翻译|润色|改写|重写', current))
+    live_audit = (thread_audit or bool(re.search(
+        r'最新(?:的)?prompt|本轮|这一轮|刚才(?:这)?一轮|刚才.{0,8}对话|几条对话|调用效果|调用记录|工具回执|链路页|有没有调用|是否调用|'
+        r'检验.*(?:recall|research)|检查.*(?:recall|research)|(?:上一轮|上轮|前一轮).*(?:链路|调用|工具|回执|审计)|'
+        r'(?:应该|本应|需要|必须).{0,18}(?:调用|使用).{0,18}(?:recall|research|get[_ ]?preference|EP工具|历史工具).{0,18}(?:没有|未|没)(?:调用|使用)|'
+        r'(?:没有|未|没)(?:调用|使用).{0,18}(?:recall|research|get[_ ]?preference|EP工具|历史工具).{0,24}(?:测试|检查|修复|问题|回执|链路)',
+        audit_text,
+    ))) and not (quoted_transform and '不是翻译任务' not in current)
     historical = bool(re.search(r'以前|之前|过去|上次|上回|回顾|后来|当初|最近|近期|上周|上月|做过|干过|拍板|咱们定过', text))
     # These are positive, transparent routing hints. Missing hints never veto
     # the Agent or turn uncertain relevance into "no memory exists".
@@ -122,8 +136,10 @@ def plan_history(prompt, task=None):
         r'(?:codex.{0,8}memory|本地记忆|原生记忆).{0,16}(?:查|搜索|检索|读取|打开|查看)', current,
         re.I,
     ))
-    skip = not policy['history_allowed'] or arithmetic or language or generic_explanation or live or supplied or greeting
+    skip = not policy['history_allowed'] or (not live_audit and (arithmetic or language or generic_explanation or live or supplied or greeting))
     missing_context = not context and bool(re.fullmatch(r'(?:那|你|就|可以|继续|开工|执行|好|啊|吧|！|!|，|,|。)+',current))
+    if not context and re.search(r'第[一二三四五六七八九十0-9]+(?:份|个|项)(?:材料|文档|文件|方案)',current):
+        missing_context = not bool(task.get('resolved_entities'))
     route = 'skip' if skip else 'live_audit' if live_audit else 'get_preference' if preference_history else 'research' if complex_history else 'recall'
     reason = ('当前用户禁止历史读取。' if not policy['history_allowed'] else '当前请求有明确的自足信息来源。') if skip else ('问题针对本轮工具调用、回执或链路状态；优先读取实时审计，不查询历史 Bank。' if live_audit else ('问题明确询问用户已记录的偏好，应调用 Get Preference 读取条件化条目。' if preference_history else ('跨时间或开放盘点，需要按范围检索并检查覆盖；可直接 Research。' if complex_history else '历史可能补充事实、旧决定或相关经验；候选由 Agent 结合完整上下文判断。')))
     if not skip and 'research' in policy['denied_tools'] and route == 'research':route='recall'
@@ -176,8 +192,10 @@ def count_tokens(text):
 def run_probe(plan, settings, api, bank):
     """A single direct Bank call; only previews enter the final token budget."""
     limit = max(300,min(1200,int(settings.get('probe_max_tokens',500))))
+    from lib.candidate_audit import snapshot, mark_delivery
     receipt = {'actor':'system_probe','state':'skipped','calls':0,'candidate_count':None,
                'returned_count':0,'items':[],'max_tokens':limit,'context_tokens':0,
+               'text_returned_count':0,'locator_returned_count':0,'candidate_audit':[],
                'token_counter':'not_injected','answer_use':'not_measured'}
     if not settings.get('auto_probe',True) or plan['minimum_action'] != 'recall_probe':
         receipt['reason'] = 'disabled' if not settings.get('auto_probe',True) else plan['minimum_action']
@@ -197,13 +215,20 @@ def run_probe(plan, settings, api, bank):
         negative_focus_terms=[str(term).casefold() for term in plan.get('negative_focus_terms') or [] if str(term).strip()]
         required_matches=1 if len(focus_terms)<=1 else 2
         for row in rows:
-            if len(items)>=3:break
-            if not isinstance(row,dict) or not row.get('id') or row.get('state')=='invalidated':continue
+            if not isinstance(row,dict) or not row.get('id'):continue
+            if row.get('state')=='invalidated':
+                receipt['candidate_audit'].append(snapshot(row,outcome='blocked',reason='withdrawn'))
+                continue
             text=mask_text(str(row.get('text') or ''))[:600]
             matched_terms=[term for term in focus_terms if term in text.casefold()]
             if len(matched_terms)<required_matches:
                 rejected += 1
+                receipt['candidate_audit'].append(snapshot(row,outcome='scope_uncertain',reason='insufficient_literal_overlap'))
                 continue
+            if len(items)>=3:
+                receipt['candidate_audit'].append(snapshot(row,outcome='budget_deferred',reason='probe_preview_budget'))
+                continue
+            receipt['candidate_audit'].append(snapshot(row,outcome='prepared',reason='literal_overlap'))
             items.append({'id':str(row['id']),'text':text,'preview':True,'admission':'positive_anchor_overlap',
                           'matched_focus_terms':matched_terms[:8]})
         receipt['admission'] = {
@@ -243,7 +268,13 @@ def run_probe(plan, settings, api, bank):
         output=render(rows=visible_items)
     if count_tokens(output)[0] > limit:
         output=render(compact=True, rows=original_items)
+        delivered_items=[{'id':item['id']} for item in original_items]
+    else:
+        delivered_items=visible_items
     count,method=count_tokens(output)
-    receipt.update(items=items,returned_count=len(items),context_tokens=count,token_counter=method,
+    receipt['candidate_audit']=mark_delivery(receipt['candidate_audit'],delivered_items)
+    text_count=sum(bool(item.get('text')) for item in delivered_items)
+    receipt.update(items=delivered_items,returned_count=len(delivered_items),context_tokens=count,token_counter=method,
+                   text_returned_count=text_count,locator_returned_count=len(delivered_items)-text_count,
                    elapsed_ms=round((time.monotonic()-started)*1000,1),delivery_stage='context_prepared')
     return output,receipt

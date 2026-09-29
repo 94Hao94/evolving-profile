@@ -1,9 +1,38 @@
 import json
 import unittest
 from system_probe import plan_history, run_probe, count_tokens
+from recall import route_requires_ep_history
 
 
 class SystemProbeTests(unittest.TestCase):
+    def test_historical_reference_requires_real_ep_history_route(self):
+        self.assertTrue(route_requires_ep_history('河北工业大学采购计算机那个项目需求书，你找到了吗'))
+        self.assertTrue(route_requires_ep_history('我上次给你的那段说明'))
+        self.assertFalse(route_requires_ep_history('把这句话翻译成英文'))
+        self.assertFalse(route_requires_ep_history('请翻译以下内容，不要结合历史'))
+
+    def test_probe_saves_excluded_candidates_without_injecting_their_body(self):
+        plan=plan_history('鹏飞学校呢？')
+        output, receipt=run_probe(plan, {'auto_probe': True, 'probe_max_tokens': 1200},
+            lambda *args, **kwargs: {'results': [
+                {'id': 'good', 'state': 'valid', 'text': '鹏飞学校方案'},
+                {'id': 'uncertain', 'state': 'valid', 'text': '另一个高校的方案'},
+                {'id': 'withdrawn', 'state': 'invalidated', 'text': '撤回正文'},
+            ]}, 'bank')
+        self.assertEqual(len(receipt['candidate_audit']), 3)
+        self.assertEqual(receipt['candidate_audit'][0]['delivery'], 'text_returned')
+        self.assertEqual(receipt['candidate_audit'][1]['delivery'], 'not_returned')
+        self.assertEqual(receipt['candidate_audit'][2]['text'], '')
+        self.assertNotIn('另一个高校的方案', output)
+        self.assertEqual(receipt['text_returned_count'], 1)
+
+    def test_unresolved_document_ordinal_is_not_a_literal_history_anchor(self):
+        plan = plan_history('我让你重写第三份材料，第一份和第二份材料目前是合格的')
+        self.assertEqual(plan['minimum_action'], 'needs_context')
+        output, receipt = run_probe(plan, {'auto_probe': True},
+                                   lambda *args, **kwargs: self.fail('unresolved references must not auto-search'), 'bank')
+        self.assertEqual(receipt['calls'], 0)
+
     def test_monthly_inventory_and_paraphrase_choose_research_without_keywords(self):
         for text in ('我最近一个月都干什么了，分几类','请回顾我过去一个月的工作，按类别列出来','过去30天忙了些什么？'):
             with self.subTest(text=text):
@@ -23,6 +52,33 @@ class SystemProbeTests(unittest.TestCase):
         self.assertEqual(plan['recommended_route'],'live_audit')
         self.assertEqual(plan['minimum_action'],'live_audit')
         self.assertEqual(plan['suggested_tools'],[])
+
+    def test_defect_report_about_missing_history_calls_is_live_audit(self):
+        prompts = (
+            '应该调用 recall、research，但它没有调用；把测试做好后再停工。',
+            '必须使用 get_preference，结果却没使用，请检查链路和回执。',
+            '这条 Prompt 本应调用 EP 历史工具但没有调用，继续测试直到确认。',
+            '刚才翻译的问题，我说是应该调用 recall、research，但它没有调用，请检查。',
+            'codex://threads/01a0c2d2-9f05-7fc3-b913-ee631658e6a7 不是翻译任务，检查里面为什么没调用 recall。',
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                plan = plan_history(prompt)
+                self.assertEqual(plan['recommended_route'], 'live_audit')
+                self.assertEqual(plan['minimum_action'], 'live_audit')
+                self.assertEqual(plan['suggested_tools'], [])
+
+    def test_explicit_no_memory_boundary_still_wins_over_audit_words(self):
+        plan = plan_history('不要读取任何记忆，只根据这段文字解释为什么没调用 recall。')
+        self.assertEqual(plan['recommended_route'], 'skip')
+
+    def test_quoted_translation_or_rewrite_does_not_trigger_live_audit(self):
+        for prompt in (
+            '把“应该调用 recall 但没有调用”翻译成英文。',
+            '请润色这一句：“应该调用 recall 但没有调用，请检查。”',
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(plan_history(prompt)['recommended_route'], 'skip')
 
     def test_live_audit_and_broad_inventory_skip_probe_and_use_explicit_route(self):
         audit=plan_history('codex://threads/x 看刚才几条对话有没有问题')

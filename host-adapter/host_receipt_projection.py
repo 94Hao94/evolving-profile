@@ -64,7 +64,7 @@ def read_native_context_receipts(path, session_id, deadline_seconds=.6):
 
 _CONTROLLER_NAMES = {'evolving_profile_controller', 'hindsight_controller'}
 TOOLS={f'mcp__{controller}__{operation}' for controller in _CONTROLLER_NAMES
-       for operation in ('recall','research','read_research')}
+       for operation in ('recall','research','read_research','get_preference')}
 READ_TOOLS=TOOLS | {f'mcp__{controller}__{operation}' for controller in _CONTROLLER_NAMES
                     for operation in ('read_source','find_sources')}
 

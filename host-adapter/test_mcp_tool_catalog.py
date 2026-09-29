@@ -24,6 +24,12 @@ class McpToolCatalogTest(unittest.TestCase):
             {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "get_preference", "arguments": {
                 "memory_policy": "allowed", "loaded": [], "task": {"objective": "偏好", "phase": "understand", "current_constraints": [], "domains": [], "media": [], "resolved_entities": [], "unresolved_references": []},
             }}},
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "search_scenario_summary", "arguments": {
+                "query": "天津财经大学 商务智能与数据分析", "context_type": "session", "limit": 8,
+            }}},
+            {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "catalog_search", "arguments": {
+                "query": "商务智能与数据分析", "scope": "scenarios", "limit": 8,
+            }}},
         ]
         completed = subprocess.run(
             [str(Path.home() / ".evolving-profile/runtime/python-3.11/bin/python"), str(root / "host-adapter/evolving_profile_controller_mcp.py")],
@@ -38,6 +44,18 @@ class McpToolCatalogTest(unittest.TestCase):
         tools = {item["name"] for item in next(row for row in rows if row.get("id") == 2)["result"]["tools"]}
         self.assertIn("refresh_runtime_guidance", tools)
         self.assertTrue({'catalog_list','catalog_search','catalog_read','record_evidence_decision','update_task_state'} <= tools)
+        self.assertNotIn('read_context_summary', tools)
+        self.assertIn('search_scenario_summary', tools)
+        self.assertNotIn('get_task_guidance', tools)
+        self.assertNotIn('read_guidance', tools)
+        self.assertNotIn('read_guidance_unit', tools)
+        self.assertNotIn('search_scenario_contexts', tools)
+        self.assertIn('rag_search', tools)
+        listed = {item['name']: item for item in next(row for row in rows if row.get('id') == 2)['result']['tools']}
+        for tool in ('read_scenario_summary', 'scenario_gate'):
+            self.assertIn(tool, listed)
+            self.assertIn('check_id', listed[tool]['inputSchema']['properties'])
+        self.assertIn('episode_id', listed['read_scenario_summary']['inputSchema']['properties'])
         preference = next(item for item in next(row for row in rows if row.get("id") == 2)["result"]["tools"] if item["name"] == "get_preference")
         self.assertIn("check_id", preference["inputSchema"]["required"])
         self.assertEqual(preference["inputSchema"]["properties"]["check_id"]["type"], "string")
@@ -46,6 +64,14 @@ class McpToolCatalogTest(unittest.TestCase):
         self.assertEqual(payload["persistence"], "none_current_turn_only")
         error = next(row for row in rows if row.get("id") == 4)
         self.assertIn("requires the current Prompt check_id", error["error"]["message"])
+        scenario = json.loads(next(row for row in rows if row.get("id") == 5)["result"]["content"][0]["text"])
+        self.assertEqual(scenario["schema"], "evolving-profile.search-scenario-summary.v1")
+        self.assertTrue(scenario["coverage"]["navigation_only"])
+        self.assertTrue(all("summary" not in item for item in scenario["items"]))
+        scenario_catalog = json.loads(next(row for row in rows if row.get("id") == 6)["result"]["content"][0]["text"])
+        self.assertEqual(scenario_catalog["schema"], "evolving-profile.scenario-context-search.v1")
+        self.assertTrue(scenario_catalog["coverage"]["navigation_only"])
+        self.assertTrue(all("summary" not in item for item in scenario_catalog["items"]))
 
 
 if __name__ == "__main__":

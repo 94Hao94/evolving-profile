@@ -69,6 +69,14 @@
     ".next-55993/dev/types/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".next-10000/types/**/*.ts",
+    ".next-10000/dev/types/**/*.ts",
+    ".next-10001/types/**/*.ts",
+    ".next-10001/dev/types/**/*.ts",
+    ".next-10002/types/**/*.ts",
+    ".next-10002/dev/types/**/*.ts",
+    ".next-10003/types/**/*.ts",
+    ".next-10003/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

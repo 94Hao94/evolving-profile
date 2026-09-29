@@ -17,6 +17,8 @@ Exit codes:
   0 — always (graceful degradation on any error)
 """
 
+from __future__ import annotations
+
 import io
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
@@ -230,9 +232,9 @@ def qwen_full_prompt_fallback(prompt: str, messages: list[dict], *, timeout_ms: 
     if len(serialized.encode("utf-8")) > 48000:
         return {"ok": False, "reason": "context_slice_exceeds_full_prompt_transport_boundary", "context_slice": slice_receipt}
     env = _load_dotenv_values(Path("~/.evolving-profile/profiles/agentmemory.env").expanduser())
-    base_url = str(env.get("EVOLVING_PROFILE_API_LLM_BASE_URL") or "").rstrip("/")
-    api_key = str(env.get("EVOLVING_PROFILE_API_LLM_API_KEY") or "")
-    model = str(env.get("EVOLVING_PROFILE_API_LLM_MODEL") or "qwen3.7-plus")
+    base_url = str(env.get("EVOLVING_PROFILE_API_LLM_BASE_URL") or env.get("HINDSIGHT_API_LLM_BASE_URL") or "").rstrip("/")
+    api_key = str(env.get("EVOLVING_PROFILE_API_LLM_API_KEY") or env.get("HINDSIGHT_API_LLM_API_KEY") or "")
+    model = str(env.get("EVOLVING_PROFILE_API_LLM_MODEL") or env.get("HINDSIGHT_API_LLM_MODEL") or "qwen3.7-plus")
     if not (base_url and api_key):
         return {"ok": False, "reason": "coding_plan_not_configured"}
     instruction = (
@@ -348,6 +350,91 @@ def record_agent_choice_pending_receipt(hook_input: dict, prompt: str, config: d
         temporary.write_text(json.dumps(receipt,ensure_ascii=False),encoding="utf-8"); temporary.chmod(0o600); temporary.replace(target)
     except OSError:
         pass
+
+
+def emit_bounded_system_probe(hook_input, prompt, config, invocation_id):
+    """One bounded direct Bank read; never re-enter the legacy recall pipeline."""
+    from system_probe import plan_history, run_probe
+    task=((ENTRY_GUIDANCE_RECEIPT or {}).get('request') or {}).get('task') or {}
+    plan=plan_history(prompt,task)
+    state_root=Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT',str(Path.home()/'.evolving-profile')))
+    try:settings=json.loads((state_root/'config/guidance-settings.json').read_text())
+    except (OSError,ValueError):settings={'auto_probe':True,'probe_max_tokens':500}
+    base=os.environ.get('EVOLVING_PROFILE_SOURCE_API_URL','http://127.0.0.1:12088').rstrip('/')
+    def api(path,body,timeout):
+        endpoint=urllib.parse.urlparse(base)
+        if endpoint.scheme!='http' or endpoint.hostname not in ('127.0.0.1','localhost','::1'):
+            raise ValueError('probe requires local trusted data plane')
+        headers={'Content-Type':'application/json','X-Memory-Client':'ep-system-probe',
+                 'X-Memory-Invocation-Id':invocation_id}
+        if config.get('evolvingProfileApiToken'):headers['Authorization']='Bearer '+config['evolvingProfileApiToken']
+        request=urllib.request.Request(base+path,data=json.dumps(body,ensure_ascii=False).encode(),headers=headers,method='POST')
+        with urllib.request.urlopen(request,timeout=timeout) as response:data=response.read(2*1024*1024+1)
+        if len(data)>2*1024*1024:raise ValueError('probe response too large')
+        return json.loads(data)
+    bank=derive_bank_id(hook_input,config)
+    context,probe=run_probe(plan,settings,api,bank)
+    if not is_shadow_replay() and hook_input.get('session_id') and hook_input.get('turn_id'):
+        try:
+            from memory_turn_check import register_route
+            register_route({
+                'invocation_id':invocation_id,
+                'session_id':hook_input.get('session_id'),
+                'turn_id':hook_input.get('turn_id'),
+                'raw_prompt':prompt,
+                'execution_mode':'production',
+                'prompt_origin':hook_input.get('memory_prompt_origin','user_direct'),
+                'required_ep_tool':plan.get('required_ep_tool'),
+                'allow_native_memory':plan.get('allow_native_memory',False),
+                'memory_policy':plan.get('memory_policy'),
+                'recommended_route':plan.get('recommended_route'),
+            })
+        except Exception as error:
+            debug_log(config,'Memory access guard route receipt unavailable: '+type(error).__name__)
+    identity={'session_id':hook_input.get('session_id'),'turn_id':hook_input.get('turn_id'),
+              'hook_invocation_id':invocation_id}
+    route={k:plan[k] for k in ('recommended_route','history_dependency','minimum_action','reason','required_slots','context_source','candidate_policy','fallback_route','fallback_trigger','required_ep_tool','allow_native_memory')}
+    route['check_id']=invocation_id
+    route_context='<evolving_profile_memory_route>\n'+json.dumps(route,ensure_ascii=False).replace('<','\\u003c')+'\n</evolving_profile_memory_route>'
+    output=route_context+'\n'+context
+    if not is_shadow_replay():
+        record_prompt_ingress(config,prompt,str(hook_input.get('session_id') or 'unknown'),str(hook_input.get('cwd') or ''),
+            turn_id=hook_input.get('turn_id'),hook_invocation_id=invocation_id,prompt_origin=hook_input.get('memory_prompt_origin','user_direct'))
+    emit_hook_output(output)
+    probe['delivery_stage']='hook_stdout_write_completed'
+    receipt={'at':datetime.now(timezone.utc).isoformat(),**identity,'raw_user_prompt':prompt,
+        'prompt_origin':hook_input.get('memory_prompt_origin','user_direct'),'bank_id':bank,
+        'memory_action':'system_probe','system_probe':probe,'history_plan':route,
+        'history_decision':'not_needed' if plan['minimum_action']=='skip' else 'needed',
+        'history_decision_evidence':'bounded_system_probe',
+        'candidate_count':probe['candidate_count'],'injected_count':probe['returned_count'],
+        'injected_items':probe['items'],'packet_delivery':{'state':'hook_stdout_write_completed'},
+        'context_sha256':hashlib.sha256(_with_entry_guidance(output).encode()).hexdigest()}
+    receipt.update({
+        'route_required': plan.get('recommended_route') in {'recall', 'research'},
+        'route_started': False,
+        'tool_called': False,
+        'returned_count': 0,
+        'delivery_state': 'not_started' if plan.get('recommended_route') in {'recall', 'research'} else 'not_required',
+        'unresolved': ['EP历史工具尚未调用；本地文件搜索或候选提示不计为历史核验'] if plan.get('recommended_route') in {'recall', 'research'} else [],
+    })
+    from evidence_workspace import _save
+    lane='diagnostic' if is_shadow_replay() or hook_input.get('memory_prompt_origin')=='test_probe' else 'production'
+    _save(state_root/'audit/hook-output-receipts'/lane/(hashlib.sha256((str(identity['session_id'])+':'+invocation_id).encode()).hexdigest()+'.json'),receipt)
+    _save(state_root/'audit/memory-route-receipts'/(hashlib.sha256(invocation_id.encode()).hexdigest()+'.json'),
+          {**plan,'check_id':invocation_id,'raw_prompt':prompt,'prompt_binding':identity,'system_probe':probe})
+
+
+def route_requires_ep_history(prompt: str, task: dict | None = None) -> bool:
+    """Return whether the entry route requires a real EP history call.
+
+    The agent-owned entry path may provide navigation, but a required history
+    route cannot end at the bounded probe because that probe is not Recall or
+    Research. The legacy pipeline remains the execution owner for this turn.
+    """
+    from system_probe import plan_history
+    plan = plan_history(prompt, task or {})
+    return plan.get('minimum_action') in {'recall_probe', 'agent_query', 'live_audit'} or plan.get('recommended_route') in {'recall', 'research', 'live_audit'}
 
 
 def publish_injection(context: str, payload: dict, config: dict) -> bool:
@@ -511,12 +598,14 @@ def is_shadow_replay() -> bool:
     user-visible production turn.  The Controller still receives a trace with
     an explicit mode so the status page can be audited separately.
     """
-    return os.environ.get("EVOLVING_PROFILE_EXECUTION_MODE", "").strip().casefold() in {
+    mode = os.environ.get("EVOLVING_PROFILE_EXECUTION_MODE") or os.environ.get("HINDSIGHT_EXECUTION_MODE", "")
+    return mode.strip().casefold() in {
         "replay", "shadow_replay", "cassette_replay"
     }
 
 
 SHADOW_REPLAY_FIXTURE_ROOT = Path(HAM_SOURCE_ROOT) / "tests" / "fixtures" / "hindsight-replay"
+LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_LEGACY_REPLAY_ROOT", str(Path.home()/".evolving-profile/legacy-replay")))
 
 
 def allow_shadow_fixture_transcript(transcript_path: str) -> bool:
@@ -528,12 +617,17 @@ def allow_shadow_fixture_transcript(transcript_path: str) -> bool:
     versioned fixtures that model the actual Hook envelope.  Both the explicit
     environment opt-in and the path boundary are required.
     """
-    if not is_shadow_replay() or os.environ.get("EVOLVING_PROFILE_SHADOW_REPLAY_WITH_TRANSCRIPT") != "1":
+    transcript_opt_in = os.environ.get("EVOLVING_PROFILE_SHADOW_REPLAY_WITH_TRANSCRIPT") or os.environ.get("HINDSIGHT_SHADOW_REPLAY_WITH_TRANSCRIPT")
+    if not is_shadow_replay() or transcript_opt_in != "1":
         return False
     try:
         path = Path(transcript_path).expanduser().resolve()
-        root = SHADOW_REPLAY_FIXTURE_ROOT.resolve()
-        return str(path).startswith(str(root) + os.sep)
+        roots = [SHADOW_REPLAY_FIXTURE_ROOT.resolve()]
+        try:
+            roots.append(LEGACY_SHADOW_REPLAY_FIXTURE_ROOT.resolve())
+        except (OSError, RuntimeError):
+            pass
+        return any(str(path).startswith(str(root) + os.sep) for root in roots)
     except (OSError, RuntimeError):
         return False
 
@@ -1381,9 +1475,20 @@ def format_memory_route_context(value: dict) -> str:
     payload={'check_id':check_id,'recommended_route':route,'reason':reason,'candidate_count':probe.get('candidate_count'),
              'catalog_status':probe.get('status'),'catalog_coverage':probe.get('catalog_coverage'),'matched_entities':entities,'catalog_hints':hints,'agent_may_override':True,
              'catalog_miss_does_not_prove_bank_absence':True}
+    route_instruction = (
+        "单点历史问题必须实际调用 EP Recall；若为空、主体不匹配或时间/范围不足，升级一次 Research。"
+        if route == "recall" else
+        "这是开放盘点或多实体时间线，必须实际调用 EP Research，并继续分页或回读原文。"
+        if route == "research" else
+        "这是对用户已记录偏好、格式或协作习惯的询问；必须实际调用 Get Preference，并按返回的适用条件和例外回答。"
+        if route == "get_preference" else
+        "这是实时链路审计，优先调用 audit_thread_history（若当前宿主已挂载）并读取 Hook 回执和 MCP 活动记录，不查询普通历史 Bank。"
+        if route == "live_audit" else
+        "当前任务可先依据现有上下文处理；若发现证据缺口，再调用相应历史工具。"
+    )
     return ('<evolving_profile_memory_route check_id="'+check_id+'">\n'
             '本轮已执行低成本目录探针：'+json.dumps(payload,ensure_ascii=False)+'\n'
-            '目录只用于判断是否需要历史读取，不是事实证据；目录未命中不等于Bank不存在。当前Prompt和上下文优先。若需历史证据，调用相应工具并携带此check_id。'
+            + route_instruction + '目录只用于判断是否需要历史读取，不是事实证据；目录未命中不等于Bank不存在。空的 system_probe 只代表没有候选注入，不能代替实际 MCP 检索；此路线标为必需时，须先调用对应的 EP 工具，不能用本地 Codex Memory 作为无标记替代。'
             '\n</evolving_profile_memory_route>')
 
 
@@ -2539,20 +2644,17 @@ def main():
         )
         return
 
-    if config.get('agentOwnedGuidance',True) or not config.get("autoRecall"):
-        # Agent-owned mode supplies instructions and permitted local maps;
-        # the Agent interprets the complete Prompt and chooses deeper reads.
-        # Legacy automatic routing remains opt-in only.
-        if not is_shadow_replay():
-            record_prompt_ingress(config, prompt, str(hook_input.get('session_id') or 'unknown'),
-                str(hook_input.get('cwd') or ''), turn_id=hook_input.get('turn_id'),
-                hook_invocation_id=hook_invocation_id,
-                prompt_origin=str(hook_input.get('memory_prompt_origin') or 'user_direct'))
-            if not config.get('agentOwnedGuidance',True):
-                route_probe=record_memory_route_probe(hook_input, prompt, config, hook_invocation_id)
-                ENTRY_GUIDANCE_CONTEXT += '\n'+format_memory_route_context(route_probe)
-            record_agent_choice_pending_receipt(hook_input, prompt, config, hook_invocation_id)
-        emit_hook_output()
+    if config.get('agentOwnedGuidance',True) and config.get('autoRecall', False):
+        task = ((ENTRY_GUIDANCE_RECEIPT or {}).get('request') or {}).get('task') or {}
+        if not route_requires_ep_history(prompt, task):
+            emit_bounded_system_probe(hook_input,prompt,config,hook_invocation_id)
+            return
+        # A required history route must execute the real EP pipeline. The
+        # bounded probe remains available as a route hint, but it cannot count
+        # as Recall/Research and must not be the terminal path.
+        debug_log(config, 'Agent-owned guidance route requires EP history; continuing into the real retrieval pipeline')
+    elif not config.get("autoRecall"):
+        emit_bounded_system_probe(hook_input,prompt,config,hook_invocation_id)
         return
 
     # UserPromptSubmit is user-authored by default. Controlled replays and

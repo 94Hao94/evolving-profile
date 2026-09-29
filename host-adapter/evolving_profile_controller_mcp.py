@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
-GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", "/Users/apple/.evolving-profile/runtime/guidance")
+GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path.home() / ".evolving-profile/runtime/guidance"))
 if GUIDANCE_V1_SRC not in sys.path:
     sys.path.insert(0, GUIDANCE_V1_SRC)
 from evidence_workspace import discover, search, read_page, source_witness, record_stdout, DEFAULT_ROOT
@@ -26,15 +26,31 @@ from source_safety import mask_text, mask_value
 from topic_catalog import TopicCatalog,knowledge_review,redact_unreviewed_page,merge_catalog_rows
 from evidence_gap import record_decision
 from task_state import TaskStateStore
+from lib.context_summary import read_context_index, BUDGETS
+from lib.scenario_episodes import revalidate_persisted_episode_source
+from lib.scenario_source import read_session_source
+from lib.scenario_gate import decide_scenario_summary
+from lib.context_associations import project_key
+from lib.scope_hypotheses import search_contexts, build_hypotheses
+from lib.external_rag import search_external_rag
+from runtime_settings import load_runtime_settings, module_enabled, route_policy
 
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
-BANK = os.environ.get("EVOLVING_PROFILE_BANK_ID", "personal-memory")
-VERSION = "1.8.0-thread-audit"
+BANK = "personal-memory"
+VERSION = "4.0.0-dev-scenario-quality"
+ADAPTER_BUILD_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 CURRENT_TOOL_CALL = None
-GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", "/Users/apple/.evolving-profile/guidance-v1/guidance-v1.json")
+
+def runtime_disabled(module: str, action: str = 'retrieve'):
+    settings = load_runtime_settings()
+    if module_enabled(settings, module, action) and route_policy(settings, 'ep')['sources']:
+        return None
+    return {'content':[{'type':'text','text':json.dumps({'schema':'evolving-profile.runtime-gate.v1','status':'disabled_by_runtime_settings','disabled_module':module,'disabled_action':action,'source':'ep','ep_accessed':False},ensure_ascii=False)}],'isError':False}
+GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json"))
 TOPIC_CATALOG_PATH = Path(os.environ.get("EVOLVING_PROFILE_TOPIC_CATALOG", str(Path.home()/'.evolving-profile/catalog/topics.sqlite3')))
 EVIDENCE_DECISION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_EVIDENCE_DECISION_ROOT", str(Path.home()/'.evolving-profile/audit/evidence-decisions')))
 TASK_STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_TASK_STATE_ROOT", str(Path.home()/'.evolving-profile/task-state')))
+CONTEXT_INDEX_PATH = Path(os.environ.get("EVOLVING_PROFILE_CONTEXT_INDEX", str(Path.home()/'.evolving-profile/context/context-index.json')))
 THREAD_SESSION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_THREAD_SESSION_ROOT", str(Path.home()/'.codex/sessions')))
 CHECK_TOOL = {
     'name':'memory_check',
@@ -46,18 +62,18 @@ CHECK_TOOL = {
     'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False},
 }
 GUIDANCE_TOOL = {
-    'name':'read_guidance',
+    'name':'read_preference',
     'description':'读取Evolving Profile已有的经审阅多维度偏好/协作参考及Bank原文依赖；适用于用户偏好、协作方式和执行要求的核对。逐次核对来源有效性与原文版本，不读取Codex原生memory。只是有适用范围的小视图，不是所有偏好或全部心智模型；需结合recall/research补齐其他历史证据。',
     'inputSchema':{'type':'object','properties':{},'additionalProperties':False},
     'annotations':{'readOnlyHint':True,'destructiveHint':False,'openWorldHint':False},
 }
 GUIDANCE_UNIT_TOOL = {
-    'name':'read_guidance_unit','description':'按GuidanceUnit稳定ID和可选revision读取完整正文、条件、例外、行动影响、来源引用及版本状态。只读；用于补读deferred项或核对已加载版本。',
+    'name':'read_preference_unit','description':'按PreferenceUnit稳定ID和可选revision读取完整正文、条件、例外、行动影响、来源引用及版本状态。只读；用于补读deferred项或核对已加载版本。',
     'inputSchema':{'type':'object','additionalProperties':False,'properties':{'id':{'type':'string','minLength':1},'revision':{'type':'string'}},'required':['id']},
     'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
 }
 CATALOG_LIST_TOOL={'name':'catalog_list','description':'列出真实主题目录节点的短摘要、新鲜度和来源覆盖；仅用于导航，不作为事实证据。','inputSchema':{'type':'object','additionalProperties':False,'properties':{'limit':{'type':'integer','minimum':1,'maximum':100,'default':30}}},'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}}
-CATALOG_SEARCH_TOOL={'name':'catalog_search','description':'搜索主题目录的标题、实体、摘要和概览；目录未命中不代表Bank无相关内容。','inputSchema':{'type':'object','additionalProperties':False,'properties':{'query':{'type':'string','minLength':1},'limit':{'type':'integer','minimum':1,'maximum':20,'default':8}},'required':['query']},'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}}
+CATALOG_SEARCH_TOOL={'name':'catalog_search','description':'搜索主题目录，或用scope=scenarios只搜索Session/已核实Project的情景标题；情景模式只返回导航候选，不返回摘要正文或事实。目录未命中不代表Bank无相关内容。','inputSchema':{'type':'object','additionalProperties':False,'properties':{'query':{'type':'string','minLength':1},'limit':{'type':'integer','minimum':1,'maximum':20,'default':8},'scope':{'type':'string','enum':['topics','scenarios'],'default':'topics'}},'required':['query']},'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}}
 CATALOG_READ_TOOL={'name':'catalog_read','description':'按topic_id从L0进入L1主题，再取得L2来源ID。L1来源用offset分页，事实结论仍需recall/read_source核验。','inputSchema':{'type':'object','additionalProperties':False,'properties':{'topic_id':{'type':'string','minLength':1},'offset':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':40}},'required':['topic_id']},'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}}
 EVIDENCE_DECISION_TOOL={'name':'record_evidence_decision','description':'记录当前Agent对证据缺口、路线、充分性和停止原因的有界决定；不记录私有思维链，不写入长期记忆，不证明答案因此受益。','inputSchema':{'type':'object','additionalProperties':False,'properties':{
     'check_id':{'type':'string','minLength':1},'need':{'type':'string','enum':['none','current_context','history','exact_source']},'known_from_current_context':{'type':'boolean'},
@@ -71,11 +87,55 @@ TASK_STATE_TOOL={'name':'update_task_state','description':'由当前Agent更新�
     'constraints':{'type':'array','items':{'type':'string'},'maxItems':20},'completed':{'type':'array','items':{'type':'string'},'maxItems':30},
     'unresolved':{'type':'array','items':{'type':'string'},'maxItems':30},'objects':{'type':'array','items':{'type':'string'},'maxItems':20},
     'source_versions':{'type':'object','additionalProperties':{'type':'string'}}},'required':['session_id']},'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False}}
+CONTEXT_SUMMARY_TOOL = {
+    'name': 'read_context_summary',
+    'description': '读取EP的Session/Conversation或Project Context摘要。多主题Session首次只返回episode目录；指定episode_id后才返回该段compact/standard/full正文。摘要只用于情境导航和解开指代，不是Bank事实；深读前核验来源修订。',
+    'inputSchema': {'type': 'object', 'additionalProperties': False, 'properties': {
+        'context_type': {'type': 'string', 'enum': ['session', 'project']},
+        'context_id': {'type': 'string', 'minLength': 1},
+        'tier': {'type': 'string', 'enum': ['compact', 'standard', 'full'], 'default': 'compact'},
+        'session_id': {'type': 'string'},
+        'project_key': {'type': 'string'},
+        'episode_id': {'type': 'string', 'minLength': 1},
+    }, 'required': ['context_type']},
+    'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True, 'openWorldHint': False},
+}
+SCENARIO_SUMMARY_TOOL = {
+    'name': 'read_scenario_summary',
+    'description': '按需读取Project/Session Scenario Summary。多主题Session先读episode目录，再用episode_id单段下钻；候选出现明确解释缺口后先读compact，不足再展开standard/full。来源路径不是Bank read_source ID，摘要不是事实证据。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'scenario_type': {'type':'string','enum':['session','project']}, 'scenario_id': {'type':'string','minLength':1},
+        'tier': {'type':'string','enum':['compact','standard','full'],'default':'compact'}, 'session_id': {'type':'string'}, 'project_key': {'type':'string'},
+        'episode_id': {'type':'string','minLength':1},
+        'offset': {'type':'integer','minimum':0,'default':0}, 'limit': {'type':'integer','minimum':1,'maximum':20,'default':10}
+    },'required':['scenario_type']}, 'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}
+}
+SCENARIO_GATE_TOOL = {
+    'name':'scenario_gate',
+    'description':'Agent先根据Recall/Research候选指出证据缺口，再判断是否从compact读取Scenario Summary；不按问题关键词自动断言需要情景，不读取摘要、不证明答案正确。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {'prompt':{'type':'string','minLength':1},'candidates':{'type':'array','items':{'type':'object'},'maxItems':50},'current_context_sufficient':{'type':'boolean'},'unresolved_slots':{'type':'array','items':{'type':'string'},'maxItems':8},'max_hops':{'type':'integer','minimum':0,'maximum':2}},'required':['prompt']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}
+}
+SCENARIO_CONTEXT_SEARCH_TOOL = {
+    'name': 'search_scenario_summary',
+    'description': '独立搜索Session/已核实Project的情景导航候选，补充Bank Recall未覆盖的会话。只返回标题、来源范围和不确定性，不返回摘要正文，不证明项目身份或Bank不存在。候选多个时由当前Agent建立项目假设并按需read_scenario_summary/read_source。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'query': {'type':'string','minLength':1}, 'context_type': {'type':'string','enum':['both','session','project'],'default':'both'},
+        'limit': {'type':'integer','minimum':1,'maximum':20,'default':8},
+        'build_hypotheses': {'type':'boolean','default':True}
+    },'required':['query']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}
+}
+EXTERNAL_RAG_TOOL = {
+    'name': 'rag_search',
+    'description': '只搜索Web配置的外部RAG目录，不读取EP Bank、Recall、Research或偏好；返回外部文件路径和片段定位。RAG关闭或未配置时明确返回disabled/root_unavailable。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {'query': {'type':'string','minLength':1}, 'limit': {'type':'integer','minimum':1,'maximum':50,'default':8}}, 'required':['query']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
 try:
-    from mcp_runtime import TASK_GUIDANCE_TOOL, PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL, MEMORY_INSTRUCTIONS_TOOL, GUIDANCE_INSTRUCTIONS, load_repository, get_task_guidance_response, read_guidance_unit, read_memory_instructions, record_instruction
+    from mcp_runtime import PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL, MEMORY_INSTRUCTIONS_TOOL, GUIDANCE_INSTRUCTIONS, load_repository, get_preference_response, read_preference_unit, read_memory_instructions, record_instruction
     from runtime_recovery import refresh_runtime_guidance
 except Exception as guidance_v1_import_error:
-    TASK_GUIDANCE_TOOL = None
     PREFERENCE_TOOL = None
     RUNTIME_GUIDANCE_TOOL = None
     MEMORY_INSTRUCTIONS_TOOL = {'name':'read_memory_instructions','description':'记忆使用说明当前不可用。','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}
@@ -159,7 +219,7 @@ def audit_thread_history(args):
     return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
 RESEARCH_TOOL = {
     'name':'research',
-    'description':'复杂历史知识路线。单次recall不足、多主题时间线或关联闭包时建立可分页证据工作区，由当前Agent继续分面、翻页和原文核对；默认不生成长期模型，也不是简单任务或每轮必经步骤。',
+    'description':'复杂历史知识路线。单次recall不足、多主题时间线或关联闭包时建立可分页证据工作区，由当前Agent继续分面、翻页和原文核对。对象未定时保留竞争假设，不把候选名称、预算拆分或阶段预填成已知事实；找到一版不等于排除其他版本。默认不生成长期模型，也不是简单任务或每轮必经步骤。',
     'inputSchema':{'type':'object','additionalProperties':False,'properties':{'query':{'type':'string','description':'原问题及当前对话确定的背景、范围和未解缺口；不虚构背景，不把预期答案写入查询。'}},'required':['query']},
     'annotations':{'readOnlyHint':True,'openWorldHint':False},
 }
@@ -185,10 +245,11 @@ TOOL = {
     "name": "recall",
     "description": (
         "历史知识路线。当前任务可能受已有事实、经历、关系、旧决定或经验影响时主动查询Evolving Profile，不等用户明确点名工具。返回受预算限制的候选预览和原文定位，不生成或发布长期模型。"
-        "用当前对话已确定的背景补全查询，不猜测指代；可将多时间、多对象问题拆成 facets。"
+        "只用当前对话已确定的背景补全查询，不猜测指代；未核实的候选名称、预算拆分或版本阶段不得作为查询前提。可将多时间、多对象问题拆成 facets。"
         "开放盘点、完整历史、多跳优先使用research；单点查找用recall。仍有缺口时按不同要点分面查找或research，不只改写同一句检索词。"
         "因果问题必须把动机、障碍、结果分槽；若动机候选只是执行记录、助手建议或嵌套转录，先用find_sources检索目的/选择词和对象词，再read_source核对，不能用障碍倒推动机。"
         "next_action指出未读页；调用结束不等于语义覆盖完成。用户明确原话可以分别支持总结的不同要点，不要求整套概括逐字出现于一段原文。候选不是已核实事实或完整 Bank 清单。"
+        "候选relevance只是字面线索；uncertain不等于无关。结合完整对话逐条判断，必要时按来源关联读取一次已审核的Scenario Summary compact；同一Session不重复补读。未审核摘要只作导航，不作事实或筛选依据。"
     ),
     "inputSchema": {
         "type": "object", "additionalProperties": False,
@@ -209,14 +270,15 @@ TOOL = {
 }
 
 
-for _tool in (TOOL,RESEARCH_TOOL,RESEARCH_PAGE_TOOL,SOURCE_TOOL,FIND_SOURCES_TOOL):
+for _tool in (TOOL,RESEARCH_TOOL,RESEARCH_PAGE_TOOL,SOURCE_TOOL,FIND_SOURCES_TOOL,
+              CONTEXT_SUMMARY_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL):
     _tool['inputSchema']['properties']['check_id']={'type':'string','description':'请传当前Hook为本条用户Prompt提供的消息级check_id；不要复用上一轮ID，也不要用turn_id代替。缺失或过期时工具仍执行，但观测回执会标成未归因。'}
 
 
 def _returned_count(value, tool):
     if not isinstance(value,dict):return 0
     tool=str(tool or '')
-    if tool.endswith(('get_preference','get_task_guidance','read_guidance','read_guidance_unit')):
+    if tool.endswith(('get_preference','read_preference','read_preference_unit')):
         guidance=value.get('guidance_view') or value
         ids=[]
         for key in ('included','stable_profile','guidance_items','model_sections','entries'):
@@ -234,6 +296,49 @@ def _returned_count(value, tool):
         rows=value.get(key)
         if isinstance(rows,list):return len(rows)
     return 0
+
+
+def _scenario_activity_fields(value):
+    if not isinstance(value, dict) or value.get('source') != 'scenario_summary_index':
+        return {}
+    items = [item for item in value.get('items') or [] if isinstance(item, dict)]
+    episodes = []
+    episode_count = None
+    summaries = []
+    selected_episode_id = str(value.get('episode_id') or '') or None
+    for item in items:
+        if item.get('summary'):
+            summaries.append(str(item['summary']))
+        if item.get('scenario_type') == 'episode' or item.get('episode_id'):
+            selected_episode_id = str(item.get('episode_id') or item.get('scenario_id') or selected_episode_id or '') or None
+        nested = [episode for episode in item.get('episodes') or [] if isinstance(episode, dict)]
+        episodes.extend({key: episode.get(key) for key in (
+            'episode_id', 'title', 'title_authority', 'start_message_id', 'start_user_message_id',
+            'end_message_id', 'source_message_count', 'source_revision', 'status')}
+            for episode in nested)
+        count = item.get('episodes_total')
+        if type(count) is int and count >= 0:
+            episode_count = (episode_count or 0) + count
+        elif nested:
+            episode_count = (episode_count or 0) + len(nested)
+    selected = next((item for item in items if item.get('scenario_type') == 'episode'
+                     or item.get('episode_id')), None)
+    if selected and selected.get('summary'):
+        summaries = [str(selected['summary'])]
+    joined = '\n\n'.join(summaries)
+    fields = {
+        'scenario_type': value.get('scenario_type'),
+        'scenario_tier': value.get('tier'),
+        'scenario_episode_id': selected_episode_id,
+        'scenario_episode_title': selected.get('title') if selected else None,
+        'scenario_episodes': episodes[:20],
+        'scenario_summary_status': value.get('status'),
+        'scenario_summary_text': joined[:4000],
+        'scenario_summary_truncated': len(joined) > 4000,
+    }
+    if episode_count is not None:
+        fields['scenario_episode_count'] = episode_count
+    return fields
 
 
 def _prompt_binding_for_check_id(check_id,event_at,home=None):
@@ -274,6 +379,46 @@ def _prompt_binding_for_check_id(check_id,event_at,home=None):
                      latest_hook_invocation_id=latest.get('hook_invocation_id'))
     return value
 
+
+def _query_scope_audit(check_id, query, binding, home=None):
+    """Flag query details absent from this Prompt, without judging prior context."""
+    if binding.get('state') != 'prompt_bound' or not str(query or '').strip():
+        return {'status': 'unavailable', 'boundary': 'Prompt scope was not verified; retrieval is not blocked.'}
+    home = Path(home) if home is not None else Path.home()
+    try:
+        from collections import deque
+        with (home/'.evolving-profile/audit/prompt-ingress.jsonl').open('r',encoding='utf-8') as stream:
+            recent = deque(stream,maxlen=4000)
+        row = None
+        for line in reversed(recent):
+            try:
+                candidate = json.loads(line)
+            except (ValueError,TypeError):
+                continue
+            if isinstance(candidate,dict) and candidate.get('hook_invocation_id') == check_id:
+                row = candidate
+                break
+    except (OSError,ValueError,TypeError):
+        row = None
+    prompt = str((row or {}).get('prompt_preview') or '')
+    if not prompt:
+        return {'status': 'unavailable', 'boundary': 'Prompt preview unavailable; retrieval is not blocked.'}
+
+    amount_pattern = r'(?<!\d)(\d+(?:\.\d+)?)\s*万(?:元)?'
+    split_pattern = r'(?<!\d)\d+(?:\.\d+)?(?:\s*[+＋]\s*\d+(?:\.\d+)?){2,}'
+    prompt_amounts = set(re.findall(amount_pattern,prompt))
+    prompt_splits = {re.sub(r'\s+','',item).replace('＋','+') for item in re.findall(split_pattern,prompt)}
+    added_amounts = sorted(set(re.findall(amount_pattern,query))-prompt_amounts)
+    added_splits = sorted({re.sub(r'\s+','',item).replace('＋','+') for item in re.findall(split_pattern,query)}-prompt_splits)
+    return {
+        'status': 'review_added_anchors' if added_amounts or added_splits else 'no_added_anchors',
+        'comparison_scope': 'recorded_current_prompt_preview_first_600_chars',
+        'added_amounts_wan': added_amounts[:12],
+        'added_budget_splits': added_splits[:8],
+        'next_action': 'Check prior confirmed context or direct source support; otherwise rerun a neutral scope query before asserting a project or version.' if added_amounts or added_splits else None,
+        'boundary': 'Absent from this recorded Prompt preview is not proof of fabrication: the rest of a long Prompt, prior conversation or verified sources may support these anchors. Check provenance before using them to narrow scope or assert a version; retrieval is not blocked.',
+    }
+
 def reply(message_id, result=None, error=None):
     call=dict(CURRENT_TOOL_CALL or {})
     tool=str(call.get('name') or '')
@@ -289,8 +434,19 @@ def reply(message_id, result=None, error=None):
                     if isinstance(value,dict) and CURRENT_TOOL_CALL:
                         binding=_prompt_binding_for_check_id(check_id,event_at)
                         value['observability_binding']=binding
+                        if tool in {'recall','research'}:
+                            value['query_scope_audit']=_query_scope_audit(check_id,str(args.get('query') or ''),binding)
+                            value['evidence_contract']={
+                                'navigation_role':'locator_only',
+                                'candidate_role':'unverified_memory_preview',
+                                'direct_fact_role':'read_source source.text checked for the same object and version',
+                                'absence_claim':'not_supported_by_one_result_page',
+                                'version_rule':'A found version does not exclude competing or later versions; inspect a targeted conflict before claiming exclusivity.',
+                                'stop_rule':'Stop when the requested slots have direct-source support and remaining conflicts are either resolved or explicitly reported as unresolved. A next page is an option, not an obligation to exhaust all candidates.',
+                            }
                         if tool in {'recall','research','read_research','read_source','find_sources',
-                                    'get_preference','get_task_guidance','read_guidance','read_guidance_unit'}:
+                                    'get_preference','read_preference','read_preference_unit',
+                                    'read_scenario_summary','read_context_summary'}:
                             value['returned_count']=_returned_count(value,tool)
                         if binding.get('state')=='stale_prompt_binding':
                             value['observability_warning']='check_id belongs to an earlier Prompt; this result was returned but was not attached to its older Prompt receipt.'
@@ -298,6 +454,8 @@ def reply(message_id, result=None, error=None):
                             value['observability_warning']='result returned; Prompt-level attribution is unverified because a current check_id could not be confirmed.'
                     if isinstance(value,dict) and 'adapter_version' in value:
                         value['adapter_config_generation']=os.environ.get('EVOLVING_PROFILE_CONFIG_GENERATION','unspecified')
+                    if isinstance(value, dict):
+                        value['adapter_build_sha256'] = ADAPTER_BUILD_SHA256
                     safe=mask_value(value)
                     if safe!=value and isinstance(safe,dict):safe['credential_redaction']='recognized patterns masked; not exhaustive; source offsets and hashes refer to original storage'
                     block['text']=json.dumps(safe,ensure_ascii=False)
@@ -332,7 +490,15 @@ def reply(message_id, result=None, error=None):
                    'source_read_count':1 if tool.endswith('read_source') and _returned_count(value,tool) else 0,
                    'memory_ids':[item.get('id') for item in memories if isinstance(item,dict) and item.get('id')][:50],
                    'memory_id':(value.get('memory') or {}).get('id'),'guidance_ids':guidance_items[:100],
-                   'guidance_count':len(guidance_items),'deferred_count':len(guidance.get('deferred') or []),'delivery':value.get('delivery') or {}}
+                   'guidance_count':len(guidance_items),'deferred_count':len(guidance.get('deferred') or []),'delivery':value.get('delivery') or {},
+                   'scenario_ids':[item.get('scenario_id') for item in (value.get('items') or []) if isinstance(item,dict) and item.get('scenario_id')][:20],
+                   'scenario_navigation_roles':[(item.get('scenario_id'),item.get('navigation_role')) for item in (value.get('items') or []) if isinstance(item,dict) and item.get('scenario_id')][:20],
+                   **_scenario_activity_fields(value),
+                   'scope_hypothesis_count':len((value.get('hypotheses') or {}).get('hypotheses') or []) if isinstance(value.get('hypotheses'),dict) else 0,
+                   'scope_route_policy':value.get('route_policy') or {},
+                   'scenario_decision':value.get('decision') if tool=='scenario_gate' else None}
+            if tool in {'recall','research'}:
+                event['query_scope_status']=(value.get('query_scope_audit') or {}).get('status')
             with activity_root.open('a',encoding='utf-8') as stream:
                 stream.write(json.dumps(event,ensure_ascii=False)+'\n')
     except Exception:
@@ -362,8 +528,19 @@ def reply(message_id, result=None, error=None):
                                'source_read_count':1 if tool.endswith('read_source') and _returned_count(value,tool) else 0,
                                'memory_id':(value.get('memory') or {}).get('id'),
                                'memory_ids':[item.get('id') for item in (value.get('memories') or []) if isinstance(item,dict) and item.get('id')][:50],
-                               'delivery':value.get('delivery') or {}})
+                               'delivery':value.get('delivery') or {},
+                               'scenario_ids':[item.get('scenario_id') for item in (value.get('items') or []) if isinstance(item,dict) and item.get('scenario_id')][:20],
+                               **_scenario_activity_fields(value),
+                               'scenario_decision':value.get('decision') if tool=='scenario_gate' else None})
                 receipt['tool_events']=events[-20:];receipt['updated_at']=datetime.datetime.now(datetime.timezone.utc).isoformat()
+                planned = receipt.get('recommended_route') or receipt.get('history_plan', {}).get('recommended_route')
+                required = bool(receipt.get('route_required')) or planned in {'recall', 'research'} or receipt.get('history_plan', {}).get('minimum_action') in {'recall_probe', 'agent_query'}
+                receipt['route_required'] = required
+                receipt['route_started'] = bool(events)
+                receipt['tool_called'] = bool(events)
+                receipt['returned_count'] = sum(int(event.get('returned_count') or 0) for event in events)
+                receipt['delivery_state'] = 'returned' if receipt['returned_count'] > 0 else ('tool_called_empty' if events else 'not_started')
+                receipt['unresolved'] = [] if events else (['EP历史工具尚未调用；本地文件搜索或候选提示不计为历史核验'] if required else [])
                 root.mkdir(parents=True,exist_ok=True);tmp=target.with_suffix('.tmp');tmp.write_text(json.dumps(receipt,ensure_ascii=False),encoding='utf-8');tmp.replace(target)
     except Exception:
         pass
@@ -434,7 +611,7 @@ def official_json(path,body=None,timeout=15):
 
 
 def guidance_value(args):
-    if args:raise ValueError('read_guidance takes no arguments; use returned scopes to judge applicability')
+    if args:raise ValueError('read_preference takes no arguments; use returned scopes to judge applicability')
     from profile_view import load_view
     try:view=load_view(BANK,get=lambda path:official_json(path,timeout=0.8))
     except Exception as error:
@@ -446,14 +623,14 @@ def guidance_value(args):
         'boundary':'释义而非逐字原话；按范围选用，当前Prompt优先。仅核验所列来源，不保证已发现独立新纠正；需补查其他原文。未可用不等于用户没有偏好。'}
     return result
 
-def read_guidance(args):
+def read_preference(args):
     return {'content':[{'type':'text','text':json.dumps(guidance_value(args),ensure_ascii=False)}],'isError':False}
 
-def task_guidance(args):
-    if TASK_GUIDANCE_TOOL is None:
+def preference(args):
+    if PREFERENCE_TOOL is None:
         return {'content':[{'type':'text','text':json.dumps({'coverage':'unavailable','errors':['guidance_runtime_import_'+str(_GUIDANCE_V1_IMPORT_ERROR)]},ensure_ascii=False)}],'isError':True}
     repo=load_repository(GUIDANCE_V1_CONFIG)
-    result=get_task_guidance_response(repo,args,record=not bool(args.get("entry_adapter")))
+    result=get_preference_response(repo,args,record=not bool(args.get("entry_adapter")))
     result['adapter_version']=VERSION+'+guidance-v1'
     result['delivery']={'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'}
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
@@ -464,8 +641,8 @@ def runtime_guidance(args):
     result['adapter_version']=VERSION+'+runtime-guidance'
     result['delivery']={'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'}
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
-def guidance_unit(args):
-    repo=load_repository(GUIDANCE_V1_CONFIG);result=read_guidance_unit(repo,str(args.get('id') or ''),args.get('revision'));result['adapter_version']=VERSION+'+guidance-v1'
+def preference_unit(args):
+    repo=load_repository(GUIDANCE_V1_CONFIG);result=read_preference_unit(repo,str(args.get('id') or ''),args.get('revision'));result['adapter_version']=VERSION+'+preference-v1'
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 def memory_instructions(args):
     if args:raise ValueError('read_memory_instructions takes no arguments')
@@ -488,6 +665,13 @@ def catalog_result(operation,args):
             'entity_topics':catalog.count(),'returned':len(items)}}
     elif operation=='catalog_search':
         query=str(args.get('query') or '');limit=int(args.get('limit') or 8)
+        if str(args.get('scope') or 'topics') == 'scenarios':
+            value=search_contexts(read_context_index(CONTEXT_INDEX_PATH),query,context_type='both',limit=limit)
+            value['hypotheses']=build_hypotheses(query,value.get('items') or [])
+            value['adapter_version']=VERSION
+            return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
+        if str(args.get('scope') or 'topics') != 'topics':
+            raise ValueError('catalog_search scope must be topics or scenarios')
         entity_rows=catalog.search(query,limit);official_available=True
         try:
             official_value=official_json(prefix+'/search?q='+urllib.parse.quote(query)+'&limit='+str(limit))
@@ -514,18 +698,249 @@ def catalog_result(operation,args):
     value.update(schema='evolving-profile.topic-catalog.v1',boundary='navigation_only_not_fact_evidence',catalog_miss_does_not_prove_bank_absence=True)
     return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
 
+
+def read_context_summary(args):
+    disabled = runtime_disabled('scenario_summary', 'retrieve')
+    if disabled: return disabled
+    context_type = str(args.get('scenario_type') or args.get('context_type') or '').strip()
+    if context_type not in BUDGETS:
+        raise ValueError('context_type must be session or project')
+    tier = str(args.get('tier') or 'compact').strip()
+    if tier not in BUDGETS[context_type]:
+        raise ValueError('invalid_context_tier')
+    offset, limit = args.get('offset', 0), args.get('limit', 10)
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 20:
+        raise ValueError('invalid_context_pagination')
+    index = read_context_index(CONTEXT_INDEX_PATH)
+    rows = index.get('sessions' if context_type == 'session' else 'projects') or []
+    wanted_id = str(args.get('scenario_id') or args.get('context_id') or '').strip()
+    wanted_session = str(args.get('session_id') or '').strip()
+    wanted_project = str(args.get('project_key') or '').strip()
+    matches = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if wanted_id and str(row.get('context_id') or '') != wanted_id:
+            continue
+        if wanted_session and str(row.get('session_id') or '') != wanted_session:
+            continue
+        if wanted_project and str(row.get('project_key') or '') != wanted_project:
+            continue
+        matches.append(row)
+    if not wanted_id and not wanted_session and not wanted_project:
+        raise ValueError('context_id_or_scope_required')
+    episode_id = str(args.get('episode_id') or '').strip()
+    if episode_id:
+        if context_type != 'session':
+            raise ValueError('episode_id_requires_session')
+        parent = matches[0] if len(matches) == 1 else None
+        episode = next((item for item in (parent or {}).get('episodes') or []
+                        if isinstance(item, dict) and item.get('episode_id') == episode_id), None)
+        if episode is None:
+            value = {'schema': 'evolving-profile.scenario-summary.v1', 'status': 'episode_not_found',
+                     'scenario_type': 'episode', 'parent_session_id': wanted_session or None,
+                     'episode_id': episode_id, 'tier': tier, 'items': [], 'source': 'scenario_summary_index',
+                     'total': 0, 'offset': 0, 'next_offset': None}
+        else:
+            try:
+                live_source = read_session_source(str(parent.get('session_id') or ''), THREAD_SESSION_ROOT,
+                                                  max_chars=500000)
+                freshness = revalidate_persisted_episode_source(live_source, parent, episode_id)
+            except (OSError, TypeError, ValueError):
+                freshness = {'status': 'episode_source_unavailable'}
+            item = {'scenario_id': episode_id, 'scenario_type': 'episode',
+                    'parent_scenario_id': parent.get('context_id'),
+                    'parent_session_id': parent.get('session_id'), 'episode_id': episode_id,
+                    'title': episode.get('title'), 'start_message_id': episode.get('start_message_id'),
+                    'start_user_message_id': episode.get('start_user_message_id'),
+                    'end_message_id': episode.get('end_message_id'),
+                    'source_message_count': episode.get('source_message_count'),
+                    'source_revision': episode.get('source_revision'), 'tier': tier,
+                    'status': freshness.get('status'),
+                    'evidence_role': 'context_navigation_only',
+                    'review_scope': episode.get('review_scope') or 'conversation_episode_only_not_external_fact_verification',
+                    'raw_source_files': parent.get('raw_source_files') or [],
+                    'source_readback': 'local_source_path_not_bank_read_source'}
+            if freshness.get('parent_source_revision_changed'):
+                item['parent_source_revision_changed'] = True
+                item['freshness_boundary'] = 'selected message span still matches; other parent Session content changed'
+            if freshness.get('status') in {'current', 'span_current_parent_revision_changed'}:
+                item.update({'summary': (episode.get('summary') or {}).get(tier) or '',
+                             'summary_budget': (episode.get('summary_budget') or {}).get(tier) or {},
+                             'message_ids': list(episode.get('message_ids') or []),
+                             'unknowns': list(episode.get('unknowns') or [])})
+            value = {'schema': 'evolving-profile.scenario-summary.v1',
+                     'status': freshness.get('status') or 'episode_source_unavailable',
+                     'scenario_type': 'episode', 'tier': tier, 'items': [item],
+                     'source': 'scenario_summary_index', 'index_updated_at': index.get('updated_at'),
+                     'total': 1, 'offset': 0, 'next_offset': None}
+        return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
+
+    if context_type == 'session' and len(matches) == 1 and isinstance(matches[0].get('episodes'), list):
+        row = matches[0]
+        episodes = row['episodes']
+        page = episodes[offset:offset + limit]
+        projected = [{key: episode.get(key) for key in (
+            'episode_id', 'title', 'title_authority', 'start_message_id', 'start_user_message_id',
+            'end_message_id', 'source_message_count', 'source_revision', 'status', 'evidence_role')}
+            for episode in page if isinstance(episode, dict)]
+        next_episode_offset = offset + limit if offset + limit < len(episodes) else None
+        value = {'schema': 'evolving-profile.scenario-summary.v1', 'status': 'episode_directory_ready',
+                 'scenario_type': 'session', 'tier': tier, 'source': 'scenario_summary_index',
+                 'items': [{
+                     'scenario_id': row.get('context_id'), 'scenario_type': 'session',
+                     'session_id': row.get('session_id'), 'project_key': row.get('project_key'),
+                     'summary': (row.get('summary') or {}).get(tier) or '',
+                     'summary_budget': (row.get('summary_budget') or {}).get(tier) or {},
+                     'episodes': projected, 'episodes_total': len(episodes),
+                     'source_ids': row.get('source_ids') or [], 'updated_at': row.get('updated_at'),
+                     'status': row.get('status') or 'episode_directory_ready',
+                     'evidence_role': 'context_navigation_only',
+                     'source_revision': row.get('source_revision'),
+                     'manual_source_coverage': row.get('manual_source_coverage') or {},
+                     'episode_partition_status': row.get('episode_partition_status') or 'unknown',
+                     'episode_bodies_included': False,
+                 }],
+                 'index_updated_at': index.get('updated_at'), 'total': len(episodes),
+                 'offset': offset, 'next_offset': next_episode_offset}
+        return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
+
+    total = len(matches)
+    next_offset = offset + limit if offset + limit < total else None
+    if not matches:
+        value = {'schema': 'evolving-profile.scenario-summary.v1', 'status': index.get('status') or 'not_found',
+                 'scenario_type': context_type, 'tier': tier, 'items': [], 'source': 'scenario_summary_index',
+                 'total': 0, 'offset': offset, 'next_offset': None}
+    else:
+        items = []
+        page = matches[offset:offset + limit]
+        for row in page:
+            items.append({
+                'scenario_id': row.get('context_id'), 'scenario_type': row.get('context_type'),
+                'session_id': row.get('session_id'), 'project_key': row.get('project_key'),
+                'summary': (row.get('summary') or {}).get(tier) or '',
+                'summary_budget': (row.get('summary_budget') or {}).get(tier) or {},
+                'source_ids': row.get('source_ids') or [], 'session_ids': row.get('session_ids') or [],
+                'updated_at': row.get('updated_at'), 'status': row.get('status') or 'unknown',
+                'evidence_role': row.get('evidence_role') or 'context_navigation_only',
+                'identity_status': (row.get('identity_status') or 'unverified_workspace_bucket') if context_type == 'project' else 'session_id_matched',
+                'source_locator_type': 'codex_raw_rollout_and_summary_seed' if row.get('raw_source_files') else 'codex_rollout_summary_path',
+                'source_readback': 'local_source_path_not_bank_read_source',
+                'raw_source_files': row.get('raw_source_files') or [],
+                'source_revision': row.get('source_revision'),
+                'review_scope': row.get('review_scope') or 'not_reviewed',
+                'selection_coverage': row.get('selection_coverage') or {},
+                'manual_source_coverage': row.get('manual_source_coverage') or {},
+            })
+        reviewed = all(row.get('status') == 'model_reviewed' for row in matches)
+        value = {'schema': 'evolving-profile.scenario-summary.v1', 'status': 'ready' if reviewed else 'available_unreviewed',
+                 'scenario_type': context_type, 'tier': tier, 'items': items, 'source': 'scenario_summary_index',
+                 'index_updated_at': index.get('updated_at'), 'total': total, 'offset': offset,
+                 'next_offset': next_offset}
+    return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
+
+
+def search_scenario_summary(args):
+    index = read_context_index(CONTEXT_INDEX_PATH)
+    value = search_contexts(index, str(args.get('query') or ''),
+                            context_type=str(args.get('context_type') or 'both'),
+                            limit=int(args.get('limit') or 8))
+    if bool(args.get('build_hypotheses', True)):
+        value['hypotheses'] = build_hypotheses(str(args.get('query') or ''), value['items'])
+    value['adapter_version'] = VERSION
+    value['tool_name'] = 'search_scenario_summary'
+    value['schema'] = 'evolving-profile.search-scenario-summary.v1'
+    return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
+
+
+def scenario_gate(args):
+    value = decide_scenario_summary(
+        str(args.get('prompt') or ''), args.get('candidates') or [],
+        bool(args.get('current_context_sufficient')), unresolved_slots=args.get('unresolved_slots') or [],
+        max_hops=int(args.get('max_hops', 1)),
+    )
+    value.update({'schema':'evolving-profile.scenario-gate.v1','source':'explicit_agent_gap_policy'})
+    return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
+
+
+# Internal compatibility for code paths that still use the old Python helper.
+search_scenario_contexts = search_scenario_summary
+
+
+def scenario_followup(result):
+    """Expose only source-linked summary locators after candidate retrieval."""
+    rows = result.get('memories') or []
+    if not rows:
+        return {'decision': 'none', 'reason': 'no_returned_candidates', 'scenarios': []}
+    index = read_context_index(CONTEXT_INDEX_PATH)
+    sessions = {str(row.get('session_id')): row for row in index.get('sessions') or [] if row.get('session_id')}
+    projects = {str(row.get('project_key')): row for row in index.get('projects') or [] if row.get('project_key')}
+    selected = {}
+    excluded_unverified_workspace = set()
+    for candidate in rows:
+        metadata = candidate.get('metadata') or {}
+        ids = metadata.get('session_ids') or metadata.get('session_id') or []
+        if isinstance(ids, str):
+            ids = [value.strip() for value in ids.split(',') if value.strip()]
+        raw_project = metadata.get('project') or metadata.get('cwd') or ''
+        pkey = str(metadata.get('project_key') or project_key(raw_project))
+        matched = [sessions[str(sid)] for sid in ids if str(sid) in sessions]
+        if pkey in projects:
+            project = projects[pkey]
+            if project.get('identity_status') == 'verified_project':
+                matched.append(project)
+            else:
+                excluded_unverified_workspace.add(pkey)
+        for scope in matched:
+            key = str(scope.get('context_id') or '')
+            if not key:
+                continue
+            title = str(scope.get('title') or '').strip()
+            if not title:
+                first_line = str((scope.get('summary') or {}).get('compact') or '').split('\n', 1)[0].strip()
+                if first_line.startswith('# '):
+                    title = first_line[2:].strip()
+            item=selected.setdefault(key, {'scenario_id': key, 'scenario_type': scope.get('context_type'),
+                'status': scope.get('status') or 'unknown','summary_review_status':scope.get('status') or 'unknown',
+                'navigation_title': title[:120], 'title_authority': 'navigation_label_not_verified_fact',
+                'updated_at': scope.get('updated_at'), 'source_revision': scope.get('source_revision'),
+                'source_linkage_ambiguous': False,
+                'source_memory_ids': [],'uncertain_source_memory_ids': []})
+            if len(ids) > 1:
+                item['source_linkage_ambiguous'] = True
+            if candidate.get('id') not in item['source_memory_ids']:
+                item['source_memory_ids'].append(candidate.get('id'))
+            if (candidate.get('relevance') or {}).get('state')=='uncertain' and candidate.get('id') not in item['uncertain_source_memory_ids']:
+                item['uncertain_source_memory_ids'].append(candidate.get('id'))
+    scenarios = list(selected.values())[:8]
+    return {'decision': 'agent_decides' if scenarios else 'none',
+        'reason': 'candidate_scopes_available_not_read' if scenarios else 'no_matching_scenario_index',
+        'scenarios': scenarios, 'next_tool': 'read_scenario_summary' if scenarios else None,
+        'excluded_unverified_workspace_count': len(excluded_unverified_workspace),
+        'default_tier': 'compact', 'summary_text_included': False,
+        'next_action': 'check_scenario_if_scope_or_revision_unresolved',
+        'source_linkage_boundary': 'Batch session links do not prove which Session supports each individual claim; verify original source before merging projects or versions.',
+        'deduplication':'one_locator_per_source_session_or_verified_project',
+        'scenarios_total':len(selected),
+        'boundary': 'Only verified Project identities are recommended; cwd buckets are navigation hints, not projects. Summary is not fact evidence.'}
+
 def research(args,page=False):
+    disabled = runtime_disabled('facts', 'retrieve')
+    if disabled: return disabled
     root=Path(os.environ.get('EVOLVING_PROFILE_RESEARCH_ROOT',str(DEFAULT_ROOT)))
     if page:
         result=read_page(BANK,args.get('research_id'),args.get('offset'),official_json,root)
     else:
         result=search(BANK,args.get('query'),official_json,root,budget='high',max_tokens=2400,page_size=6)
         result['guidance_view']=guidance_value({})
+    result['scenario_followup']=scenario_followup(result)
     result['adapter_version']=VERSION
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 
 
 def evidence_recall(args):
+    disabled = runtime_disabled('facts', 'retrieve')
+    if disabled: return disabled
     root=Path(os.environ.get('EVOLVING_PROFILE_RESEARCH_ROOT',str(DEFAULT_ROOT)))
     args=dict(args);facets=args.get('facets')
     if facets is not None:
@@ -542,6 +957,7 @@ def evidence_recall(args):
             budget=args.get('budget','high'),max_tokens=args.get('max_tokens',2400),types=(args.get('types') or None),
             temporal_window=args.get('temporal_window'),prefer_observations=args.get('prefer_observations',False),page_size=args.get('max_results',6))
     result['guidance_view']=guidance_value({})
+    result['scenario_followup']=scenario_followup(result)
     result['adapter_version']=VERSION
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 
@@ -561,6 +977,8 @@ def find_sources(args):
 
 
 def read_source(args):
+    disabled = runtime_disabled('source_readback', 'retrieve')
+    if disabled: return disabled
     try:
         mid = str(uuid.UUID(str(args.get("memory_id") or "")))
     except ValueError:
@@ -686,7 +1104,7 @@ for line in sys.stdin:
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL] + ([PREFERENCE_TOOL, TASK_GUIDANCE_TOOL, RUNTIME_GUIDANCE_TOOL] if TASK_GUIDANCE_TOOL and PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
+            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
         elif method == "tools/call":
             params = request.get("params") or {}
             CURRENT_TOOL_CALL={'name':params.get('name'),'arguments':params.get('arguments') or {}}
@@ -700,17 +1118,17 @@ for line in sys.stdin:
                     value=memory_check_route(args)
                 value['adapter_version']=VERSION
                 reply(message_id,{'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False})
-            elif params.get('name') == 'read_guidance':
-                reply(message_id,read_guidance(params.get('arguments') or {}))
-            elif params.get('name') in ('get_preference','get_task_guidance'):
+            elif params.get('name') in ('read_preference', 'read_guidance'):
+                reply(message_id,read_preference(params.get('arguments') or {}))
+            elif params.get('name') in ('get_preference', 'get_task_guidance'):
                 guidance_args=params.get('arguments') or {}
-                if params.get('name')=='get_preference' and not str(guidance_args.get('check_id') or '').strip():
+                if params.get('name') == 'get_preference' and not str(guidance_args.get('check_id') or '').strip():
                     raise ValueError('get_preference requires the current Prompt check_id for auditable attribution')
-                reply(message_id,task_guidance(guidance_args))
+                reply(message_id,preference(guidance_args))
             elif params.get('name') == 'refresh_runtime_guidance':
                 reply(message_id,runtime_guidance(params.get('arguments') or {}))
-            elif params.get('name') == 'read_guidance_unit':
-                reply(message_id,guidance_unit(params.get('arguments') or {}))
+            elif params.get('name') in ('read_preference_unit', 'read_guidance_unit'):
+                reply(message_id,preference_unit(params.get('arguments') or {}))
             elif params.get('name') == 'read_memory_instructions':
                 reply(message_id,memory_instructions(params.get('arguments') or {}))
             elif params.get('name') in ('catalog_list','catalog_search','catalog_read'):
@@ -723,6 +1141,17 @@ for line in sys.stdin:
                 expected_version=args.pop('expected_version',None);update_reason=args.pop('update_reason','agent_update')
                 value=TaskStateStore(TASK_STATE_ROOT).update(session_id,args,turn_id,check_id,expected_version=expected_version,update_reason=update_reason)
                 reply(message_id,{'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False})
+            elif params.get('name') == 'read_context_summary':
+                # Hidden compatibility alias; new hosts use read_scenario_summary.
+                reply(message_id, read_context_summary(params.get('arguments') or {}))
+            elif params.get('name') in ('search_scenario_summary', 'search_scenario_contexts'):
+                reply(message_id, search_scenario_summary(params.get('arguments') or {}))
+            elif params.get('name') == 'read_scenario_summary':
+                reply(message_id, read_context_summary(params.get('arguments') or {}))
+            elif params.get('name') == 'scenario_gate':
+                reply(message_id, scenario_gate(params.get('arguments') or {}))
+            elif params.get('name') == 'rag_search':
+                reply(message_id, {'content':[{'type':'text','text':json.dumps(search_external_rag(str((params.get('arguments') or {}).get('query') or ''), limit=int((params.get('arguments') or {}).get('limit') or 8)),ensure_ascii=False)}],'isError':False})
             elif params.get("name") == "read_source":
                 reply(message_id, read_source(params.get("arguments") or {}))
             elif params.get('name') == 'find_sources':
@@ -738,4 +1167,19 @@ for line in sys.stdin:
         else:
             reply(message_id, error={"code": -32601, "message": "Method not found"})
     except Exception as exc:
-        reply(request.get("id") if "request" in locals() else None, error={"code": -32000, "message": str(exc)})
+        recovery = None
+        try:
+            failed_name = str((request.get('params') or {}).get('name') or '') if isinstance(request, dict) else ''
+            if failed_name in {'recall', 'research', 'read_research', 'get_preference', 'read_source'}:
+                failed_args = (request.get('params') or {}).get('arguments') or {}
+                objective = str(failed_args.get('query') or failed_args.get('task', {}).get('objective') or 'EP工具调用失败后的运行恢复')
+                recovery_result = runtime_guidance({
+                    'task': {'objective': objective, 'current_user_message': objective, 'phase': 'verify'},
+                    'runtime_event': {'capability': failed_name, 'tool': failed_name, 'failure': str(exc)[:240], 'occurrence': 1, 'required_for': 'current_ep_request'},
+                })
+                recovery = {'state': 'attempted', 'service': 'runtime_guidance', 'result': recovery_result}
+        except Exception as recovery_error:
+            recovery = {'state': 'failed', 'service': 'runtime_guidance', 'error': type(recovery_error).__name__}
+        error_payload = {"code": -32000, "message": str(exc)}
+        if recovery is not None: error_payload['data'] = {'recovery': recovery, 'ep_history_verification': 'failed'}
+        reply(request.get("id") if "request" in locals() else None, error=error_payload)

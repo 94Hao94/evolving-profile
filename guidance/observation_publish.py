@@ -45,7 +45,7 @@ def build_observation_proposal(classification: dict, evidence: list[dict], bank_
     return {"proposal_id": "observation-guidance:" + classification["id"], "operation": "create", "target_id": "observation-guidance:" + classification["id"], "base_revision": None,
             "nature": "inferred_pattern", "primary_category": classification["primary_category"], "related_categories": classification.get("related_categories") or [],
             "text": classification["text"], "applies_when": classification.get("applies_when") or [], "exceptions": classification.get("exceptions") or [],
-            "effect_on_action": classification.get("effect_on_action") or "在匹配范围内调整行动", "scope": {"user_id": "user", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
+            "effect_on_action": classification.get("effect_on_action") or "在匹配范围内调整行动", "scope": {"user_id": "liuzhongyang", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
             "evidence_refs": refs, "source_family_ids": sorted("document:" + value for value in families)}
 
 

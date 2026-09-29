@@ -95,7 +95,7 @@ def publish(config_path: str, witness_path: str, out_path: str) -> dict:
                     "verbatim_quote": quote, "asr_corrections": [], "uncertain_terms": [],
                     "applies_when": applies, "exceptions": exceptions,
                     "effect_on_action": "在适用范围内作为多维度偏好参考，不扩张执行授权。",
-                    "scope": {"user_id": "user", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
+                    "scope": {"user_id": "liuzhongyang", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
                     "evidence_refs": refs, "source_family_ids": ["codex-60d-family:" + str(index)]}
         review = {"support": "supported", "scope_ok": True, "conditions_preserved": True,
                   "source_role_ok": True, "hypothetical_only": False, "conflicts": [],

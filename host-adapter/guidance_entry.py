@@ -3,7 +3,7 @@
 
 This is the host adapter boundary for the guidance MCP implementation.  It
 invokes the same read-only GuidanceRepository selector used by
-``get_task_guidance`` and records that the check happened.  It does not run
+``get_preference`` and records that the check happened.  It does not run
 historical recall, research, source reads, or long-term publication.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import sys
@@ -20,12 +21,13 @@ from task_state import TaskStateStore
 from lib.memory_policy import classify_memory_policy
 from entry_navigation import build_navigation_map
 
-GUIDANCE_SRC = Path("$HOME/.evolving-profile/runtime/guidance")
-GUIDANCE_CONFIG = Path("$HOME/.evolving-profile/guidance-v1/guidance-v1.json")
+GUIDANCE_SRC = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC") or Path.home() / ".evolving-profile/runtime/guidance")
+GUIDANCE_CONFIG = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG") or Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json")
 RECEIPT_ROOT = Path.home() / ".evolving-profile/audit/guidance-entry-receipts"
 MAX_TOKENS = 5000
-MAX_CONTEXT_CHARS = 9000
-AGENT_ENTRY_MAX_CONTEXT_CHARS = 9000
+MAX_CANDIDATES = 6
+MAX_CONTEXT_CHARS = 6500
+AGENT_ENTRY_MAX_CONTEXT_CHARS = 12000
 PROMPT_INGRESS = Path.home() / ".evolving-profile" / "audit" / "prompt-ingress.jsonl"
 TASK_STATE_ROOT = Path.home() / ".evolving-profile" / "task-state"
 
@@ -52,6 +54,7 @@ def _active_context(hook_input: dict, current_prompt: str) -> str:
             stream.seek(0, 2)
             stream.seek(max(0, stream.tell() - 512_000))
             rows = stream.read().decode("utf-8", errors="ignore").splitlines()
+        recent=[]
         for raw in reversed(rows):
             try:
                 row = json.loads(raw)
@@ -60,8 +63,10 @@ def _active_context(hook_input: dict, current_prompt: str) -> str:
             if str(row.get("session_id") or "") != session_id:
                 continue
             prior = str(row.get("prompt_preview") or row.get("prompt") or "").strip()
-            if prior and prior != current_prompt and not _continuation_only(prior):
-                return f"前一项活动任务：{prior[:1200]}"
+            if prior and prior != current_prompt and not _continuation_only(prior) and prior not in recent:
+                recent.append(prior[:1200])
+                if len(recent)>=3:break
+        if recent:return "最近用户前文（仅消解本轮指代，不继承旧授权）：\n" + "\n".join(reversed(recent))
     except OSError:
         pass
     return ""
@@ -89,6 +94,13 @@ def preference_memory_policy(prompt: str, requested: str = "allowed") -> str:
     classified = classify_memory_policy(prompt)["guidance_memory_policy"]
     return "forbidden" if requested == "forbidden" or classified == "forbidden" else "allowed"
 
+def configured_candidate_limit() -> int:
+    try:
+        value = json.loads((Path.home() / ".evolving-profile/config/guidance-settings.json").read_text(encoding="utf-8"))
+        return max(1, min(20, int(value.get("max_candidates", MAX_CANDIDATES))))
+    except (OSError, ValueError, TypeError):
+        return MAX_CANDIDATES
+
 
 def build_request(hook_input: dict, prompt: str, context_ref: str, *, memory_policy: str = "allowed") -> dict:
     value = str(prompt or "").strip()
@@ -106,7 +118,10 @@ def build_request(hook_input: dict, prompt: str, context_ref: str, *, memory_pol
         and len(normalized) <= 96
         and any(marker in normalized for marker in ("再检查", "再检察", "检查下", "检察下"))
     )
-    continuation = explicit_continuation or recheck_continuation
+    referential_followup = bool(active_context and (
+        re.match(r'^(?:那|那么|所以|还有|另外|再|还是|刚才|上面|上述|这个|这次)', value)
+        or re.search(r'为什么(?:你)?(?:没|不)(?:用|查|读)|你(?:漏了|没查|没用|没读)',value)))
+    continuation = explicit_continuation or recheck_continuation or referential_followup
     if not continuation:
         active_context = ""
     phase = _phase(value)
@@ -128,6 +143,7 @@ def build_request(hook_input: dict, prompt: str, context_ref: str, *, memory_pol
         "loaded": [],
         "memory_policy": preference_memory_policy(value, memory_policy),
         "max_tokens": MAX_TOKENS,
+        "max_candidates": configured_candidate_limit(),
         "entry_adapter": True,
         # The Hook is the production entry path.  Keep command-line evaluation
         # deterministic unless it explicitly opts in, while every submitted
@@ -136,19 +152,23 @@ def build_request(hook_input: dict, prompt: str, context_ref: str, *, memory_pol
     }
 
 
-def _call_task_guidance(request: dict) -> dict:
+def _call_preference(request: dict) -> dict:
     if str(GUIDANCE_SRC) not in sys.path:
         sys.path.insert(0, str(GUIDANCE_SRC))
     script_root = str(Path(__file__).resolve().parent)
     if script_root not in sys.path:
         sys.path.insert(0, script_root)
     # Call the same implementation behind the registered
-    # mcp__evolving_profile_controller__get_task_guidance tool. The stdio server is a
+    # mcp__evolving_profile_controller__get_preference tool. The stdio server is a
     # line-oriented process and must not be imported from a Hook (it would
     # consume the Hook stdin); the entry adapter uses its underlying runtime
     # function directly and records the boundary separately.
-    from mcp_runtime import load_repository, get_task_guidance_response
-    return get_task_guidance_response(load_repository(GUIDANCE_CONFIG), request, record=False)
+    from mcp_runtime import load_repository, get_preference_response
+    return get_preference_response(load_repository(GUIDANCE_CONFIG), request, record=False)
+
+
+# Test/replay compatibility only; current entry path calls _call_preference.
+_call_task_guidance = _call_preference
 
 
 def _entry_relevant(prompt: str, item: dict) -> bool:
@@ -171,64 +191,44 @@ def _entry_relevant(prompt: str, item: dict) -> bool:
     return True
 
 
-def render_entry(result: dict, prompt: str = "") -> tuple[str, dict]:
-    stable = list(result.get("stable_profile") or [])
-    raw_included = list(result.get("included") or [])
-    included = raw_included
-    models = list(result.get("model_sections") or [])
-    deferred = list(result.get("deferred") or [])
-    rendered_stable, rendered_items, rendered_models, bodies = [], [], [], []
-    used = 0
-    included_ids={str(item.get('id') or '') for item in included}
-    stable=[item for item in stable if str(item.get('id') or '') not in included_ids]
-    for kind, items, rendered in (("稳定协作骨架", stable, rendered_stable), ("候选偏好", included, rendered_items), ("融合心智模型", models, rendered_models)):
-        for item in items:
-            identity = str(item.get('id') or item.get('section_id') or '')
-            text = str(item.get('text') or item.get('content') or '')
-            body = f"- {kind} {identity}：{text}"
-            for field, label in (('scope', '作用范围'), ('applies_when', '适用条件'), ('exceptions', '例外'), ('effect_on_action', '行动影响')):
-                if item.get(field):
-                    body += '\n  ' + label + '：' + (item[field] if isinstance(item[field], str) else json.dumps(item[field], ensure_ascii=False))
-            if not text or used + len(body) > MAX_CONTEXT_CHARS:
-                deferred.append({'id': identity, 'revision': item.get('revision'), 'reason': 'entry_body_budget', 'kind': kind})
+def render_entry(result: dict, prompt: str = "", *, max_chars=None, include_instruction=True) -> tuple[str, dict]:
+    """Pack whole records; the receipt describes exactly the emitted bodies."""
+    budget = MAX_CONTEXT_CHARS if max_chars is None else max(0, int(max_chars))
+    manual = instruction_block('user-prompt-submit') + '\n' if include_instruction else ''
+    stable, included, models, bodies = [], [], [], []
+    selected_ids = {str(row.get('id')) for row in result.get('included') or []}
+    deferred = [{k:v for k,v in row.items() if k in ('id','revision','section_id','reason')}
+                for row in result.get('deferred') or []]
+    start = f'<evolving_profile_guidance_entry version="{VERSION}" mode="forced_task_guidance_check">\n'
+    footer = '\n候选需核对条件和例外；未读内容可用 Get Preference 分页或 read_preference_unit 补读。当前要求优先，查询不扩大授权。\n</evolving_profile_guidance_entry>'
+    used = len(manual) + len(start) + len(footer) + 260
+    groups = (('候选偏好', result.get('included') or [], included),
+              ('稳定协作骨架', [x for x in result.get('stable_profile') or [] if str(x.get('id')) not in selected_ids], stable),
+              ('融合心智模型', result.get('model_sections') or [], models))
+    for kind, rows, emitted in groups:
+        for row in rows:
+            identity = str(row.get('id') or row.get('section_id') or '')
+            text = str(row.get('text') or row.get('content') or '')
+            body = f'- {kind} {identity}：{text}'
+            for field, label in (('scope','作用范围'),('applies_when','适用条件'),('exceptions','例外'),('effect_on_action','行动影响')):
+                if row.get(field):
+                    body += '\n  ' + label + '：' + json.dumps(row[field], ensure_ascii=False)
+            # Escape structural markup from stored content; never cut a record.
+            body = body.replace('<', '&lt;')
+            if not text or used + len(body) + 1 > budget:
+                deferred.append({'id':identity,'revision':row.get('revision'),'reason':'entry_body_budget'})
                 continue
-            bodies.append(body)
-            rendered.append(item)
-            used += len(body)
-    coverage = str(result.get("coverage") or "unknown")
-    if len(deferred) > len(result.get('deferred') or []):
-        coverage = 'partial_entry_body_with_deferred'
-    deferred_previews = []
-    for item in deferred:
-        text = str(item.get('text') or '')
-        if not text:
-            continue
-        preview = f"- 可展开偏好摘要 {item.get('id')}: {text}"
-        if item.get('applies_when'):
-            preview += "\n  适用条件摘要：" + (item['applies_when'] if isinstance(item['applies_when'], str) else json.dumps(item['applies_when'], ensure_ascii=False))
-        if len(preview) <= MAX_CONTEXT_CHARS:
-            deferred_previews.append(preview)
-    lines = [
-        f"<evolving_profile_guidance_entry version=\"{VERSION}\" mode=\"forced_task_guidance_check\">",
-        "入口适配层已执行一次 Get Preference 检查；结果只是多维度偏好参考。当前用户 Prompt 优先；当前权威来源、工具结果和权限优先。",
-        f"coverage={coverage}；{len(rendered_stable)} 条稳定协作骨架；{len(rendered_items)} 条候选偏好已注入；{len(rendered_models)} 个模型章节正文；{len(deferred)} 条可展开完整条件。",
-    ]
-    if deferred_previews:
-        lines.append("候选摘要与适用条件（完整正文仍可按 ID 展开）：")
-        lines.extend(deferred_previews)
-    if bodies:
-        lines.append("协作骨架与候选（候选仍需当前Agent逐条核对条件和例外）：")
-        lines.extend(bodies)
-    else:
-        lines.append("本轮未读取多维度偏好正文；需要时再按任务缺口读取。")
-    if deferred:
-        lines.append("候选摘要已进入上下文；需要完整正文、例外或来源核对时可按 ID 展开。")
-        lines.append('可展开 ID：' + '、'.join(str(item.get('id') or item.get('section_id') or '') for item in deferred[:8]))
-        if len(deferred) > 8:
-            lines.append('其余待补读项通过 Get Preference 分页获取。')
-    lines.append("查询不生成长期模型，也不扩大用户授权。</evolving_profile_guidance_entry>")
-    value = instruction_block('user-prompt-submit') + '\n' + "\n".join(lines)
-    return value, {'stable_profile':rendered_stable,'included': rendered_items, 'preference_candidates':rendered_items, 'model_sections': rendered_models, 'deferred': deferred, 'coverage': coverage}
+            bodies.append(body); emitted.append(row); used += len(body) + 1
+    coverage = 'partial_entry_body_with_deferred' if deferred else str(result.get('coverage') or 'unknown')
+    summary = f'coverage={coverage}；{len(stable)} 条稳定协作骨架；{len(included)} 条候选偏好已写入本轮上下文；{len(models)} 个模型章节；{len(deferred)} 条未读。\n'
+    value = manual + start + summary + '\n'.join(bodies) + footer
+    if len(value) > budget:
+        value = ''
+        stable, included, models = [], [], []
+        coverage = 'entry_budget_unavailable'
+    return value, {'stable_profile':stable,'included':included,'preference_candidates':included,
+        'model_sections':models,'deferred':deferred,'coverage':coverage,
+        'budget':dict(result.get('budget') or {}),'next_cursor':result.get('next_cursor')}
 
 
 def format_context(result: dict, prompt: str = "") -> str:
@@ -261,6 +261,19 @@ def _task_state_context(task_state: dict, session_id: str, budget: int) -> str:
             return rendered
     return render({key:block[key] for key in ('version','projection_truncated','full_state_file')})
 
+def _fit_entry_base(context: str, budget: int) -> str:
+    """Shorten only L0 navigation lines while preserving complete XML blocks."""
+    if len(context) <= budget:
+        return context
+    match = re.search(r'(<evolving_profile_navigation_map[^>]*>)([\s\S]*?)(</evolving_profile_navigation_map>)', context)
+    if not match:
+        return context[:budget]
+    before, after = context[:match.start()], context[match.end():]
+    allowance = max(200, budget - len(before) - len(after) - len(match.group(1)) - len(match.group(3)) - 60)
+    body = match.group(2)
+    compact = body[:allowance].rsplit('\n', 1)[0] + '\nL0 其余目录已按预算截断；仍可使用 catalog/recall/research 下钻。\n'
+    return before + match.group(1) + compact + match.group(3) + after
+
 
 def prepare_agent_owned_entry(hook_input: dict, prompt: str, *, memory_policy: str = "allowed") -> dict:
     """Supply L0 navigation plus a bounded Get Preference candidate packet."""
@@ -284,22 +297,23 @@ def prepare_agent_owned_entry(hook_input: dict, prompt: str, *, memory_policy: s
         '据证据缺口调用catalog/recall/research/read_source；不得仅因当前上下文看似足够而跳过地图检查。'
         '</evolving_profile_guidance_entry>'
     )
+    context = _fit_entry_base(context, AGENT_ENTRY_MAX_CONTEXT_CHARS - MAX_CONTEXT_CHARS - 400)
     guidance_result=None;guidance_rendered={'stable_profile':[],'included':[],'preference_candidates':[],'model_sections':[],'deferred':[],'coverage':'not_requested'}
     if request.get('memory_policy') != 'forbidden' and not simple_self_contained(prompt):
         try:
             candidate_request=dict(request,max_tokens=5000)
-            guidance_result=_call_task_guidance(candidate_request)
-            guidance_context,guidance_rendered=render_entry(guidance_result,prompt)
-            remaining=max(0,AGENT_ENTRY_MAX_CONTEXT_CHARS-len(context)-320)
+            guidance_result=_call_preference(candidate_request)
+            remaining=max(0,AGENT_ENTRY_MAX_CONTEXT_CHARS-len(context)-400)
+            guidance_context,guidance_rendered=render_entry(guidance_result,prompt,max_chars=remaining,include_instruction=False)
             if remaining:
-                context += '\n' + guidance_context[:remaining]
+                context += '\n' + guidance_context
         except Exception:
             guidance_result={'coverage':'unavailable','included':[],'deferred':[]}
             guidance_rendered['coverage']='unavailable'
     if task_state:
         context+=_task_state_context(task_state,session_id,AGENT_ENTRY_MAX_CONTEXT_CHARS-len(context))
     receipt={
-        'schema':'hindsight.guidance-entry-check.v1','kind':'guidance_entry_check','tool_name':'get_preference','legacy_tool_name':'get_task_guidance',
+        'schema':'hindsight.guidance-entry-check.v1','kind':'preference_entry_check','tool_name':'get_preference',
         'invocation_mode':'navigation_plus_get_preference_candidate_packet','delivery_stage':'navigation_and_guidance_candidates_prepared',
         'host_visibility':'hook_context_pending','at':datetime.now(timezone.utc).isoformat(),
         'session_id':hook_input.get('session_id'),'turn_id':hook_input.get('turn_id'),'hook_invocation_id':invocation,
@@ -339,7 +353,7 @@ def run_entry_check(hook_input: dict, prompt: str, *, memory_policy: str = "allo
             task_state = None
     started = datetime.now(timezone.utc).isoformat()
     try:
-        result = _call_task_guidance(request)
+        result = _call_preference(request)
         error = None
     except Exception as exc:  # Entry check must never block the user turn.
         result = {"coverage": "unavailable", "included": [], "model_sections": [], "deferred": [], "errors": [type(exc).__name__]}
@@ -359,7 +373,6 @@ def run_entry_check(hook_input: dict, prompt: str, *, memory_policy: str = "allo
         "schema": "hindsight.guidance-entry-check.v1",
         "kind": "guidance_entry_check",
         "tool_name": "get_preference",
-        "legacy_tool_name": "get_task_guidance",
         "invocation_mode": "codex_UserPromptSubmit_entry_adapter",
         "delivery_stage": "entry_selected_then_hook_context_prepared",
         "host_visibility": "hook_context_pending",

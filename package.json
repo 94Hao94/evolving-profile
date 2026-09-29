@@ -1,0 +1,11 @@
+{
+  "name": "evolving-profile",
+  "private": true,
+  "workspaces": ["evolving-client", "console"],
+  "scripts": {
+    "dev": "npm run dev -w @evolving-profile/console",
+    "preview": "npm run preview -w @evolving-profile/console",
+    "build": "npm run build -w @evolving-profile/console",
+    "test": "npm run test -w @evolving-profile/console"
+  }
+}

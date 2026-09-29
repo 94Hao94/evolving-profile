@@ -47,7 +47,7 @@ def preference_candidate(unit: dict) -> dict:
         "status": "candidate_requires_agent_judgment",
         "may_override_current_prompt": False,
         "source_locator": {
-            "tool": "read_guidance_unit",
+            "tool": "read_preference_unit",
             "id": unit.get("id"),
             "revision": unit.get("revision"),
         },

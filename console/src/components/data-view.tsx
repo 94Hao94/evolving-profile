@@ -113,7 +113,7 @@ export function DataView({
   const itemsPerPage = 100;
 
   // Fetch limit state - how many memories to load from the API
-  const [fetchLimit, setFetchLimit] = useState(1000);
+  const [fetchLimit, setFetchLimit] = useState(200);
 
   // Which timestamp drives the constellation recency color
   type RecencyBasis = "mentioned_at" | "occurred_start" | "occurred_end";
@@ -654,7 +654,7 @@ export function DataView({
                       })}
                       <button
                         onClick={() => {
-                          const newLimit = Math.min(data.total_units, fetchLimit + 1000);
+                          const newLimit = Math.min(data.total_units, fetchLimit + 200);
                           setFetchLimit(newLimit);
                           loadData(
                             newLimit,
