@@ -1,7 +1,7 @@
 # Evolving Profile 5.0.0
 
 发布日期：2026-10-02
-状态：本地发布包已准备，PR 待创建
+状态：PR #3 已提交，等待上游审核；尚未合并、打 Tag 或创建 GitHub Release
 
 ## 解决的问题
 
@@ -45,7 +45,7 @@ EP 4.0 能够记录和检索用户记忆，但 Agent 在执行任务时产生的
 
 - 仓库：`https://github.com/94Hao94/evolving-profile-2.2`
 - 分支：`release/5.0.0`
-- PR：待创建
+- PR：[94Hao94/evolving-profile#3](https://github.com/94Hao94/evolving-profile/pull/3)
 - Tag：未创建
 - Release：未发布
 

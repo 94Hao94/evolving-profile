@@ -179,7 +179,7 @@ The release gate also runs the relevant Python Host Adapter, Controller, Guidanc
 
 ## Contribution and release status
 
-This package is prepared on the `release/5.0.0` contribution branch for [`94Hao94/evolving-profile-2.2`](https://github.com/94Hao94/evolving-profile-2.2). PR, merge, tag, and GitHub Release states are intentionally recorded separately in [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md). The distribution author remains CCY; Hindsight and related research are acknowledged in [`NOTICE.md`](NOTICE.md) without implying that upstream projects are EP code contributors.
+This package is prepared on the `release/5.0.0` contribution branch for the upstream [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile), with the sanitized branch hosted in [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2). PR, merge, tag, and GitHub Release states are intentionally recorded separately in [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md). The distribution author remains CCY; Hindsight and related research are acknowledged in [`NOTICE.md`](NOTICE.md) without implying that upstream projects are EP code contributors.
 
 ---
 
@@ -255,4 +255,4 @@ cd .. && npm run dev
 
 EP 能确认工具调用、候选返回、送达和原文回读，但在宿主没有答案采用回执时，不能声称知道 Agent 最终在回答中采用了哪条记忆。情景摘要、过程模式和 RAG 结果都不能替代原始证据。
 
-本次版本在 `release/5.0.0` 分支准备，GitHub PR、合并、Tag 和 Release 状态分别记录在 [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md)。作者署名、Hindsight 致谢和许可边界见 [`NOTICE.md`](NOTICE.md)。
+本次版本在 `release/5.0.0` 分支准备，已向上游 [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile) 提交 PR；发行分支位于 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)。GitHub PR、合并、Tag 和 Release 状态分别记录在 [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md)。作者署名、Hindsight 致谢和许可边界见 [`NOTICE.md`](NOTICE.md)。
