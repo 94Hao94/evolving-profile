@@ -3,8 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { homedir } from "node:os";
 
-const STATE_ROOT = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(process.env.HOME ?? homedir(), ".evolving-profile");
-const ENV_PATH = path.join(STATE_ROOT, "profiles/evolving-profile-api.env");
+const ENV_PATH = path.join(process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(homedir(), ".evolving-profile"), "profiles/evolving-profile-api.env");
 
 function friendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? "");

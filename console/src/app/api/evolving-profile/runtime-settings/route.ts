@@ -9,7 +9,8 @@ const stateRoot = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(process.e
 const settingsPath = path.join(stateRoot, "config/runtime-settings.json");
 const envPath = path.join(stateRoot, "profiles/evolving-profile-api.env");
 const actions = { record: true, retrieve: true, inject: true };
-const moduleNames = ["facts", "experiences", "entities", "preferences", "scenario_summary", "mental_models", "source_readback", "background_reflection"] as const;
+const agentProcessModuleNames = ["agent_process_trajectory", "agent_process_observation", "agent_process_failure_episode", "agent_process_repair_pattern", "agent_process_capability", "agent_process_strategy", "agent_process_revalidation"] as const;
+const moduleNames = ["facts", "experiences", "entities", "preferences", "scenario_summary", "mental_models", "source_readback", "background_reflection", "agent_process_memory", ...agentProcessModuleNames] as const;
 const defaults = {
   schema: "evolving-profile.runtime-settings.v1",
   modules: Object.fromEntries(moduleNames.map((name) => [name, { ...actions }])) as Record<string, typeof actions>,
@@ -87,6 +88,7 @@ async function validate(value: any) {
   if (!['auto', 'ep', 'external_rag', 'both_isolated'].includes(value.routing?.mode)) throw new Error("invalid_routing_mode");
   if (typeof value.routing?.ep_enabled !== "boolean" || typeof value.routing?.external_rag_enabled !== "boolean") throw new Error("invalid_routing_switch");
   for (const name of moduleNames) for (const action of Object.keys(actions)) if (typeof value.modules?.[name]?.[action] !== "boolean") throw new Error(`invalid_module_${name}_${action}`);
+  for (const name of agentProcessModuleNames) if (value.modules[name].inject && !value.modules[name].retrieve) throw new Error(`agent_module_inject_requires_retrieve:${name}`);
   if (!Number.isInteger(value.budgets?.ep_total_tokens) || value.budgets.ep_total_tokens < 500 || value.budgets.ep_total_tokens > 20000) throw new Error("invalid_ep_budget");
   if (!Number.isInteger(value.budgets?.rag_total_tokens) || value.budgets.rag_total_tokens < 0 || value.budgets.rag_total_tokens > 20000) throw new Error("invalid_rag_budget");
   if (!Number.isInteger(value.budgets?.total_tokens) || value.budgets.total_tokens < 500 || value.budgets.total_tokens > 30000) throw new Error("invalid_total_budget");

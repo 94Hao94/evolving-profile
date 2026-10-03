@@ -10,6 +10,7 @@ import { DataView } from "@/components/data-view";
 import { normalizeDataSubTab, type DataSubTab } from "@/lib/data-subtab";
 import { DocumentsView } from "@/components/documents-view";
 import { EntitiesView } from "@/components/entities-view";
+import { AgentMemoryView } from "@/components/agent-memory-view";
 import { SearchDebugView } from "@/components/search-debug-view";
 import { BankProfileView } from "@/components/bank-profile-view";
 import { RuntimeSectionsView } from "@/components/runtime-sections-view";
@@ -60,7 +61,8 @@ import {
 import { LlmHealthDialog } from "@/components/llm-health-dialog";
 import { ExtractDialog } from "@/components/extract-dialog";
 
-type NavItem = "recall" | "data" | "documents" | "entities" | "flow" | "profile";
+import { inlineUiText, setInlineLocale } from "@/lib/inline-i18n";
+type NavItem = "recall" | "data" | "documents" | "agent-memory" | "flow" | "profile";
 type BankConfigTab =
   | "general"
   | "data"
@@ -81,6 +83,7 @@ export default function BankPage() {
   const searchParams = useSearchParams();
   const t = useTranslations("bank");
   const locale = useLocale();
+  setInlineLocale(locale);
   const tCommon = useTranslations("common");
   const { features } = useFeatures();
   const { currentBank: bankId, setCurrentBank, loadBanks } = useBank();
@@ -351,7 +354,7 @@ export default function BankPage() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        数据与路由防护
+                        {locale.startsWith("zh") ? inlineUiText("数据与路由防护") : "Data and routing protection"}
                         {bankConfigTab === "memory-defense" && (
                           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                         )}
@@ -366,18 +369,18 @@ export default function BankPage() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        运行配置
+                        {locale.startsWith("zh") ? inlineUiText("运行配置") : "Runtime configuration"}
                         {bankConfigTab === "configuration" && (
                           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                         )}
                       </button>
                     )}
-                    <button onClick={() => handleBankConfigTabChange("memory")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "memory" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>EP 记忆</button>
-                    <button onClick={() => handleBankConfigTabChange("models")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "models" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>检索与判断模型</button>
-                    <button onClick={() => handleBankConfigTabChange("rag")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "rag" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>外部 RAG</button>
-                    <button onClick={() => handleBankConfigTabChange("providers")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "providers" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>Provider 与 Fallback</button>
-                    <button onClick={() => handleBankConfigTabChange("scenario")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "scenario" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>情景摘要</button>
-                    <button onClick={() => handleBankConfigTabChange("backup")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "backup" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>备份</button>
+                    <button onClick={() => handleBankConfigTabChange("memory")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "memory" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("EP 记忆") : "EP Memory"}</button>
+                    <button onClick={() => handleBankConfigTabChange("models")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "models" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("检索与判断模型") : "Retrieval and judge models"}</button>
+                    <button onClick={() => handleBankConfigTabChange("rag")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "rag" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("外部 RAG") : "External RAG"}</button>
+                    <button onClick={() => handleBankConfigTabChange("providers")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "providers" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("Provider 与 Fallback") : "Providers and fallback"}</button>
+                    <button onClick={() => handleBankConfigTabChange("scenario")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "scenario" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("情景摘要") : "Scenario summaries"}</button>
+                    <button onClick={() => handleBankConfigTabChange("backup")} className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "backup" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{locale.startsWith("zh") ? inlineUiText("备份") : "Backup"}</button>
                     <button
                       onClick={() => handleBankConfigTabChange("audit-logs")}
                       className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold transition-colors sm:px-6 ${
@@ -386,10 +389,10 @@ export default function BankPage() {
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {t("auditLogs")}
+                      {locale.startsWith("zh") ? inlineUiText("审计日志") : t("auditLogs")}
                       {!auditLogEnabled && (
                         <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          Off
+                          {locale.startsWith("zh") ? inlineUiText("关闭") : "Off"}
                         </span>
                       )}
                       {bankConfigTab === "audit-logs" && (
@@ -404,10 +407,10 @@ export default function BankPage() {
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {t("llmRequests")}
+                      {locale.startsWith("zh") ? inlineUiText("模型请求") : t("llmRequests")}
                       {!llmTraceEnabled && (
                         <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          Off
+                          {locale.startsWith("zh") ? inlineUiText("关闭") : "Off"}
                         </span>
                       )}
                       {bankConfigTab === "llm-requests" && (
@@ -449,7 +452,7 @@ export default function BankPage() {
                     (auditLogEnabled ? (
                       <div>
                         <p className="text-sm text-muted-foreground mb-4">
-                          {locale.startsWith("zh") ? "原始操作记录，包含当前 Evolving Profile 与迁移前底层操作；当前宿主链路以“运行配置”和“链路”页为准。" : "Raw operation records include current Evolving Profile activity and pre-migration records. Use Runtime Configuration and Flow for the active host path."}
+                          {locale.startsWith("zh") ? inlineUiText("原始操作记录，包含当前 Evolving Profile 与迁移前底层操作；当前宿主链路以“运行配置”和“链路”页为准。") : "Raw operation records include current Evolving Profile activity and pre-migration records. Use Runtime Configuration and Flow for the active host path."}
                         </p>
                         <AuditLogsView />
                       </div>
@@ -469,7 +472,7 @@ export default function BankPage() {
                     (llmTraceEnabled ? (
                       <div>
                         <p className="text-sm text-muted-foreground mb-4">
-                          原始模型调用记录，包含迁移前后台任务；前台查询不会因浏览该页额外调用模型。
+                          {inlineUiText("原始模型调用记录，包含迁移前后台任务；前台查询不会因浏览该页额外调用模型。")}
                         </p>
                         <LLMRequestsView />
                       </div>
@@ -553,7 +556,7 @@ export default function BankPage() {
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {locale.startsWith("zh") ? "多维度偏好" : "Multi-dimensional Preferences"}
+                      {locale.startsWith("zh") ? inlineUiText("多维度偏好") : "Multi-dimensional Preferences"}
                       {subTab === "preferences" && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                       )}
@@ -564,7 +567,7 @@ export default function BankPage() {
                         subTab === "context" ? "text-primary" : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {locale.startsWith("zh") ? "情景摘要" : "Scenario Summary"}
+                      {locale.startsWith("zh") ? inlineUiText("情景摘要") : "Scenario Summary"}
                       {subTab === "context" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
                     </button>
                   </div>
@@ -602,12 +605,10 @@ export default function BankPage() {
               </div>
             )}
 
-            {/* Entities Tab */}
-            {view === "entities" && (
+            {/* Agent Memory Tab */}
+            {view === "agent-memory" && (
               <div>
-                <h1 className="text-3xl font-bold mb-2 text-foreground">{t("entities")}</h1>
-                <p className="text-muted-foreground mb-6">{t("entitiesDescription")}</p>
-                <EntitiesView />
+                <AgentMemoryView />
               </div>
             )}
 

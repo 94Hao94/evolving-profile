@@ -147,7 +147,8 @@
       "memoryBank": "Banco de memória",
       "expandSidebar": "Expandir barra lateral",
       "collapseSidebar": "Recolher barra lateral",
-      "collapse": "Recolher"
+      "collapse": "Recolher",
+      "agentMemory": "智能体记忆"
     },
     "overviewAndOperations": "Estatísticas gerais e operações em segundo plano para este banco de memória.",
     "operations": "Operações",
@@ -165,7 +166,9 @@
     "llmRequestsDisabledMessage": "O rastreamento de requisições LLM está desabilitado neste servidor. Defina <envVar></envVar> para habilitar.",
     "deleteWillDeleteDetails": "Isso excluirá {memories, plural, one {# memória} other {# memórias}}, {documents, plural, one {# documento} other {# documentos}} e {links, plural, one {# link} other {# links}}.",
     "deleteWillDeleteObservations": "Isso excluirá {count, plural, one {# observação} other {# observações}}.",
-    "memoryDefense": "Defesa da memória"
+    "memoryDefense": "Defesa da memória",
+    "agentMemory": "智能体记忆",
+    "agentMemoryDescription": "查看智能体执行过程记忆"
   },
   "bankProfile": {
     "noBankSelected": "Nenhum Banco Selecionado",
@@ -631,6 +634,15 @@
     "previousPage": "Anterior",
     "nextPage": "Próximo",
     "detailTitle": "Detalhes do Documento",
+    "tabGeneral": "Geral",
+    "tabMemories": "Memórias",
+    "tabChunks": "Fragmentos",
+    "documentSection": "Documento",
+    "world": "Fatos",
+    "experience": "Experiências",
+    "observations": "Observações",
+    "labelContext": "Contexto",
+    "metadata": "Metadados",
     "detailSubtitle": "Texto original do documento e metadados",
     "closeButton": "Fechar",
     "loadingDocument": "Carregando documento...",
@@ -729,7 +741,8 @@
     "errorLoadingEntityDetail": "Erro ao carregar detalhe da entidade",
     "errorLoadingEntityGraph": "Erro ao carregar grafo de entidades",
     "na": "N/A",
-    "entityCount": "{count, plural, one {# entidade} other {# entidades}}"
+    "entityCount": "{count, plural, one {# entidade} other {# entidades}}",
+    "lastSeenLabel": "最近出现"
   },
   "mentalModels": {
     "selectBankPrompt": "Selecione um banco de memória para visualizar os modelos mentais.",

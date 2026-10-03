@@ -147,7 +147,8 @@
       "memoryBank": "メモリバンク",
       "expandSidebar": "サイドバーを展開",
       "collapseSidebar": "サイドバーを折りたたむ",
-      "collapse": "折りたたむ"
+      "collapse": "折りたたむ",
+      "agentMemory": "智能体记忆"
     },
     "overviewAndOperations": "このメモリバンクの概要統計とバックグラウンド操作。",
     "operations": "操作",
@@ -165,7 +166,9 @@
     "llmRequestsDisabledMessage": "このサーバーではLLMリクエストのトレースが無効になっています。有効にするには <envVar></envVar> を設定してください。",
     "deleteWillDeleteDetails": "{memories, plural, other {# 件のメモリ}}、{documents, plural, other {# 件のドキュメント}}、および {links, plural, other {# 件のリンク}} が削除されます。",
     "deleteWillDeleteObservations": "{count, plural, other {# 件の観測}} が削除されます。",
-    "memoryDefense": "メモリ防御"
+    "memoryDefense": "メモリ防御",
+    "agentMemory": "智能体记忆",
+    "agentMemoryDescription": "查看智能体执行过程记忆"
   },
   "bankProfile": {
     "noBankSelected": "バンクが選択されていません",
@@ -631,6 +634,15 @@
     "previousPage": "前へ",
     "nextPage": "次へ",
     "detailTitle": "ドキュメントの詳細",
+    "tabGeneral": "概要",
+    "tabMemories": "メモリ",
+    "tabChunks": "チャンク",
+    "documentSection": "ドキュメント",
+    "world": "事実",
+    "experience": "経験",
+    "observations": "観察",
+    "labelContext": "コンテキスト",
+    "metadata": "メタデータ",
     "detailSubtitle": "元のドキュメントテキストとメタデータ",
     "closeButton": "閉じる",
     "loadingDocument": "ドキュメントを読み込み中...",
@@ -729,7 +741,8 @@
     "errorLoadingEntityDetail": "エンティティ詳細の読み込みエラー",
     "errorLoadingEntityGraph": "エンティティグラフの読み込みエラー",
     "na": "N/A",
-    "entityCount": "{count, plural, one {#件のエンティティ} other {#件のエンティティ}}"
+    "entityCount": "{count, plural, one {#件のエンティティ} other {#件のエンティティ}}",
+    "lastSeenLabel": "最近出现"
   },
   "mentalModels": {
     "selectBankPrompt": "メンタルモデルを表示するにはメモリバンクを選択してください。",

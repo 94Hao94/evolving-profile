@@ -2793,7 +2793,7 @@ def evolution_evidence_alignment(query: str, text: str) -> dict[str, Any]:
     # only when it itself records a completed/active change.
     narrative_prefixes = (
         "助手解释", "助理解释", "助手建议", "助理建议", "助手澄清", "助理澄清",
-        "用户询问", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
+        "User询问", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
         "用户认为", "用户担忧", "用户偏好", "用户决定", "用户设定", "回答用户",
         "对用户当前场景的判断", "当前问题",
     )

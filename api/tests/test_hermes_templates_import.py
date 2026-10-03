@@ -1,7 +1,7 @@
-"""End-to-end import of the shipped Hermes-tagged bank templates.
+"""End-to-end import of the EP-owned Hermes integration fixtures.
 
 Proves every `hermes`-tagged manifest in the Templates Hub catalog actually
-imports: creating the bank, applying config, and creating its mental models
+ imports: creating the bank, applying config, and creating its mental models
 and directives — plus idempotent re-apply and additive layering.
 """
 
@@ -15,7 +15,7 @@ import pytest_asyncio
 
 from evolving_profile_api.api import create_app
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "hindsight-docs" / "src" / "data"
+_DATA_DIR = Path(__file__).resolve().parent / "fixtures" / "ep_templates"
 
 
 def _hermes_manifests():

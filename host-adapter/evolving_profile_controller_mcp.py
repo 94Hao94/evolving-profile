@@ -33,24 +33,205 @@ from lib.scenario_gate import decide_scenario_summary
 from lib.context_associations import project_key
 from lib.scope_hypotheses import search_contexts, build_hypotheses
 from lib.external_rag import search_external_rag
+from lib.process_memory import ProcessMemoryStore, compute_intervention
+from lib.process_memory_evaluation import evaluate_ab, transfer_gate, build_revalidation_queue
 from runtime_settings import load_runtime_settings, module_enabled, route_policy
 
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
 BANK = "personal-memory"
-VERSION = "4.0.0-dev-scenario-quality"
+VERSION = "5.0.0-dev-scenario-quality"
 ADAPTER_BUILD_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 CURRENT_TOOL_CALL = None
+
+PROCESS_DIMENSION_BY_KIND = {
+    'trace': 'agent_process_trajectory',
+    'process_observation': 'agent_process_observation',
+    'episode': 'agent_process_failure_episode',
+    'pattern': 'agent_process_repair_pattern',
+    'skill': 'agent_process_strategy',
+    'capability_observation': 'agent_process_capability',
+    'rollout': 'agent_process_revalidation',
+}
+
+def process_module_for_kind(kind):
+    return PROCESS_DIMENSION_BY_KIND.get(str(kind or ''), 'agent_process_memory')
+
+def process_runtime_disabled(action, kind=None):
+    gate = runtime_disabled('agent_process_memory', action)
+    if gate:
+        return gate
+    dimension = process_module_for_kind(kind)
+    return runtime_disabled(dimension, action) if dimension != 'agent_process_memory' else None
 
 def runtime_disabled(module: str, action: str = 'retrieve'):
     settings = load_runtime_settings()
     if module_enabled(settings, module, action) and route_policy(settings, 'ep')['sources']:
         return None
     return {'content':[{'type':'text','text':json.dumps({'schema':'evolving-profile.runtime-gate.v1','status':'disabled_by_runtime_settings','disabled_module':module,'disabled_action':action,'source':'ep','ep_accessed':False},ensure_ascii=False)}],'isError':False}
+
+
+def _process_store() -> ProcessMemoryStore:
+    return ProcessMemoryStore(PROCESS_MEMORY_PATH)
+
+
+def _process_reply(value: dict) -> dict:
+    return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
+
+
+def record_agent_trajectory(args: dict) -> dict:
+    gate = process_runtime_disabled('record', 'trace')
+    if gate:
+        return gate
+    record = dict(args)
+    record.pop('check_id', None)
+    value = _process_store().record_trajectory(record)
+    return _process_reply({'schema': 'evolving-profile.agent-process-receipt.v1', 'status': 'recorded', 'record': value, 'injection': 'disabled_by_default'})
+
+
+def record_agent_process_draft(args: dict) -> dict:
+    gate = process_runtime_disabled('record', 'process_observation')
+    if gate:
+        return gate
+    value = _process_store().record_process_draft(dict(args))
+    return _process_reply({'schema': 'evolving-profile.agent-process-draft-receipt.v1', 'status': 'candidate_recorded', 'record': value, 'default_retrieval': 'excluded_until_verified'})
+
+
+def promote_agent_process_memory(args: dict) -> dict:
+    gate = process_runtime_disabled('record', args.get('target_kind'))
+    if gate:
+        return gate
+    store = _process_store()
+    target = str(args.get('target_kind') or '')
+    ids = [str(item) for item in args.get('source_ids') or []]
+    payload = dict(args.get('payload') or {})
+    if target == 'episode':
+        if len(ids) != 1:
+            raise ValueError('episode_requires_one_trace')
+        record = store.promote_episode(ids[0], payload)
+    elif target == 'pattern':
+        record = store.promote_pattern(ids, payload)
+    elif target == 'skill':
+        record = store.promote_skill(ids, payload)
+    else:
+        raise ValueError('process_memory_target_invalid')
+    return _process_reply({'schema': 'evolving-profile.agent-process-receipt.v1', 'status': 'promoted', 'record': record, 'injection': 'disabled_by_default'})
+
+
+def search_agent_process_memory(args: dict) -> dict:
+    gate = process_runtime_disabled('retrieve', args.get('kind'))
+    if gate:
+        return gate
+    compatibility = {key: args[key] for key in ('model_family', 'model_version', 'capability_fingerprint', 'toolchain') if args.get(key)}
+    store = _process_store()
+    rows = store.search(str(args.get('query') or ''), compatibility=compatibility, task_archetype=args.get('task_archetype'), primary_context=args.get('primary_context'), include_unverified=bool(args.get('include_unverified', False)), limit=int(args.get('limit') or 8))
+    profile = store.capability_profile(str(args.get('model_family') or 'unknown'), str(args.get('task_archetype') or 'other'), str(args.get('phase') or 'observe'), args.get('model_version'))
+    intervention = compute_intervention(profile, {'complexity': args.get('complexity', 'normal')})
+    return _process_reply({'schema': 'evolving-profile.agent-process-search.v1', 'status': 'observed', 'returned_count': len(rows), 'records': rows, 'capability_profile': profile, 'intervention': intervention, 'source': 'agent_process_memory', 'automatic_injection': False})
+
+
+def prepare_agent_process_context(args: dict) -> dict:
+    """Prepare an explicit, bounded hint packet; the host still decides whether to use it."""
+    gate = process_runtime_disabled('inject', args.get('kind'))
+    if gate:
+        return gate
+    compatibility = {key: args[key] for key in ('model_family', 'model_version', 'capability_fingerprint', 'toolchain') if args.get(key)}
+    store = _process_store()
+    rows = store.search(str(args.get('query') or ''), compatibility=compatibility, task_archetype=args.get('task_archetype'), primary_context=args.get('primary_context'), limit=int(args.get('limit') or 3))
+    profile = store.capability_profile(str(args.get('model_family') or 'unknown'), str(args.get('task_archetype') or 'other'), str(args.get('phase') or 'observe'), args.get('model_version'))
+    intervention = compute_intervention(profile, {'complexity': args.get('complexity', 'normal')})
+    hints = [{
+        'id': row.get('process_memory_id'), 'kind': row.get('kind'), 'text': row.get('text', ''),
+        'applicable_when': row.get('preconditions', []), 'avoid_when': row.get('counterevidence', []),
+        'suggested_checks': row.get('verification_evidence', []), 'evidence_links': row.get('source_trace_ids', []),
+        'confidence': row.get('maturity'), 'intervention_level': row.get('intervention_level', intervention['intervention_level']),
+    } for row in rows]
+    return _process_reply({'schema': 'evolving-profile.agent-process-context.v1', 'status': 'prepared' if hints else 'no_candidate', 'returned_count': len(hints), 'hints': hints, 'capability_profile': profile, 'intervention': intervention, 'automatic_injection': False, 'source': 'agent_process_memory'})
+
+
+def revalidate_agent_process_memory(args: dict) -> dict:
+    gate = process_runtime_disabled('record', 'rollout')
+    if gate:
+        return gate
+    record = _process_store().set_drift_status(str(args.get('process_memory_id') or ''), str(args.get('drift_status') or ''), args.get('verification_evidence'))
+    return _process_reply({'schema': 'evolving-profile.agent-process-revalidation.v1', 'status': 'updated', 'record': record, 'source': 'agent_process_memory'})
+
+
+def evaluate_agent_process_memory(args: dict) -> dict:
+    gate = process_runtime_disabled('retrieve', 'capability_observation')
+    if gate:
+        return gate
+    result = evaluate_ab(list(args.get('baseline') or []), list(args.get('memory') or []))
+    transfer = transfer_gate(result)
+    return _process_reply({'schema': 'evolving-profile.agent-process-evaluation.v1', 'status': 'observed', 'evaluation': result, 'transfer': transfer, 'source': 'agent_process_memory', 'writes': False})
+
+
+def manage_agent_process_rollout(args: dict) -> dict:
+    gate = process_runtime_disabled('record', 'rollout')
+    if gate:
+        return gate
+    record = _process_store().set_rollout(str(args.get('process_memory_id') or ''), str(args.get('action') or ''), experiment_id=args.get('experiment_id'), reason=str(args.get('reason') or ''), baseline=args.get('baseline'), memory=args.get('memory'))
+    return _process_reply({'schema': 'evolving-profile.agent-process-rollout.v1', 'status': 'updated', 'record': record})
+
+
+def read_agent_process_memory(args: dict) -> dict:
+    gate = process_runtime_disabled('retrieve', args.get('kind'))
+    if gate:
+        return gate
+    wanted = str(args.get('process_memory_id') or '')
+    record = next((item for item in _process_store().all() if item.get('process_memory_id') == wanted), None)
+    return _process_reply({'schema': 'evolving-profile.agent-process-read.v1', 'status': 'observed' if record else 'not_found', 'record': record, 'source': 'agent_process_memory', 'automatic_injection': False})
+
+
+def record_agent_capability_observation(args: dict) -> dict:
+    gate = process_runtime_disabled('record', 'capability_observation')
+    if gate:
+        return gate
+    record = _process_store().record_capability_observation(dict(args))
+    return _process_reply({'schema': 'evolving-profile.agent-capability-receipt.v1', 'status': 'recorded', 'record': record, 'source': 'agent_process_memory'})
+
+
+def capture_tool_trajectory(tool_name: str, arguments: dict, *, outcome: str = 'ambiguous', error: str | None = None) -> None:
+    """Capture bounded tool metadata; never copy prompt or Bank bodies into process memory."""
+    if tool_name.startswith('record_agent_') or tool_name.startswith('promote_agent_'):
+        return
+    if process_runtime_disabled('record', 'trace'):
+        return
+    dimensions = ['tool_use']
+    if tool_name in {'recall', 'research', 'read_research', 'read_source', 'rag_search'}:
+        dimensions.append('retrieval')
+    if tool_name in {'read_source', 'read_scenario_summary'}:
+        dimensions.append('context_management')
+    text = f"tool={tool_name}; outcome={outcome}"
+    if error:
+        text += f"; error={str(error)[:240]}"
+    try:
+        store = _process_store()
+        store.record_trajectory({
+            'task_archetype': ['coordination_multi_agent'],
+            'process_dimensions': dimensions,
+            'phase': 'observe',
+            'outcome': outcome,
+            'text': text,
+            'toolchain': [tool_name],
+            'environment_fingerprint': {'host': 'evolving-profile-controller-mcp'},
+            'primary_context': {key: arguments.get(key) for key in ('project_id', 'session_id', 'task_id') if arguments.get(key)},
+            'agent': {'role': arguments.get('agent_role') or 'current-agent', 'host': arguments.get('host') or 'codex'},
+            'model_profile': {'family': arguments.get('model_family') or 'unknown', 'version': arguments.get('model_version') or 'unknown'},
+            'preconditions': [key for key in ('check_id', 'session_id', 'turn_id') if arguments.get(key)],
+            'failure_signature': [str(error)[:120]] if error else [],
+        })
+        # Evidence-driven promotion is automatic; no human confirmation is
+        # required.  Shadow/transfer gates still prevent unverified injection.
+        store.auto_promote_verified_process(limit=100)
+    except Exception:
+        # Process-memory capture cannot break an EP5.0 tool response.
+        return
 GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json"))
 TOPIC_CATALOG_PATH = Path(os.environ.get("EVOLVING_PROFILE_TOPIC_CATALOG", str(Path.home()/'.evolving-profile/catalog/topics.sqlite3')))
 EVIDENCE_DECISION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_EVIDENCE_DECISION_ROOT", str(Path.home()/'.evolving-profile/audit/evidence-decisions')))
 TASK_STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_TASK_STATE_ROOT", str(Path.home()/'.evolving-profile/task-state')))
 CONTEXT_INDEX_PATH = Path(os.environ.get("EVOLVING_PROFILE_CONTEXT_INDEX", str(Path.home()/'.evolving-profile/context/context-index.json')))
+PROCESS_MEMORY_PATH = Path(os.environ.get("EVOLVING_PROFILE_PROCESS_MEMORY_PATH", str(Path.home()/'.evolving-profile/process-memory/records.json')))
 THREAD_SESSION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_THREAD_SESSION_ROOT", str(Path.home()/'.codex/sessions')))
 CHECK_TOOL = {
     'name':'memory_check',
@@ -131,6 +312,111 @@ EXTERNAL_RAG_TOOL = {
     'description': '只搜索Web配置的外部RAG目录，不读取EP Bank、Recall、Research或偏好；返回外部文件路径和片段定位。RAG关闭或未配置时明确返回disabled/root_unavailable。',
     'inputSchema': {'type':'object','additionalProperties':False,'properties': {'query': {'type':'string','minLength':1}, 'limit': {'type':'integer','minimum':1,'maximum':50,'default':8}}, 'required':['query']},
     'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+AGENT_TRAJECTORY_TOOL = {
+    'name': 'record_agent_trajectory',
+    'description': '记录Agent执行轨迹或工具回执到EP5.0过程记忆候选区。只记录过程证据，不写入Facts/Experiences，不自动注入。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'task_archetype': {'type':'array','items':{'type':'string'},'minItems':1,'maxItems':8},
+        'process_dimensions': {'type':'array','items':{'type':'string'},'maxItems':12},
+        'phase': {'type':'string','enum':['understand','plan','retrieve','act','observe','verify','recover','deliver','reflect']},
+        'outcome': {'type':'string'}, 'text': {'type':'string','minLength':1,'maxLength':30000},
+        'agent': {'type':'object'}, 'model_profile': {'type':'object'}, 'environment_fingerprint': {'type':'object'},
+        'primary_context': {'type':'object'}, 'source_trace_ids': {'type':'array','items':{'type':'string'}},
+        'verification_evidence': {'type':'array','items':{'type':'object'}}, 'preconditions': {'type':'array','items':{'type':'string'}},
+        'failure_signature': {'type':'array','items':{'type':'string'}}, 'repair_actions': {'type':'array','items':{'type':'string'}},
+    },'required':['task_archetype','phase','text']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'openWorldHint':False},
+}
+AGENT_PROMOTION_TOOL = {
+    'name': 'promote_agent_process_memory',
+    'description': '在验证证据满足条件后，将轨迹提升为Failure Episode、Repair Pattern或Procedural Skill。自我声明不能单独晋升。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'target_kind': {'type':'string','enum':['episode','pattern','skill']},
+        'source_ids': {'type':'array','items':{'type':'string'},'minItems':1,'maxItems':32},
+        'payload': {'type':'object'},
+    },'required':['target_kind','source_ids','payload']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'openWorldHint':False},
+}
+AGENT_DRAFT_TOOL = {
+    'name': 'record_agent_process_draft',
+    'description': '仅在执行中出现错误/绕路/多次尝试且最终验证成功时，由Agent主动保存一段短过程草稿。普通成功任务不要调用；草稿只进入候选区，不直接检索或注入。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'task_archetype': {'type':'array','items':{'type':'string'},'minItems':1,'maxItems':8},
+        'process_dimensions': {'type':'array','items':{'type':'string'},'maxItems':12},
+        'phase': {'type':'string','enum':['understand','plan','retrieve','act','observe','verify','recover','deliver','reflect']},
+        'text': {'type':'string','minLength':1,'maxLength':3000}, 'failure_signature': {'type':'array','items':{'type':'string'}},
+        'repair_actions': {'type':'array','items':{'type':'string'}}, 'source_trace_ids': {'type':'array','items':{'type':'string'}},
+        'verification_evidence': {'type':'array','items':{'type':'object'}}, 'preconditions': {'type':'array','items':{'type':'string'}},
+        'model_profile': {'type':'object'}, 'environment_fingerprint': {'type':'object'}, 'primary_context': {'type':'object'},
+    },'required':['task_archetype','phase','text','source_trace_ids']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'openWorldHint':False},
+}
+AGENT_SEARCH_TOOL = {
+    'name': 'search_agent_process_memory',
+    'description': '按任务族、阶段、模型和工具链搜索EP5.0 Agent过程记忆。默认只返回可用且经过验证的候选，不改变EP5.0召回结果。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'query': {'type':'string','minLength':1}, 'task_archetype': {'type':'string'}, 'phase': {'type':'string'},
+        'model_family': {'type':'string'}, 'model_version': {'type':'string'}, 'capability_fingerprint': {'type':'string'}, 'complexity': {'type':'string','enum':['low','normal','high']},
+        'toolchain': {'type':'array','items':{'type':'string'}}, 'limit': {'type':'integer','minimum':1,'maximum':50,'default':8},
+        'include_unverified': {'type':'boolean','default':False},
+    },'required':['query']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+AGENT_READ_TOOL = {
+    'name': 'read_agent_process_memory',
+    'description': '按稳定ID读取一条Agent过程记忆及来源、验证、适用范围和反例。读取结果是行动参考，不是用户事实。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {'process_memory_id': {'type':'string','minLength':1}},'required':['process_memory_id']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+AGENT_CONTEXT_TOOL = {
+    'name': 'prepare_agent_process_context',
+    'description': '按当前任务准备有界的Agent过程经验提示包。必须由当前Agent显式调用；返回的提示包含适用条件、验证检查和来源链接，不会自动注入或覆盖当前任务。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'query': {'type':'string','minLength':1}, 'task_archetype': {'type':'string'}, 'phase': {'type':'string'},
+        'model_family': {'type':'string'}, 'model_version': {'type':'string'}, 'capability_fingerprint': {'type':'string'},
+        'toolchain': {'type':'array','items':{'type':'string'}}, 'primary_context': {'type':'object'},
+        'complexity': {'type':'string','enum':['low','normal','high']}, 'limit': {'type':'integer','minimum':1,'maximum':5,'default':3},
+    },'required':['query']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+AGENT_REVALIDATION_TOOL = {
+    'name': 'revalidate_agent_process_memory',
+    'description': '更新Agent过程记忆的漂移状态。标记为revalidation_required或deprecated不需要证据；恢复stable必须提供独立验证证据，并保留历史回滚记录。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'process_memory_id': {'type':'string','minLength':1}, 'drift_status': {'type':'string','enum':['stable','watch','revalidation_required','deprecated']},
+        'verification_evidence': {'type':'array','items':{'type':'object'}},
+    },'required':['process_memory_id','drift_status']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'openWorldHint':False},
+}
+AGENT_EVALUATION_TOOL = {
+    'name': 'evaluate_agent_process_memory',
+    'description': '对无记忆基线和过程记忆组执行确定性的A/B指标比较，并给出跨模型迁移状态；只读，不晋升、不改变默认注入。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'baseline': {'type':'array','items':{'type':'object'}}, 'memory': {'type':'array','items':{'type':'object'}},
+        'transfer': {'type':'object'},
+    },'required':['baseline','memory']},
+    'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+AGENT_ROLLOUT_TOOL = {
+    'name': 'manage_agent_process_rollout',
+    'description': '过程经验的影子、指定实验Canary、发布和撤回。发布需成对真实任务独立验证回执；试用不影响默认检索，历史保留。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'process_memory_id': {'type':'string'}, 'action': {'type':'string','enum':['shadow','canary','publish','rollback']},
+        'experiment_id': {'type':'string'}, 'reason': {'type':'string'},
+        'baseline': {'type':'array','items':{'type':'object'}}, 'memory': {'type':'array','items':{'type':'object'}},
+    },'required':['process_memory_id','action']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False},
+}
+AGENT_CAPABILITY_TOOL = {
+    'name': 'record_agent_capability_observation',
+    'description': '记录按模型、任务族和阶段拆分的能力观测。需要独立验证器；不会生成全局强弱模型排名。',
+    'inputSchema': {'type':'object','additionalProperties':False,'properties': {
+        'model_family': {'type':'string','minLength':1}, 'model_version': {'type':'string'}, 'task_archetype': {'type':'string','minLength':1},
+        'phase': {'type':'string','minLength':1}, 'outcome': {'type':'string','minLength':1}, 'verifier_kind': {'type':'string','minLength':1},
+        'status': {'type':'string','minLength':1}, 'toolchain': {'type':'array','items':{'type':'string'}},
+    },'required':['model_family','task_archetype','phase','outcome','verifier_kind']},
+    'annotations': {'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'openWorldHint':False},
 }
 try:
     from mcp_runtime import PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL, MEMORY_INSTRUCTIONS_TOOL, GUIDANCE_INSTRUCTIONS, load_repository, get_preference_response, read_preference_unit, read_memory_instructions, record_instruction
@@ -1092,7 +1378,7 @@ def governed_recall(args):
     return {"content": [{"type": "text", "text": json.dumps(content, ensure_ascii=False)}], "isError": False}
 
 
-for line in sys.stdin:
+for line in (sys.stdin if __name__ == "__main__" else ()):
     try:
         request = json.loads(line)
         method = request.get("method")
@@ -1104,10 +1390,11 @@ for line in sys.stdin:
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
+            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_SEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
         elif method == "tools/call":
             params = request.get("params") or {}
             CURRENT_TOOL_CALL={'name':params.get('name'),'arguments':params.get('arguments') or {}}
+            capture_tool_trajectory(str(params.get('name') or ''), params.get('arguments') or {})
             if params.get('name') == 'memory_check':
                 from memory_turn_check import declare
                 args=params.get('arguments') or {}
@@ -1152,6 +1439,26 @@ for line in sys.stdin:
                 reply(message_id, scenario_gate(params.get('arguments') or {}))
             elif params.get('name') == 'rag_search':
                 reply(message_id, {'content':[{'type':'text','text':json.dumps(search_external_rag(str((params.get('arguments') or {}).get('query') or ''), limit=int((params.get('arguments') or {}).get('limit') or 8)),ensure_ascii=False)}],'isError':False})
+            elif params.get('name') == 'record_agent_trajectory':
+                reply(message_id, record_agent_trajectory(params.get('arguments') or {}))
+            elif params.get('name') == 'record_agent_process_draft':
+                reply(message_id, record_agent_process_draft(params.get('arguments') or {}))
+            elif params.get('name') == 'promote_agent_process_memory':
+                reply(message_id, promote_agent_process_memory(params.get('arguments') or {}))
+            elif params.get('name') == 'search_agent_process_memory':
+                reply(message_id, search_agent_process_memory(params.get('arguments') or {}))
+            elif params.get('name') == 'read_agent_process_memory':
+                reply(message_id, read_agent_process_memory(params.get('arguments') or {}))
+            elif params.get('name') == 'prepare_agent_process_context':
+                reply(message_id, prepare_agent_process_context(params.get('arguments') or {}))
+            elif params.get('name') == 'revalidate_agent_process_memory':
+                reply(message_id, revalidate_agent_process_memory(params.get('arguments') or {}))
+            elif params.get('name') == 'evaluate_agent_process_memory':
+                reply(message_id, evaluate_agent_process_memory(params.get('arguments') or {}))
+            elif params.get('name') == 'manage_agent_process_rollout':
+                reply(message_id, manage_agent_process_rollout(params.get('arguments') or {}))
+            elif params.get('name') == 'record_agent_capability_observation':
+                reply(message_id, record_agent_capability_observation(params.get('arguments') or {}))
             elif params.get("name") == "read_source":
                 reply(message_id, read_source(params.get("arguments") or {}))
             elif params.get('name') == 'find_sources':
@@ -1167,6 +1474,11 @@ for line in sys.stdin:
         else:
             reply(message_id, error={"code": -32601, "message": "Method not found"})
     except Exception as exc:
+        try:
+            if isinstance(request, dict) and (request.get('params') or {}).get('name'):
+                capture_tool_trajectory(str((request.get('params') or {}).get('name')), (request.get('params') or {}).get('arguments') or {}, outcome='blocked', error=str(exc))
+        except Exception:
+            pass
         recovery = None
         try:
             failed_name = str((request.get('params') or {}).get('name') or '') if isinstance(request, dict) else ''

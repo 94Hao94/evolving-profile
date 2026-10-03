@@ -1,0 +1,25 @@
+{
+  "schema": "evolving-profile.source-of-truth.v1",
+  "principle": "每类事实只有一个可写权威；其他文件必须标记为投影、缓存、回执或历史证据。",
+  "authorities": {
+    "product_release": {"path": "config/release-manifest.json", "role": "唯一产品版本、发布通道和 schema 版本登记"},
+    "runtime_configuration": {"path": "~/.evolving-profile/config/runtime-settings.json", "role": "模块开关、路由、Provider、RAG 和检索模型活动配置"},
+    "guidance_configuration": {"path": "~/.evolving-profile/config/guidance-settings.json", "role": "Get Preference 候选预算和探测策略"},
+    "backup_configuration": {"path": "~/.evolving-profile/config/backup-settings.json", "role": "备份周期、位置、保留和校验策略"},
+    "user_memory": {"path": "Evolving Profile API PostgreSQL memory_units", "role": "事实、经历、实体关系和观察的持久事实源"},
+    "agent_process_memory": {"path": "~/.evolving-profile/process-memory/records.json", "role": "Agent 过程轨迹、失败、模式、能力观测和策略候选"},
+    "raw_context": {"path": "~/.codex/sessions", "role": "原始 Session/Conversation 证据；任何摘要只能派生于此"},
+    "external_rag": {"path": "runtime-settings.rag.root_path", "role": "外部资料原文；索引和向量均为可重建派生物"}
+  },
+  "projections": {
+    "provider_env": {"path": "~/.evolving-profile/profiles/evolving-profile-api.env", "authority": "runtime_configuration", "write_policy": "只允许由配置应用流程生成，禁止手工作为第二配置源"},
+    "release_runtime_copy": {"path": "~/.evolving-profile/config/release-manifest.json", "authority": "product_release", "write_policy": "部署时复制并校验，不单独编辑"},
+    "context_index": {"path": "~/.evolving-profile/context/context-index.json", "authority": "raw_context", "write_policy": "可删除重建，不能反向覆盖原始 Session"},
+    "process_graph_api": {"path": "console /api/evolving-profile/runtime", "authority": "agent_process_memory", "write_policy": "只读运行投影"},
+    "rag_indexes": {"path": "runtime-settings.rag.root_path/index", "authority": "external_rag", "write_policy": "模型或分块变化时标记 rebuild_required"}
+  },
+  "historical_evidence": {
+    "path": "docs/EP5.0-HISTORICAL-*.json",
+    "role": "只读候选和评测材料，不得升级为当前配置或当前事实"
+  }
+}

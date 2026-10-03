@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { access, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { homedir } from "node:os";
 
-const ROOT = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(process.env.HOME ?? homedir(), ".evolving-profile");
+const ROOT = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(homedir(), ".evolving-profile");
 const SETTINGS = path.join(ROOT, "config/runtime-settings.json");
 const OVERLAY = path.join(ROOT, "config/retrieval-models.env");
 const ENV = path.join(ROOT, "profiles/evolving-profile-api.env");

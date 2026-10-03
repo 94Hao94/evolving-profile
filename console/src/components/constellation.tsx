@@ -45,6 +45,10 @@ export interface ConstellationProps {
    * Used by the entities view to scale dots by total co-occurrence weight.
    */
   nodeSizeFn?: (node: GraphNode) => number;
+  /** Optional minimum opacity for a dense process view with sparse links. */
+  nodeOpacity?: number;
+  /** Optional minimum opacity for inline labels. */
+  labelOpacity?: number;
   /**
    * When true, pack labels densely: small deconfliction footprint and no zoom
    * threshold. Appropriate for graphs with short labels (e.g. entity names)
@@ -248,6 +252,8 @@ export function Constellation({
   linkOpacity,
   linkWidth,
   nodeSizeFn,
+  nodeOpacity,
+  labelOpacity,
   nodeHeatFn,
   heatLegendLabel,
   heatLegendEndpoints,
@@ -694,7 +700,7 @@ export function Constellation({
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fillStyle = n.heatColor;
-      ctx.globalAlpha = isHovered ? 1 : isNeighbor ? 0.95 : hoverIndex >= 0 ? 0.08 : baseAlpha;
+      ctx.globalAlpha = isHovered ? 1 : isNeighbor ? 0.95 : hoverIndex >= 0 ? 0.08 : Math.max(baseAlpha, nodeOpacity ?? 0);
 
       if (isHovered || isNeighbor) {
         ctx.shadowColor = n.heatColor;
@@ -910,7 +916,7 @@ export function Constellation({
       // Inline label
       ctx.font = FONT_SMALL;
       ctx.fillStyle = isHovered ? (dark ? "#e4e4e7" : "#18181b") : dark ? "#52525b" : "#a1a1aa";
-      ctx.globalAlpha = isHovered ? 1 : force ? 0.85 : Math.min(1, (zoom - 0.3) * 2.5);
+      ctx.globalAlpha = isHovered ? 1 : force ? 0.85 : Math.max(labelOpacity ?? 0, Math.min(1, (zoom - 0.3) * 2.5));
       ctx.textAlign = "left";
       const text = n.node.label || n.node.id.substring(0, 12);
       const label = text.length > 45 ? text.slice(0, 45) + "..." : text;

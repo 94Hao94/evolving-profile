@@ -13,11 +13,13 @@ import {
   ChevronRight,
   Settings,
   GitBranch,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-type NavItem = "recall" | "data" | "documents" | "entities" | "flow" | "profile";
+import { inlineUiText } from "@/lib/inline-i18n";
+type NavItem = "recall" | "data" | "documents" | "agent-memory" | "flow" | "profile";
 
 interface SidebarProps {
   currentTab: NavItem;
@@ -37,10 +39,10 @@ export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
 
   const navItems = [
     { id: "data" as NavItem, label: t("memories"), icon: Database },
+    { id: "agent-memory" as NavItem, label: t("agentMemory"), icon: Bot },
     { id: "recall" as NavItem, label: t("recall"), icon: Search },
     { id: "documents" as NavItem, label: t("documents"), icon: FileText },
-    { id: "entities" as NavItem, label: t("entities"), icon: Users },
-    { id: "flow" as NavItem, label: locale.startsWith("zh") ? "链路" : "Flow", icon: GitBranch },
+    { id: "flow" as NavItem, label: locale.startsWith("zh") ? inlineUiText("链路") : "Flow", icon: GitBranch },
     { id: "profile" as NavItem, label: tBank("bankConfiguration"), icon: Settings },
   ];
 

@@ -17,7 +17,7 @@ pip install evolving-profile-api
 ```bash
 # Set your LLM provider
 export EVOLVING_PROFILE_API_LLM_PROVIDER=openai
-export EVOLVING_PROFILE_API_LLM_API_KEY=YOUR_API_KEY
+export EVOLVING_PROFILE_API_LLM_API_KEY=sk-your-api-key
 
 # Start the server (uses embedded PostgreSQL by default)
 evolving-profile-api
@@ -91,7 +91,7 @@ Configure via environment variables:
 ```bash
 export EVOLVING_PROFILE_API_DATABASE_URL=postgresql://user:pass@localhost:5432/hindsight
 export EVOLVING_PROFILE_API_LLM_PROVIDER=groq
-export EVOLVING_PROFILE_API_LLM_API_KEY=YOUR_PROVIDER_API_KEY
+export EVOLVING_PROFILE_API_LLM_API_KEY=gsk_your-api-key
 
 evolving-profile-api
 ```

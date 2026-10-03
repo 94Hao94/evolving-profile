@@ -49,7 +49,12 @@ const INTERESTING = /[A-Za-zÀ-ÿ]{2,}.+[a-z]/;
 function isSkippable(s: string): boolean {
   const trimmed = s.trim();
   if (trimmed.length < 3) return true;
-  if (!INTERESTING.test(trimmed)) return true;
+  // Stable technical identifiers are intentionally kept in English across
+  // locales; inline-i18n may still provide an explicit localized equivalent.
+  if (trimmed === "Trace ID") return true;
+  // Chinese-only UI strings must be scanned too. The old English heuristic
+  // skipped precisely the strings that leaked into English pages.
+  if (!INTERESTING.test(trimmed) && !/[\u3400-\u9fff]/u.test(trimmed)) return true;
   // HTML entity only (e.g. &middot;, &quot;, &mdash;)
   if (/^&[a-zA-Z]+;$/.test(trimmed)) return true;
   // ENV_VAR=value (uppercase identifier + optional value)

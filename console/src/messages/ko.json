@@ -147,7 +147,8 @@
       "memoryBank": "메모리 뱅크",
       "expandSidebar": "사이드바 펼치기",
       "collapseSidebar": "사이드바 접기",
-      "collapse": "접기"
+      "collapse": "접기",
+      "agentMemory": "智能体记忆"
     },
     "overviewAndOperations": "이 메모리 뱅크의 개요 통계 및 백그라운드 작업.",
     "operations": "작업",
@@ -165,7 +166,9 @@
     "llmRequestsDisabledMessage": "이 서버에서는 LLM 요청 추적이 비활성화되어 있습니다. 활성화하려면 <envVar></envVar>를 설정하세요.",
     "deleteWillDeleteDetails": "{memories, plural, other {# 메모리}}, {documents, plural, other {# 문서}}, {links, plural, other {# 링크}}가 삭제됩니다.",
     "deleteWillDeleteObservations": "{count, plural, other {# 관찰}}이 삭제됩니다.",
-    "memoryDefense": "메모리 방어"
+    "memoryDefense": "메모리 방어",
+    "agentMemory": "智能体记忆",
+    "agentMemoryDescription": "查看智能体执行过程记忆"
   },
   "bankProfile": {
     "noBankSelected": "선택된 뱅크 없음",
@@ -631,6 +634,15 @@
     "previousPage": "이전",
     "nextPage": "다음",
     "detailTitle": "문서 세부 정보",
+    "tabGeneral": "일반",
+    "tabMemories": "메모리",
+    "tabChunks": "청크",
+    "documentSection": "문서",
+    "world": "사실",
+    "experience": "경험",
+    "observations": "관찰",
+    "labelContext": "컨텍스트",
+    "metadata": "메타데이터",
     "detailSubtitle": "원본 문서 텍스트 및 메타데이터",
     "closeButton": "닫기",
     "loadingDocument": "문서 불러오는 중...",
@@ -729,7 +741,8 @@
     "errorLoadingEntityDetail": "엔티티 세부 정보 불러오기 오류",
     "errorLoadingEntityGraph": "엔티티 그래프 불러오기 오류",
     "na": "해당 없음",
-    "entityCount": "{count, plural, one {엔티티 #개} other {엔티티 #개}}"
+    "entityCount": "{count, plural, one {엔티티 #개} other {엔티티 #개}}",
+    "lastSeenLabel": "最近出现"
   },
   "mentalModels": {
     "selectBankPrompt": "멘탈 모델을 보려면 메모리 뱅크를 선택하세요.",

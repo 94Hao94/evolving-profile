@@ -9,6 +9,16 @@ from pathlib import Path
 SETTINGS_PATH = Path(os.environ.get("EVOLVING_PROFILE_RUNTIME_SETTINGS", str(Path.home() / ".evolving-profile/config/runtime-settings.json")))
 
 _MODULE = {"record": True, "retrieve": True, "inject": True}
+_PROCESS_MEMORY_MODULE = {"record": True, "retrieve": True, "inject": True}
+AGENT_PROCESS_MODULES = {
+    "agent_process_trajectory": "原始轨迹",
+    "agent_process_observation": "过程观察",
+    "agent_process_failure_episode": "失败事件",
+    "agent_process_repair_pattern": "修复模式",
+    "agent_process_capability": "能力观测",
+    "agent_process_strategy": "可复用过程策略",
+    "agent_process_revalidation": "迁移与再验证",
+}
 DEFAULT_SETTINGS = {
     "schema": "evolving-profile.runtime-settings.v1",
     "modules": {
@@ -16,6 +26,8 @@ DEFAULT_SETTINGS = {
         "preferences": dict(_MODULE), "scenario_summary": dict(_MODULE),
         "mental_models": dict(_MODULE), "source_readback": dict(_MODULE),
         "background_reflection": dict(_MODULE),
+        "agent_process_memory": dict(_PROCESS_MEMORY_MODULE),
+        **{name: dict(_PROCESS_MEMORY_MODULE) for name in AGENT_PROCESS_MODULES},
     },
     "routing": {"mode": "auto", "ep_enabled": True, "external_rag_enabled": False,
                 "allow_parallel": False, "conflict_policy": "show_both"},

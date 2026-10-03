@@ -13,6 +13,11 @@ class RuntimeSettingsTest(unittest.TestCase):
             value = load_runtime_settings()
         self.assertTrue(value["modules"]["facts"]["retrieve"])
         self.assertTrue(value["modules"]["scenario_summary"]["retrieve"])
+        self.assertTrue(value["modules"]["agent_process_memory"]["record"])
+        self.assertTrue(value["modules"]["agent_process_memory"]["retrieve"])
+        self.assertTrue(value["modules"]["agent_process_memory"]["inject"])
+        for name in ("agent_process_trajectory", "agent_process_observation", "agent_process_failure_episode", "agent_process_repair_pattern", "agent_process_capability", "agent_process_strategy", "agent_process_revalidation"):
+            self.assertTrue(value["modules"][name]["record"])
         self.assertFalse(value["rag"]["enabled"])
         self.assertEqual(value["routing"]["mode"], "auto")
 
