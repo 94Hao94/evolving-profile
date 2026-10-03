@@ -41,6 +41,98 @@ Most memory layers answer **“what looks similar?”** EP is built to answer fo
 
 EP is therefore not “a bigger vector database”. It is a **memory control plane**: a system that keeps knowledge, evidence, routing, and execution history understandable to both the agent and the operator.
 
+## Why conventional memory systems lose precision
+
+Many memory designs start with a useful idea — save the conversation, embed it, and retrieve the nearest passages. The difficult failures usually happen one layer later:
+
+### 1. User knowledge and agent experience are mixed together
+
+The user's preferences, project facts, and personal history are not the same thing as an agent's failed tool call, debugging detour, or delivery lesson. If both are stored as undifferentiated “memories”, a model can mistake an agent's temporary workaround for a user preference, or treat a project-local decision as a universal fact.
+
+### 2. A single extracted fact is not the whole meaning
+
+Useful user memory needs multiple views at once:
+
+- **Facts** describe a state, rule, claim, or constraint;
+- **Experiences** preserve who did what, when, under which conditions, and with what result;
+- **Entities and relations** connect people, projects, organizations, tools, and documents;
+- **Observations** summarize repeated evidence without pretending that one event is a pattern;
+- **Preferences** are separated into dimensions such as communication, explanation, decision, execution, delivery, permission, and acceptance — including conditions, exceptions, and the reason or evidence behind the preference;
+- **Mental models** explain a stable cross-record pattern without replacing the underlying sources.
+
+### 3. Context is missing even when the extracted item is correct
+
+“Use a concise structure” or “Project X uses provider Y” can be technically correct and still be wrong in the current turn if the original Session, Conversation, or Project context is different. Reading the complete history every time is slow, expensive, and difficult to parallelize; reading only a compressed summary can lose the exact constraint that matters. EP therefore stores Scenario Summary as a context index and chooses the smallest sufficient depth: compact, standard, full, bounded Session/Project history, or source readback.
+
+### 4. Agent lessons need their own dimensions and lifecycle
+
+An agent does more than produce text. It plans, calls tools, observes failures, repairs code, verifies output, manages context, and delivers an artifact. Those lessons need separate process dimensions and maturity states. Otherwise a “successful answer” can be promoted before it was independently verified, or a workaround from one model can be forced onto a better model later.
+
+### 5. More dimensions can create a new problem
+
+Perfect separation is not the goal. Too many always-on extractors can increase latency, token usage, and routing confusion. EP treats dimensions as configurable modules with dependency-aware switches, adaptive candidate budgets, bounded drill-down, and explicit “not observed” states. You can keep the model rich without paying for every layer on every turn.
+
+## EP's answer: layered memory without fragmented reasoning
+
+```mermaid
+flowchart TB
+    SRC[Conversations · tools · files · receipts] --> UM
+    SRC --> AM
+    SRC --> SC
+    subgraph UM[User Memory Plane]
+      F[Facts]
+      E[Experiences]
+      EN[Entities + relations]
+      O[Observations]
+      PR[Multi-dimensional preferences + reasons]
+      MM[Mental models]
+    end
+    subgraph SC[Scenario Plane]
+      SS[Project / Session / Conversation summaries]
+      SR[Source readback and bounded raw context]
+    end
+    subgraph AM[Agent Process Memory Plane]
+      T[Raw trajectory]
+      EP[Failure episodes]
+      RP[Repair patterns]
+      CO[Capability observations]
+      PS[Process strategies]
+      RV[Transfer + revalidation]
+    end
+    UM --> PK[Context packets]
+    SC --> PK
+    AM --> PK
+    PK --> OUT[Agent execution + audited writeback]
+```
+
+The planes are parallel in storage and retrieval, but they meet at a governed context packet. This is the balance: **more precise memory objects, one coherent decision point**.
+
+## Personalization is a feature, not a compromise
+
+EP lets an operator decide how much memory machinery is appropriate for a deployment:
+
+- enable or disable Facts, Experiences, Entities, Preferences, Scenario Summary, source readback, and background reflection independently;
+- enable or disable Agent trajectory, observation, failure episode, repair pattern, capability, strategy, and revalidation modules independently;
+- set separate token budgets for preferences, scenarios, source readback, EP retrieval, and external RAG;
+- keep recording while disabling retrieval or injection when a module is not wanted in the current environment;
+- use adaptive candidate limits so a simple task stays light while a cross-project investigation can expand deliberately.
+
+The result is not “maximum memory on every prompt”. It is **the smallest useful memory route for this task, with a receipt explaining what happened**.
+
+## Real chain observability
+
+EP treats observability as part of the memory contract, not as a log viewer added afterward. The topology distinguishes:
+
+```text
+not called ≠ called and empty ≠ returned ≠ delivered ≠ source-read ≠ answer-use confirmed
+```
+
+Every node can expose its own detail card: route name, timing, candidate count, returned count, delivered count, source IDs, readback count, fallback source, and unresolved boundary. This is how an operator can debug “the memory was relevant but never arrived” without guessing from a final answer.
+
+## Built with gratitude, developed independently
+
+EP began from the practical foundation and open ideas around Hindsight — retain/recall/reflect, memory banks, observations, entities, and long-term agent memory. We are grateful to the Hindsight project and its researchers for making that direction concrete and inspectable. EP 5.0 then develops an independently governed control plane around those foundations: separate user and agent-process memory, scenario-aware routing, configurable modules, external-RAG isolation, and receipt-level execution observability. See [`NOTICE.md`](NOTICE.md) for the attribution boundary.
+
 ## Why EP
 
 | If you only add… | You get… | EP adds… |
