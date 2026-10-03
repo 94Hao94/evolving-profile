@@ -1,5 +1,23 @@
 # Evolving Profile 5.0
 
+<div align="center">
+
+**Memory that knows what is true, what was tried, and what the agent should do next.**
+
+Evidence-aware memory for AI agents — with user knowledge, agent process memory, source-grounded retrieval, and a visible execution chain.
+
+![Version](https://img.shields.io/badge/version-5.0.0-2563eb?style=for-the-badge)
+![Tests](https://img.shields.io/badge/verified-636%20Python%20%7C%20146%20Console-16a34a?style=for-the-badge)
+![Languages](https://img.shields.io/badge/UI-English%20%2B%20i18n-7c3aed?style=for-the-badge)
+![Status](https://img.shields.io/badge/release-PR%20%233-f59e0b?style=for-the-badge)
+
+<a href="https://github.com/94Hao94/evolving-profile/pull/3">Review the 5.0 contribution</a> ·
+<a href="#quick-start">Quick start</a> ·
+<a href="#how-ep-thinks">How EP thinks</a> ·
+<a href="#why-ep">Why EP</a>
+
+</div>
+
 > **English is the default documentation and UI language. Simplified Chinese documentation follows this English section.**
 
 Evolving Profile (EP) is a long-term memory, evidence, and observability control plane for AI agents. It does not treat a similarity hit as a fact. Instead, it keeps navigation, retrieval, source readback, delivery, and answer-side uncertainty as separate auditable states.
@@ -9,6 +27,101 @@ This contribution package is a sanitized, re-initializable distribution. It cont
 ![EP full-chain topology](docs/assets/flow-topology-5.0.jpg)
 
 *The screenshot is a sanitized console view of the serial spine, parallel memory lanes, explicit forks/merges, and receipt-aware packets. The live UI can open a detail card for every node and show its actual candidate, returned, delivered, source-readback, and answer-use state.*
+
+## The short version
+
+Most memory layers answer **“what looks similar?”** EP is built to answer four harder questions:
+
+1. **What kind of knowledge is this?** A fact, an experience, an entity, a preference, a scenario, an external document, or an agent-process lesson?
+2. **Which route found it?** User Recall, User Research, User Preference, Agent Recall, Agent Research, or External RAG?
+3. **What evidence actually arrived?** Candidate, returned, delivered, source-read, and answer-use are separate states.
+4. **Can this lesson be reused safely?** Agent-process patterns carry scope, verifier quality, model compatibility, counterexamples, and revalidation state.
+
+EP is therefore not “a bigger vector database”. It is a **memory control plane**: a system that keeps knowledge, evidence, routing, and execution history understandable to both the agent and the operator.
+
+## Why EP
+
+| If you only add… | You get… | EP adds… |
+| --- | --- | --- |
+| Conversation memory | A compressed history of what was said | Typed user knowledge with source, time, subject, scope, and lifecycle |
+| Vector RAG | Similar chunks | Isolated routes, lexical/vector/RRF/Rerank options, source readback, and delivery receipts |
+| A knowledge graph | Connected entities | Graph navigation plus evidence boundaries; an edge is never silently promoted to a fact |
+| A task skill library | Reusable instructions | Agent-process episodes that record failure, repair, verifier quality, model compatibility, and revalidation |
+| A prompt log | A timeline of calls | A full execution topology showing serial steps, parallel lanes, forks, merges, writeback, and audit |
+
+### The promise
+
+**EP helps an agent remember without making it blindly obey the past.** Current instructions and verified evidence stay above stale preferences or unverified process patterns. A stronger future model is not forced to imitate an older model; a weaker model can receive more structure only when evidence shows that structure helps.
+
+## How EP thinks
+
+```mermaid
+flowchart LR
+    P[Prompt + current constraints] --> C[Task Contract]
+    C --> F{Route by evidence gap}
+    F --> U[User Memory]
+    F --> A[Agent Process Memory]
+    F --> R[External RAG]
+    U --> U1[Recall / Research / Preference]
+    A --> A1[Observe / Recall / Research]
+    R --> R1[Lexical + Vector → RRF → Rerank]
+    U1 --> Q[Evidence packets]
+    A1 --> Q
+    R1 --> Q
+    Q --> S[Source readback when needed]
+    S --> X[Context assembly]
+    X --> E[Agent execution]
+    E --> W[User + Agent writeback]
+    W --> Z[Audit receipt + final answer]
+```
+
+The key design choice is the **evidence gap**. EP does not begin with “inject everything that matches”. It begins by asking what is missing: a stable preference, a single historical episode, a cross-session relationship, a source paragraph, or a process lesson. The route and depth follow that gap.
+
+## What makes 5.0 different
+
+5.0 adds the execution side to EP4's user-memory and evidence model:
+
+- User Memory answers **what the user/world/project history contains**.
+- Agent Process Memory answers **what an agent tried, where it failed, how it recovered, and how confidently that recovery transfers**.
+- External RAG answers **what the operator's external documents say**.
+- The topology answers **what actually happened this turn**.
+
+These are deliberately separate planes. They can cooperate in one context packet, but they cannot silently overwrite one another.
+
+## A practical comparison
+
+EP is designed for teams that need both **memory quality** and **operational accountability**. The comparison below describes architectural emphasis, not a claim that other projects cannot be extended.
+
+| Dimension | Conversation-first memory | Retrieval-first RAG | EP 5.0 |
+| --- | --- | --- | --- |
+| Primary question | What did we say? | Which chunk is similar? | What evidence is relevant, what route found it, and what can be trusted? |
+| Memory shape | Usually one compressed history | Documents/chunks and vectors | Facts, Experiences, Entities, Observations, Preferences, Scenarios, Process Episodes, RAG documents |
+| Agent execution lessons | Often mixed into history | Usually outside the memory model | Dedicated Agent Process Memory with maturity and compatibility gates |
+| Retrieval visibility | Tool call may be opaque | Search score is visible | Candidate → returned → delivered → readback → answer-use states |
+| Conflict handling | Model-dependent | Rank-dependent | Scope, time, source, project/session identity, and explicit unresolved state |
+| Model evolution | Old summaries may dominate | Old embeddings may drift | Capability calibration, intervention levels, revalidation, downgrade, and deprecation |
+| Operator experience | Logs or a memory viewer | Search UI | Full-chain topology, node detail cards, configuration panels, audit receipts |
+
+## Proof, not hype
+
+The 5.0 contribution is backed by a release gate rather than invented product numbers:
+
+- **636** Python Host Adapter / Controller / Guidance / Status tests passed;
+- **146** Console tests passed across 23 test files;
+- **10** API Hermes template tests passed;
+- production Console build, localization scan, release preflight, package verification, and secret/personal-data scan passed;
+- the public package contains no personal Bank, private Prompt, API key, local receipt, or machine-specific user path.
+
+The two skipped Python checks depend on a private rollback fixture that is intentionally not distributed. The current contribution is tracked in [PR #3](https://github.com/94Hao94/evolving-profile/pull/3); merge, tag, and GitHub Release are separate states.
+
+## Read the project in this order
+
+1. **This README** — the product idea, logic, boundaries, and quick start.
+2. **[EP 5.0 Agent Process Memory PRD](docs/EP5.0-AGENT-PROCESS-MEMORY-PRD.md)** — process-memory model and lifecycle.
+3. **[Execution Topology PRD](docs/EP5.0-EXECUTION-TOPOLOGY-PRD.md)** — serial/parallel/fork/merge rules and visual contract.
+4. **[Route Contract](docs/EP-ROUTE-CONTRACT.md)** — canonical user and agent routes.
+5. **[Source of Truth](config/source-of-truth.json)** — which store is authoritative for which fact.
+6. **[Release Notes](docs/RELEASE-NOTES-5.0.0.md)** — migration, limits, and verification evidence.
 
 ## What is new in 5.0
 
@@ -184,6 +297,33 @@ This package is prepared on the `release/5.0.0` contribution branch for the upst
 ---
 
 # 中文说明
+
+> **让 Agent 不只是记得过去，还知道哪些是真的、哪些只是候选，以及下一步应该如何更可靠地行动。**
+
+EP 5.0 是一个面向 AI Agent 的证据型记忆控制平面：它把用户知识、智能体过程经验、外部资料和本轮执行链路分开管理，再通过可审计的路由和回执把它们安全地组合起来。
+
+## 一句话理解
+
+普通记忆系统往往回答“这段内容像不像以前见过”；EP 还会继续回答：
+
+- 这到底是事实、经历、实体、偏好、情景，还是智能体自己的过程经验？
+- 是 User Recall、User Research、User Preference、Agent Recall，还是外部 RAG 找到的？
+- 候选是否真的返回、送达、回读过原文？
+- 这个经验是否经过验证，是否适合当前模型、当前项目和当前阶段？
+
+因此 EP 不是简单扩大向量库，而是把“记忆、证据、路由、执行和审计”放进同一个可解释的控制平面。
+
+## EP 5.0 的核心卖点
+
+1. **用户记忆与智能体记忆分层**：用户事实、经历、实体、偏好和情景摘要不会与 Agent 的失败事件、修复模式、能力观测混成一团。
+2. **检索结果可对账**：链路页分别显示候选、返回、送达、原文回读和答案采用状态，避免“调用了但不知道送没送到”。
+3. **经验会验证，也会降级**：过程模式和技能候选必须有证据、范围、反例和再验证记录；新模型变强后，旧经验可以降低干预等级或废弃。
+4. **外部 RAG 与内部记忆隔离**：外部 PDF/Word/Markdown 资料可以用混合检索，但不会自动污染 EP 长期记忆。
+5. **把整个运行过程画出来**：串行主干、并行路线、分支、汇聚、上下文包、写回和审计都能在拓扑图中查看。
+
+## 如何阅读 5.0
+
+建议先看本 README 的逻辑和边界，再看 [智能体过程记忆 PRD](docs/EP5.0-AGENT-PROCESS-MEMORY-PRD.md)、[完整链路 PRD](docs/EP5.0-FULL-CHAIN-OBSERVABILITY-PRD.md)、[路由契约](docs/EP-ROUTE-CONTRACT.md)和[唯一真相源](config/source-of-truth.json)。这样可以先理解“为什么这样分”，再进入接口和实现细节。
 
 ## EP 5.0 是什么
 
