@@ -30,7 +30,7 @@ EP 4.0 能够记录和检索用户记忆，但 Agent 在执行任务时产生的
 - 情景摘要、过程模式和 RAG 候选都不是原始事实，关键结论仍需回读来源。
 - JEV 默认关闭，调用失败时由规则和未知状态托底。
 - 本文件记录的是本地包和 PR 准备状态，不代表 PR 已合并、Tag 已创建或 GitHub Release 已发布。
-- `npm ci` 报告 3 个上游依赖审计项（1 low、1 moderate、1 critical）；本次未执行可能产生破坏性升级的 `npm audit fix --force`，应在独立依赖升级 PR 中处理。
+- 当前重新执行 `npm ci` 后报告 35 个依赖审计项（1 low、1 moderate、32 high、1 critical）；`npm audit --omit=dev` 仍报告 6 个生产范围项（5 high、1 critical），其中包含 Next.js 相关安全公告。本次未执行可能产生破坏性升级的 `npm audit fix --force`，应在独立依赖升级 PR 中处理。
 
 ## 验证
 
