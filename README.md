@@ -22,6 +22,8 @@ Evidence-aware memory for AI agents — with user knowledge, agent process memor
 
 **Chinese documentation:** [README-中文.md](README-中文.md)
 
+![Evolving Profile memory control plane](docs/assets/ep-hero-banner.png)
+
 Evolving Profile (EP) is a long-term memory, evidence, and observability control plane for AI agents. It does not treat a similarity hit as a fact. Instead, it keeps navigation, retrieval, source readback, delivery, and answer-side uncertainty as separate auditable states.
 
 This contribution package is a sanitized, re-initializable distribution. It contains no personal Bank, conversation history, API key, private prompt, hosted account, or production receipt. A new installation starts with an empty user memory store and lets the operator configure its own provider, storage, and external RAG directory.
@@ -29,6 +31,10 @@ This contribution package is a sanitized, re-initializable distribution. It cont
 ![EP full-chain topology](docs/assets/flow-topology-5.0.jpg)
 
 *The screenshot is a sanitized console view of the serial spine, parallel memory lanes, explicit forks/merges, and receipt-aware packets. The live UI can open a detail card for every node and show its actual candidate, returned, delivered, source-readback, and answer-use state.*
+
+![EP memory planes](docs/assets/ep-memory-planes.svg)
+
+![From common memory problems to EP](docs/assets/ep-problem-solution.svg)
 
 ## The short version
 

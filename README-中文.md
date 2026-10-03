@@ -6,6 +6,12 @@
 
 EP 5.0 是一个面向 AI Agent 的证据型记忆控制平面：它把用户知识、智能体过程经验、外部资料和本轮执行链路分开管理，再通过可审计的路由和回执把它们安全地组合起来。
 
+![Evolving Profile 记忆控制平面](docs/assets/ep-hero-banner.png)
+
+![EP 记忆平面](docs/assets/ep-memory-planes.svg)
+
+![从常见记忆问题到 EP 解决方案](docs/assets/ep-problem-solution.svg)
+
 ## 一句话理解
 
 普通记忆系统往往回答“这段内容像不像以前见过”；EP 还会继续回答：
