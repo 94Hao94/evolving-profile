@@ -605,7 +605,7 @@ def is_shadow_replay() -> bool:
 
 
 SHADOW_REPLAY_FIXTURE_ROOT = Path(HAM_SOURCE_ROOT) / "tests" / "fixtures" / "hindsight-replay"
-LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_LEGACY_REPLAY_ROOT", str(Path.home()/".evolving-profile/legacy-replay")))
+LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_LEGACY_FIXTURE_ROOT", str(Path.home() / ".evolving-profile/fixtures/hindsight-replay")))
 
 
 def allow_shadow_fixture_transcript(transcript_path: str) -> bool:
@@ -2348,7 +2348,7 @@ def filter_timeline_evidence(query: str, results: list[dict]) -> tuple[list[dict
     )
     narrative_prefixes = (
         "助手解释", "助理解释", "助手建议", "助理建议", "助手澄清", "助理澄清", "回答用户",
-        "用户询问", "用户请求", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
+        "User询问", "User请求", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
         "用户认为", "用户担忧", "用户偏好", "用户决定", "用户设定", "对用户当前场景的判断", "当前问题",
     )
     realization_terms = ("已完成", "完成", "已实现", "实现", "已上线", "上线", "已启用", "启用", "已生效", "生效", "正式启用", "正式切换", "生产切换", "生产运行", "已切换", "切换成功", "部署完成", "验证通过", "测试通过", "落地", "运行中")
@@ -2405,7 +2405,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         return list(results or []), []
     narrative_prefixes = (
         "用户询问", "用户提问", "用户问题", "用户请求", "用户要求", "用户希望",
-        "用户询问", "用户提问", "用户请求", "用户要求", "当前问题",
+        "User询问", "User提问", "User请求", "User要求", "当前问题",
     )
     # Do not use generic words such as "解决" or "验证" here: a historical
     # *question* can ask for a solution or verification and would then evade
@@ -2415,7 +2415,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         "当前运行态", "当前正式架构运行态", "独立公司", "独立主体", "不是同一实体",
         "版本为", "版本号", "故障已修复", "修复已完成",
     )
-    # A historical user-led sentence can start with “用户要求/用户要求”
+    # A historical user-led sentence can start with “用户要求/User要求”
     # and still contain a durable rule rather than merely echoing a question.
     # These governance markers describe an ordering, prohibition, scope or
     # expiry condition that independently answers the current request.  The

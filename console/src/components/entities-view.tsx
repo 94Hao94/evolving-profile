@@ -24,6 +24,7 @@ import {
 import { Constellation } from "./constellation";
 import { convertEvolvingProfileGraphData, GraphNode } from "./graph-2d";
 
+import { inlineUiText } from "@/lib/inline-i18n";
 type EntityGraphResponse = Awaited<ReturnType<typeof client.getEntityGraph>>;
 
 interface Entity {
@@ -213,6 +214,11 @@ export function EntitiesView() {
 
   return (
     <div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border bg-card p-4"><div className="text-xs text-muted-foreground">{inlineUiText("实体数量")}</div><div className="mt-1 text-2xl font-semibold text-card-foreground">{total}</div><div className="mt-1 text-xs text-muted-foreground">{inlineUiText("当前记忆库中的实体记录")}</div></div>
+        <div className="rounded-lg border bg-card p-4"><div className="text-xs text-muted-foreground">{inlineUiText("关系节点")}</div><div className="mt-1 text-2xl font-semibold text-card-foreground">{graphData?.nodes?.length ?? (loading ? "…" : 0)}</div><div className="mt-1 text-xs text-muted-foreground">{inlineUiText("星座图当前加载节点")}</div></div>
+        <div className="rounded-lg border bg-card p-4"><div className="text-xs text-muted-foreground">{inlineUiText("关系边")}</div><div className="mt-1 text-2xl font-semibold text-card-foreground">{graphData?.edges?.length ?? (graphLoading ? "…" : 0)}</div><div className="mt-1 text-xs text-muted-foreground">{inlineUiText("实体共现与关联关系")}</div></div>
+      </div>
       {/* View mode toggle — same segmented control as memories page */}
       <div className="mb-4 flex items-center justify-end">
         <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
@@ -429,6 +435,20 @@ export function EntitiesView() {
                   </div>
                   <div className="text-lg font-semibold text-card-foreground">
                     {selectedEntity.mention_count}
+                  </div>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="text-xs font-bold text-muted-foreground uppercase mb-2">
+                    {t("lastSeenLabel")}
+                  </div>
+                  <div className="text-sm font-medium text-card-foreground">
+                    {formatDate(selectedEntity.last_seen)}
+                  </div>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="text-xs font-bold text-muted-foreground uppercase mb-2">{inlineUiText("关联关系")}</div>
+                  <div className="text-lg font-semibold text-card-foreground">
+                    {graphData?.edges?.filter((edge: any) => edge.data?.source === selectedEntity.id || edge.data?.target === selectedEntity.id).length ?? 0}
                   </div>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-lg">

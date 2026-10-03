@@ -1,0 +1,17 @@
+{
+  "$schema": "evolving-profile.route-registry.v1",
+  "version": "5.0.0",
+  "routes": [
+    {"canonical_route":"user_recall","display_name":{"zh-CN":"User Recall · 用户召回","en":"User Recall"},"legacy_tools":["recall"],"lane":"user_memory","receipt_schema":"evolving-profile.route-receipt.v1"},
+    {"canonical_route":"user_research","display_name":{"zh-CN":"User Research · 用户研究","en":"User Research"},"legacy_tools":["research","read_research"],"lane":"user_memory","receipt_schema":"evolving-profile.route-receipt.v1"},
+    {"canonical_route":"user_preference","display_name":{"zh-CN":"User Preference · 用户偏好","en":"User Preference"},"legacy_tools":["get_preference","read_preference","read_preference_unit"],"lane":"guidance","receipt_schema":"evolving-profile.route-receipt.v1"},
+    {"canonical_route":"user_scenario_summary","display_name":{"zh-CN":"User Scenario Summary · 用户情景摘要","en":"User Scenario Summary"},"legacy_tools":["search_scenario_summary","read_scenario_summary"],"lane":"user_memory","receipt_schema":"evolving-profile.route-receipt.v1"},
+    {"canonical_route":"user_source_readback","display_name":{"zh-CN":"User Source Readback · 用户原文回读","en":"User Source Readback"},"legacy_tools":["read_source","find_sources"],"lane":"user_memory","receipt_schema":"evolving-profile.route-receipt.v1"},
+    {"canonical_route":"agent_recall","display_name":{"zh-CN":"Agent Recall · 智能体召回","en":"Agent Recall"},"legacy_tools":["search_agent_process_memory","read_agent_process_memory"],"lane":"agent_process","receipt_schema":"evolving-profile.agent-process-route-receipt.v1"},
+    {"canonical_route":"agent_research","display_name":{"zh-CN":"Agent Research · 智能体研究","en":"Agent Research"},"legacy_tools":["search_agent_process_memory"],"lane":"agent_process","mode":"graph_research","receipt_schema":"evolving-profile.agent-process-research-receipt.v1"},
+    {"canonical_route":"agent_guidance","display_name":{"zh-CN":"Agent Guidance · 智能体指导","en":"Agent Guidance"},"legacy_tools":["hint","recommend","scaffold","guard"],"lane":"agent_process","receipt_schema":"evolving-profile.agent-guidance-receipt.v1"},
+    {"canonical_route":"agent_observe","display_name":{"zh-CN":"Agent Observe · 智能体观察","en":"Agent Observe"},"legacy_tools":["record_agent_trajectory"],"lane":"agent_process","receipt_schema":"evolving-profile.agent-observe-receipt.v1"},
+    {"canonical_route":"agent_writeback","display_name":{"zh-CN":"Agent Writeback · 智能体写回","en":"Agent Writeback"},"legacy_tools":["record_agent_process_draft","promote_agent_process_memory"],"lane":"execution_writeback","receipt_schema":"evolving-profile.agent-writeback-receipt.v1"},
+    {"canonical_route":"agent_evaluation","display_name":{"zh-CN":"Agent Evaluation · 智能体评估","en":"Agent Evaluation"},"legacy_tools":["record_agent_capability_observation"],"lane":"agent_process","receipt_schema":"evolving-profile.agent-evaluation-receipt.v1"}
+  ]
+}

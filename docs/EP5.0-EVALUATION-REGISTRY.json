@@ -1,0 +1,20 @@
+{
+  "schema": "evolving-profile.agent-process-evaluation-registry.v1",
+  "cutoff": "2026-09-30T00:00:00+08:00",
+  "policy": {
+    "historical_mode": "read_only_candidate",
+    "promotion": "requires_source_read_and_independent_verifier",
+    "minimum_pairs_per_slice": 5,
+    "negative_transfer_block_rate": 0.1,
+    "real_results_required": true
+  },
+  "slices": [
+    {"id": "coding-debugging", "task_archetype": "software_engineering", "dimensions": ["debugging", "verification"], "verifier": "automated_test"},
+    {"id": "document-delivery", "task_archetype": "document_office", "dimensions": ["delivery", "verification"], "verifier": "render_or_visual_check"},
+    {"id": "retrieval-scope", "task_archetype": "data_rag", "dimensions": ["retrieval", "context_management"], "verifier": "source_check"},
+    {"id": "web-recovery", "task_archetype": "web_ui_operation", "dimensions": ["tool_use", "recover"], "verifier": "deterministic_tool"},
+    {"id": "model-transfer", "task_archetype": "coordination_multi_agent", "dimensions": ["model_adaptation", "verification"], "verifier": "automated_test"}
+  ],
+  "groups": ["baseline_no_process_memory", "process_memory_hint", "process_memory_recommendation"],
+  "required_receipt_fields": ["task_id", "slice_id", "model_profile", "toolchain", "failed", "recovery_seconds", "tool_calls", "tokens", "verifier_kind", "verifier_status"]
+}

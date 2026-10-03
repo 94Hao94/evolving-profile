@@ -403,9 +403,8 @@ export function MentalModelsView() {
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
                             {m.source_query}
                           </p>
-                          <div className="relative mb-3 border-t border-border pt-3 max-h-40 overflow-hidden">
+                          <div className="relative mb-3 border-t border-border pt-3 max-h-40 overflow-y-scroll pr-2 [scrollbar-gutter:stable]">
                             <CompactMarkdown>{m.content}</CompactMarkdown>
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-card to-transparent" />
                           </div>
                           <div className="flex items-center justify-between text-xs border-t border-border pt-3">
                             <div className="flex items-center gap-2">

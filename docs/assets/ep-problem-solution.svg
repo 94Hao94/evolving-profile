@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="720" viewBox="0 0 1400 720" role="img" aria-labelledby="title desc">
+  <title id="title">From memory problems to Evolving Profile</title>
+  <desc id="desc">Common memory failures are mapped to EP design solutions.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#0b1024"/><stop offset="1" stop-color="#182451"/></linearGradient>
+    <linearGradient id="red" x1="0" x2="1"><stop stop-color="#fb7185"/><stop offset="1" stop-color="#f97316"/></linearGradient>
+    <linearGradient id="green" x1="0" x2="1"><stop stop-color="#2dd4bf"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b8c9ff"/></marker>
+  </defs>
+  <rect width="1400" height="720" rx="28" fill="url(#bg)"/>
+  <text x="70" y="70" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="700">Why EP exists</text>
+  <text x="70" y="105" fill="#a8b7d8" font-family="Inter,Arial,sans-serif" font-size="18">A memory hit is not the same as a trustworthy, usable context.</text>
+  <g font-family="Inter,Arial,sans-serif">
+    <rect x="70" y="150" width="470" height="470" rx="24" fill="#28182d" stroke="url(#red)" stroke-width="3"/>
+    <text x="105" y="200" fill="#fff" font-size="26" font-weight="700">Common failure modes</text>
+    <g fill="#ffd1d8" font-size="18">
+      <text x="105" y="250">× User facts and agent workarounds are mixed</text>
+      <text x="105" y="315">× Preferences lose their conditions and reasons</text>
+      <text x="105" y="380">× Context is missing or too expensive to reload</text>
+      <text x="105" y="445">× Agent lessons have no verification lifecycle</text>
+      <text x="105" y="510">× More extractors increase latency and confusion</text>
+      <text x="105" y="575">× A tool call is mistaken for delivered evidence</text>
+    </g>
+    <rect x="860" y="150" width="470" height="470" rx="24" fill="#102c35" stroke="url(#green)" stroke-width="3"/>
+    <text x="895" y="200" fill="#fff" font-size="26" font-weight="700">EP design response</text>
+    <g fill="#c6fff4" font-size="18">
+      <text x="895" y="250">✓ User Memory and Agent Process Memory are separate</text>
+      <text x="895" y="315">✓ Multi-dimensional preferences keep scope + reasons</text>
+      <text x="895" y="380">✓ Scenario Summary chooses bounded context depth</text>
+      <text x="895" y="445">✓ Process patterns require evidence and revalidation</text>
+      <text x="895" y="510">✓ Modules, budgets, and routes are configurable</text>
+      <text x="895" y="575">✓ Receipts show candidate → delivery → readback</text>
+    </g>
+  </g>
+  <path d="M555 385H845" stroke="#b8c9ff" stroke-width="6" marker-end="url(#arrow)"/>
+  <circle cx="700" cy="385" r="46" fill="#5b4bcb" stroke="#fff" stroke-width="3"/>
+  <text x="700" y="393" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="700">EP</text>
+</svg>

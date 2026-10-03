@@ -1,8 +1,8 @@
 {
   "product": "Evolving Profile",
-  "product_version": "4.0",
-  "release_channel": "development",
-  "build_id": "ep4-dev",
+  "product_version": "5.0",
+  "release_channel": "contribution",
+  "build_id": "ep5-contribution",
   "schema_versions": {
     "runtime_settings": "1",
     "backup_settings": "1",

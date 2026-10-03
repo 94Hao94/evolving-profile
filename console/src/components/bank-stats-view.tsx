@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useBank } from "@/lib/bank-context";
 import { useFeatures } from "@/lib/features-context";
 import { client, MentalModel } from "@/lib/api";
@@ -47,6 +47,7 @@ import {
 } from "recharts";
 import type { TooltipContentProps } from "recharts";
 
+import { inlineUiText } from "@/lib/inline-i18n";
 interface BankStats {
   bank_id: string;
   total_nodes: number;
@@ -227,20 +228,20 @@ function parseBucketIso(iso: string): Date {
   return new Date(/[+Z-]$/.test(iso) || /[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
 }
 
-function formatBucketLabel(iso: string, trunc: string): string {
+function formatBucketLabel(iso: string, trunc: string, locale: string): string {
   const d = parseBucketIso(iso);
   if (trunc === "day") {
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
   }
-  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 }
 
-function formatBucketTooltip(iso: string, trunc: string): string {
+function formatBucketTooltip(iso: string, trunc: string, locale: string): string {
   const d = parseBucketIso(iso);
   if (trunc === "day") {
-    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    return d.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
   }
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -706,14 +707,14 @@ function EvolvingModelsCard({ active, candidates, archived }: { active: number; 
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <Brain className="w-3.5 h-3.5 text-fuchsia-600" />
-          融合心智模型
+          {inlineUiText("融合心智模型")}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-3">
-          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">活动</div><div className="mt-1 text-base font-semibold tabular-nums">{active}</div></div>
-          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">候选</div><div className="mt-1 text-base font-semibold tabular-nums">{candidates}</div></div>
-          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">归档</div><div className="mt-1 text-base font-semibold tabular-nums">{archived}</div></div>
+          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{inlineUiText("活动")}</div><div className="mt-1 text-base font-semibold tabular-nums">{active}</div></div>
+          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{inlineUiText("候选")}</div><div className="mt-1 text-base font-semibold tabular-nums">{candidates}</div></div>
+          <div><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{inlineUiText("归档")}</div><div className="mt-1 text-base font-semibold tabular-nums">{archived}</div></div>
         </div>
       </CardContent>
     </Card>
@@ -721,9 +722,9 @@ function EvolvingModelsCard({ active, candidates, archived }: { active: number; 
 }
 
 function CandidateReadinessCard({ readiness }: { readiness: { total: number; states: Record<string, number> } }) {
-  const labels: Record<string, string> = { needs_semantic_review: "待语义审核", reviewed_preference: "已审核偏好", observation_candidate: "观察候选", held: "暂缓", published: "已发布" };
+  const labels: Record<string, string> = { needs_semantic_review: inlineUiText("待语义审核"), reviewed_preference: inlineUiText("已审核偏好"), observation_candidate: inlineUiText("观察候选"), held: inlineUiText("暂缓"), published: inlineUiText("已发布") };
   const entries = Object.entries(readiness.states);
-  return <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />观察候选准备度</CardTitle></CardHeader><CardContent><div className="mb-3 text-xs text-muted-foreground">候选总数：<span className="font-semibold text-foreground">{readiness.total}</span> · 依据来源、重复支持、范围与审核状态分组</div><div className="grid grid-cols-2 gap-2">{entries.length ? entries.map(([state,count]) => <div key={state} className="rounded-lg border bg-muted/20 p-2"><div className="text-[10px] text-muted-foreground">{labels[state] ?? state}</div><div className="mt-1 text-base font-semibold tabular-nums">{count}</div></div>) : <div className="col-span-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">暂无候选回执，不能推断为零候选。</div>}</div></CardContent></Card>;
+  return <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />{inlineUiText("观察候选准备度")}</CardTitle></CardHeader><CardContent><div className="mb-3 text-xs text-muted-foreground">{inlineUiText("候选总数：")}<span className="font-semibold text-foreground">{readiness.total}</span> {inlineUiText("· 依据来源、重复支持、范围与审核状态分组")}</div><div className="grid grid-cols-2 gap-2">{entries.length ? entries.map(([state,count]) => <div key={state} className="rounded-lg border bg-muted/20 p-2"><div className="text-[10px] text-muted-foreground">{labels[state] ?? state}</div><div className="mt-1 text-base font-semibold tabular-nums">{count}</div></div>) : <div className="col-span-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">{inlineUiText("暂无候选回执，不能推断为零候选。")}</div>}</div></CardContent></Card>;
 }
 
 const AXIS_TICK_STYLE = {
@@ -733,6 +734,7 @@ const AXIS_TICK_STYLE = {
 };
 
 export function BankStatsView() {
+  const locale = useLocale();
   const t = useTranslations("bankStats");
   const timeFieldLabels = getTimeFieldLabels(t as TimeFieldTranslator);
   const { currentBank } = useBank();
@@ -822,8 +824,8 @@ export function BankStatsView() {
 
   const chartData = timeseries.buckets.map((b) => ({
     ...b,
-    label: formatBucketLabel(b.time, timeseries.trunc),
-    tooltipLabel: formatBucketTooltip(b.time, timeseries.trunc),
+    label: formatBucketLabel(b.time, timeseries.trunc, locale),
+    tooltipLabel: formatBucketTooltip(b.time, timeseries.trunc, locale),
   }));
   const ingestedTotal = chartData.reduce(
     (sum, b) => sum + factSeries.reduce((s, k) => s + (enabledSeries[k] ? b[k] || 0 : 0), 0),
@@ -852,7 +854,7 @@ export function BankStatsView() {
               <InlineStat icon={Database} label={t("memories")} value={stats.total_nodes} />
               <InlineStat icon={FolderOpen} label={t("documents")} value={stats.total_documents} />
               <InlineStat icon={Link2} label={t("links")} value={stats.total_links} />
-              <InlineStat icon={Brain} label="活动融合心智模型" value={evolvingModels.active} />
+              <InlineStat icon={Brain} label={inlineUiText("活动融合心智模型")} value={evolvingModels.active} />
             </div>
 
             {/* Composition + Link types side by side */}
@@ -874,7 +876,7 @@ export function BankStatsView() {
                     ...(observationsEnabled
                       ? [
                           {
-                            name: "观察候选（原始证据）",
+                            name: inlineUiText("观察候选（原始证据）"),
                             value: stats.total_observations || 0,
                             color: CHART_COLORS.observation,
                           },

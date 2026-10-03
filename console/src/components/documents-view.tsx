@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { client, LLMRequestEntry } from "@/lib/api";
 import { useBank } from "@/lib/bank-context";
@@ -77,6 +77,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
+import { inlineUiText } from "@/lib/inline-i18n";
 const ITEMS_PER_PAGE = 50;
 
 // Show in-flight/failed uploads that don't have a real document row yet. The
@@ -99,20 +100,21 @@ type PendingUpload = {
   createdAt: string;
 };
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, locale = "en"): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const seconds = Math.floor((now - then) / 1000);
-  if (seconds < 60) return "just now";
+  const zh = locale.startsWith("zh");
+  if (seconds < 60) return zh ? inlineUiText("刚刚") : "just now";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return zh ? `${minutes}分钟前` : `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return zh ? `${hours}小时前` : `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return zh ? `${days}天前` : `${days}d ago`;
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
+  if (months < 12) return zh ? `${months}个月前` : `${months}mo ago`;
+  return zh ? `${Math.floor(months / 12)}年前` : `${Math.floor(months / 12)}y ago`;
 }
 
 function formatBytes(bytes: number): string {
@@ -311,25 +313,25 @@ function MemoryComposition({
 }: {
   nodesByFactType: { world: number; experience: number; observation: number } | undefined;
 }) {
-  const t = useTranslations("dataView");
+  const t = useTranslations("documentsView");
   const counts = nodesByFactType ?? { world: 0, experience: 0, observation: 0 };
   const total = counts.world + counts.experience + counts.observation;
   const items = [
-    { name: "World", value: counts.world, color: COMPOSITION_COLORS.world },
-    { name: "Experience", value: counts.experience, color: COMPOSITION_COLORS.experience },
-    { name: "Observations", value: counts.observation, color: COMPOSITION_COLORS.observation },
+    { name: t("world"), value: counts.world, color: COMPOSITION_COLORS.world },
+    { name: t("experience"), value: counts.experience, color: COMPOSITION_COLORS.experience },
+    { name: t("observations"), value: counts.observation, color: COMPOSITION_COLORS.observation },
   ];
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">
-          {t("memoryComposition")}
+          {t("memoryCompositionTitle")}
         </h4>
         <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()}</span>
       </div>
       {total === 0 ? (
-        <div className="text-xs text-muted-foreground py-2">{t("noMemoriesYet")}</div>
+        <div className="text-xs text-muted-foreground py-2">{t("colMemoryUnits")} · 0</div>
       ) : (
         <>
           <div className="h-1.5 flex w-full rounded-full overflow-hidden bg-muted">
@@ -591,6 +593,7 @@ function ChunkRow({ chunk }: { chunk: any }) {
 
 export function DocumentsView() {
   const t = useTranslations("documentsView");
+  const locale = useLocale();
   const tCommon = useTranslations("common");
   const tBank = useTranslations("bank");
   const { currentBank } = useBank();
@@ -1256,7 +1259,7 @@ export function DocumentsView() {
                         className="text-card-foreground"
                         title={new Date(upload.createdAt).toLocaleString()}
                       >
-                        {formatRelativeTime(upload.createdAt)}
+                        {formatRelativeTime(upload.createdAt, locale)}
                       </TableCell>
                       <TableCell className="text-card-foreground">-</TableCell>
                       <TableCell className="text-card-foreground">-</TableCell>
@@ -1298,13 +1301,13 @@ export function DocumentsView() {
                           className="text-card-foreground"
                           title={doc.created_at ? new Date(doc.created_at).toLocaleString() : ""}
                         >
-                          {doc.created_at ? formatRelativeTime(doc.created_at) : "N/A"}
+                          {doc.created_at ? formatRelativeTime(doc.created_at, locale) : (locale.startsWith("zh") ? inlineUiText("无") : "N/A")}
                         </TableCell>
                         <TableCell
                           className="text-card-foreground"
                           title={doc.updated_at ? new Date(doc.updated_at).toLocaleString() : ""}
                         >
-                          {doc.updated_at ? formatRelativeTime(doc.updated_at) : "N/A"}
+                          {doc.updated_at ? formatRelativeTime(doc.updated_at, locale) : (locale.startsWith("zh") ? inlineUiText("无") : "N/A")}
                         </TableCell>
                         <TableCell className="text-card-foreground">
                           {doc.tags && doc.tags.length > 0 ? (
@@ -1438,11 +1441,11 @@ export function DocumentsView() {
                 <TabsList className="grid grid-cols-3 w-full max-w-md">
                   <TabsTrigger value="general" className="flex items-center gap-1.5">
                     <Settings className="w-3.5 h-3.5" />
-                    General
+                    {t("tabGeneral")}
                   </TabsTrigger>
                   <TabsTrigger value="memories" className="flex items-center gap-1.5">
                     <Network className="w-3.5 h-3.5" />
-                    Memories
+                    {t("tabMemories")}
                   </TabsTrigger>
                   <TabsTrigger
                     value="chunks"
@@ -1454,7 +1457,7 @@ export function DocumentsView() {
                     }}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    Chunks{chunksLoaded ? ` (${chunksTotal})` : ""}
+                    {t("tabChunks")}{chunksLoaded ? ` (${chunksTotal})` : ""}
                   </TabsTrigger>
                 </TabsList>
                 <DropdownMenu>
@@ -1506,9 +1509,9 @@ export function DocumentsView() {
                   <div className="space-y-4">
                     <Tabs defaultValue="world" className="flex flex-col">
                       <TabsList className="w-fit">
-                        <TabsTrigger value="world">World</TabsTrigger>
-                        <TabsTrigger value="experience">Experience</TabsTrigger>
-                        <TabsTrigger value="observation">Observations</TabsTrigger>
+                        <TabsTrigger value="world">{t("world")}</TabsTrigger>
+                        <TabsTrigger value="experience">{t("experience")}</TabsTrigger>
+                        <TabsTrigger value="observation">{t("observations")}</TabsTrigger>
                       </TabsList>
                       <div className="mt-2">
                         <TabsContent value="world" className="mt-0">
@@ -1544,7 +1547,7 @@ export function DocumentsView() {
                   <div className="space-y-4">
                     {/* Info cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <InfoCard title="Document" icon={<FileText className="w-3.5 h-3.5" />}>
+                      <InfoCard title={t("documentSection")} icon={<FileText className="w-3.5 h-3.5" />}>
                         {selectedDocument.created_at && (
                           <MetadataRow
                             label={t("labelCreated")}
@@ -1631,7 +1634,7 @@ export function DocumentsView() {
                         />
                         {selectedDocument.retain_params?.context && (
                           <MetadataRow
-                            label="Context"
+                            label={t("labelContext")}
                             value={selectedDocument.retain_params.context}
                           />
                         )}
@@ -1646,7 +1649,7 @@ export function DocumentsView() {
                         {selectedDocument.retain_params?.metadata &&
                           Object.keys(selectedDocument.retain_params.metadata).length > 0 && (
                             <MetadataRow
-                              label="Metadata"
+                              label={t("metadata")}
                               value={
                                 <MetadataBadges
                                   metadata={selectedDocument.retain_params.metadata}

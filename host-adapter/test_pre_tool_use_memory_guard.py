@@ -27,7 +27,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
     def test_missing_receipt_reason_is_distinguished_from_policy_block(self):
         with tempfile.TemporaryDirectory() as root:
             hook = {"tool_name": "exec", "session_id": "s", "turn_id": "t",
-                    "tool_input": {"command": "rg x /tmp/evolving-profile-user/.codex/memories/MEMORY.md"}}
+                    "tool_input": {"command": "rg x /tmp/ep-test-user/.codex/memories/MEMORY.md"}}
             reason = local_memory_access_guard(hook, root=root)
         self.assertIn("回执暂缺", reason)
 
@@ -38,7 +38,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
             "tool_use_id": "call-1",
             "session_id": "session-1",
             "turn_id": "turn-1",
-            "tool_input": {"command": "rg -n 优优 /tmp/evolving-profile-user/.codex/memories/MEMORY.md"},
+            "tool_input": {"command": "rg -n 优优 /tmp/ep-test-user/.codex/memories/MEMORY.md"},
         }
         output = io.StringIO()
         with patch.object(pre_tool_use, "load_config", return_value={}), \
@@ -75,7 +75,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
             }, root=root)
             hook = {
                 "tool_name": "exec", "session_id": "session-1", "turn_id": "turn-1",
-                "tool_input": {"command": "rg 学校 /tmp/evolving-profile-user/.codex/memories/MEMORY.md"},
+                "tool_input": {"command": "rg 学校 /tmp/ep-test-user/.codex/memories/MEMORY.md"},
             }
             reason = local_memory_access_guard(hook, root=root)
             self.assertIn("mcp__evolving_profile_controller__recall", reason)
@@ -95,7 +95,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
                 "allow_native_memory": False, "recommended_route": "get_preference",
             }, root=root)
             hook = {"tool_name": "exec", "session_id": "session-1", "turn_id": "turn-2",
-                    "tool_input": {"command": "rg 格式 /tmp/evolving-profile-user/.codex/memories/MEMORY.md"}}
+                    "tool_input": {"command": "rg 格式 /tmp/ep-test-user/.codex/memories/MEMORY.md"}}
             observe_tool({"tool_name": "mcp__evolving_profile_controller__recall", "session_id": "session-1",
                           "turn_id": "turn-2", "tool_use_id": "wrong-tool", "tool_response": {"content": []}}, root=root)
             self.assertIn("get_preference", local_memory_access_guard(hook, root=root))
@@ -111,7 +111,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
                 "allow_native_memory": True, "recommended_route": "recall",
             }, root=root)
             hook = {"tool_name": "exec", "session_id": "session-1", "turn_id": "turn-3",
-                    "tool_input": {"command": "rg 记忆 /tmp/evolving-profile-user/.codex/memories/MEMORY.md"}}
+                    "tool_input": {"command": "rg 记忆 /tmp/ep-test-user/.codex/memories/MEMORY.md"}}
             self.assertIsNone(local_memory_access_guard(hook, root=root))
 
     def test_user_prompt_hook_registers_required_ep_tool_before_shell_fallback(self):
@@ -126,7 +126,7 @@ class PreToolUseMemoryGuardTest(unittest.TestCase):
             )
             reason=local_memory_access_guard({
                 'tool_name':'exec','session_id':'session-2','turn_id':'turn-2',
-                'tool_input':{'command':'rg 格式 /tmp/evolving-profile-user/.codex/memories/MEMORY.md'},
+                'tool_input':{'command':'rg 格式 /tmp/ep-test-user/.codex/memories/MEMORY.md'},
             },root=root)
         self.assertIn('get_preference',reason)
 

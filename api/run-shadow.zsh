@@ -1,11 +1,13 @@
 #!/bin/zsh
 set -euo pipefail
 
-EP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EP_RUNTIME="${EP_RUNTIME_PYTHON:-python3}"
+EP_ROOT="${EP_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+EP_RUNTIME="${EP_RUNTIME:-python3}"
 
 set -a
-source "${EVOLVING_PROFILE_ENV_FILE:-$HOME/.evolving-profile/profiles/evolving-profile-api.env}"
+if [[ -f "${EP_ENV_FILE:-$HOME/.evolving-profile/profiles/evolving-profile-api.env}" ]]; then
+  source "${EP_ENV_FILE:-$HOME/.evolving-profile/profiles/evolving-profile-api.env}"
+fi
 set +a
 
 export PYTHONPATH="$EP_ROOT/api${PYTHONPATH:+:$PYTHONPATH}"

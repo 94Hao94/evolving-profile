@@ -184,7 +184,7 @@ def event_from_hook(hook_name: str, hook_input: dict[str, Any], origin_class='am
             order = conn.execute('INSERT INTO captures(identity_key,input_hash,envelope_json) VALUES(?,?,?)', (key, input_hash, '{}')).lastrowid
             payload = {
                 'schema': 'ham.event.v1', 'event_id': _id(key_data), 'idempotency_key': key,
-                'principal_id': 'user', 'agent_id': 'codex', 'session_id': session,
+                'principal_id': 'liuzhongyang', 'agent_id': 'codex', 'session_id': session,
                 'project_id': hashlib.sha256(project.encode()).hexdigest()[:24],
                 'task_id': hashlib.sha256((session + '|' + project).encode()).hexdigest()[:24],
                 'sequence': source_sequence if source_sequence is not None else order,

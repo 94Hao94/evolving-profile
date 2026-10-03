@@ -1,0 +1,26 @@
+import { NextResponse } from "next/server";
+import path from "node:path";
+import { homedir } from "node:os";
+import { spawn } from "node:child_process";
+
+export async function POST(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "禁止跨站修改" }, { status: 403 });
+  try {
+    const body = await request.text();
+    if (body.length > 24000) return NextResponse.json({ error: "修改内容过长" }, { status: 413 });
+    JSON.parse(body);
+    const result = await new Promise<{code: number | null; value: any}>((resolve, reject) => {
+      const root = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(homedir(), ".evolving-profile");
+      const child = spawn(process.env.EP_RUNTIME_PYTHON ?? "python3", [path.join(root, "runtime/host-adapter/manual_preference_correction.py"), path.join(root, "guidance-v1/guidance-v1.json")], { timeout: 8000 });
+      let output = "";
+      child.stdout.on("data", (chunk) => { output += chunk; });
+      child.on("error", reject);
+      child.on("close", (code) => { try { resolve({ code, value: JSON.parse(output) }); } catch { reject(new Error("修正服务没有返回有效回执")); } });
+      child.stdin.end(body);
+    });
+    return NextResponse.json(result.value, { status: result.code === 0 ? 200 : result.value.error === "revision_conflict" ? 409 : 400 });
+  } catch {
+    return NextResponse.json({ error: "修正服务失败，请保留内容并重试" }, { status: 500 });
+  }
+}

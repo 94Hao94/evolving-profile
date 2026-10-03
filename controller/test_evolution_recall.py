@@ -46,6 +46,7 @@ from recall import (
     filter_timeline_evidence,
     specific_personal_attribute_anchor,
     split_mental_model_sections,
+    LEGACY_SHADOW_REPLAY_FIXTURE_ROOT,
 )
 
 
@@ -571,7 +572,7 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         self.assertNotEqual(decision["decision"], "qualified")
 
     def test_shadow_replay_uses_only_explicit_safe_fixture_transcript(self):
-        fixture = str(Path(__file__).resolve().parents[1] / "ham-os/tests/fixtures/hindsight-replay/followup.jsonl")
+        fixture = str(LEGACY_SHADOW_REPLAY_FIXTURE_ROOT / "followup.jsonl")
         with patch.dict("os.environ", {"HINDSIGHT_EXECUTION_MODE": "shadow_replay"}, clear=False):
             self.assertFalse(allow_shadow_fixture_transcript(fixture))
         with patch.dict(
@@ -787,7 +788,7 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
             query, "助手解释官方 Hindsight 的写入机制和检索逻辑。"
         )["qualified"])
         self.assertFalse(controller.evolution_evidence_alignment(
-            query, "用户询问 Hindsight 自下载官方以来的主要变迁历程。"
+            query, "User询问 Hindsight 自下载官方以来的主要变迁历程。"
         )["qualified"])
 
     def test_evolution_scope_rejects_unrealized_request_but_keeps_completed_change(self):
@@ -1508,7 +1509,7 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         query = "你现在就查看最近10几条我主动正常的条目，看看有没有问题"
         record = {
             "type": "world",
-            "text": "用户要求助手查看其最近10几条主动正常的条目以检查是否存在问题 | When: 2026-09-04 | Involving: 用户, 助手",
+            "text": "User要求助手查看其最近10几条主动正常的条目以检查是否存在问题 | When: 2026-09-04 | Involving: User, 助手",
         }
         unrelated = {
             "type": "experience",
@@ -1927,7 +1928,7 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         record = {
             "id": "research-preference",
             "type": "world",
-            "text": "用户明确要求AI研究方向不以CNN为主，偏好半冷门方向及论文，并要求提供具体的实现路径。",
+            "text": "User明确要求AI研究方向不以CNN为主，偏好半冷门方向及论文，并要求提供具体的实现路径。",
         }
         decision = admission_decision(query, record, deep=True)
         self.assertEqual(decision["decision"], "qualified")
@@ -2016,16 +2017,16 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         when it names one numbered clip.
         """
         query = (
-            "基于已生成的25段视频文件（位于 /tmp/project-media/优优汽车队），"
+            "基于已生成的25段视频文件（位于 /tmp/ep-test-user/Projects/Codex/优优汽车队），"
             "执行最终剪辑合成任务：按V01–V25顺序拼接，添加片头片尾、背景音乐、字幕并输出MP4。"
         )
         relevant = {
             "type": "experience",
-            "text": "文件 /tmp/project-media/优优汽车队/15.mp4 已生成，可作为本次视频合成的第15段素材。",
+            "text": "文件 /tmp/ep-test-user/Projects/Codex/优优汽车队/15.mp4 已生成，可作为本次视频合成的第15段素材。",
         }
         unrelated_config = {
             "type": "experience",
-            "text": "Codex 配置文件位于 /tmp/other-project/.codex/config.toml，记录 MCP 服务器设置。",
+            "text": "Codex 配置文件位于 /tmp/ep-test-user/.codex/config.toml，记录 MCP 服务器设置。",
         }
         unrelated_storage = {
             "type": "world",
@@ -2382,7 +2383,7 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
     def test_explicit_personal_attribute_still_uses_narrow_calibration(self):
         self.assertEqual(specific_personal_attribute_anchor("我的名字是什么"), "名字")
         self.assertEqual(specific_personal_attribute_anchor("我的鞋码是多少"), "鞋码")
-        rows = [{"id": "name", "text": "用户正确姓名是用户"}]
+        rows = [{"id": "name", "text": "用户正确姓名是User"}]
         kept, anchor, negative = filter_specific_personal_attribute(
             "我的名字是什么", rows, {"primary_shape": "point"}
         )

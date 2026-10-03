@@ -1225,7 +1225,7 @@ def concrete_artifact_scope_alignment(query: str, text: str) -> dict[str, Any]:
 
 
 _PATH_SCOPE_GENERIC_COMPONENTS = {
-    "users", "user", "apple", "home", "documents", "downloads", "desktop",
+    "users", "user", "apple", "ep-test-user", "home", "documents", "downloads", "desktop",
     "projects", "project", "codex", "tmp", "var", "private", "work", "ag",
     "outputs", "output", "files", "file", "data", "src", "dist", "main",
 }

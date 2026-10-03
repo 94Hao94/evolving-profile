@@ -21,8 +21,9 @@ from task_state import TaskStateStore
 from lib.memory_policy import classify_memory_policy
 from entry_navigation import build_navigation_map
 
-GUIDANCE_SRC = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC") or Path.home() / ".evolving-profile/runtime/guidance")
-GUIDANCE_CONFIG = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG") or Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json")
+EP_ROOT = Path(os.environ.get("EVOLVING_PROFILE_STATE_ROOT", str(Path.home() / ".evolving-profile")))
+GUIDANCE_SRC = EP_ROOT / "runtime/guidance"
+GUIDANCE_CONFIG = EP_ROOT / "guidance-v1/guidance-v1.json"
 RECEIPT_ROOT = Path.home() / ".evolving-profile/audit/guidance-entry-receipts"
 MAX_TOKENS = 5000
 MAX_CANDIDATES = 6

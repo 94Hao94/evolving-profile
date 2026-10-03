@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { client } from "@/lib/api";
 import { useBank } from "@/lib/bank-context";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import JsonView from "react18-json-view";
 import "react18-json-view/src/style.css";
 import { MemoryDetailPanel } from "./memory-detail-panel";
 
+import { inlineUiText } from "@/lib/inline-i18n";
 type Budget = "low" | "mid" | "high";
 type TagsMatch = "any" | "all" | "any_strict" | "all_strict" | "exact";
 type ViewMode = "results" | "trace" | "json";
@@ -47,13 +48,14 @@ const fmtScore = (v: number | null | undefined): string =>
 
 export function SearchDebugView() {
   const t = useTranslations("searchDebug");
+  const chinese = useLocale().startsWith("zh");
   const { currentBank } = useBank();
 
   // Query state
   const [query, setQuery] = useState("");
   const [factTypes, setFactTypes] = useState<FactType[]>(["world"]);
   const [budget, setBudget] = useState<Budget>("mid");
-  const [maxTokens, setMaxTokens] = useState(4096);
+  const [maxTokens, setMaxTokens] = useState(1200);
   const [queryDate, setQueryDate] = useState("");
   const [includeChunks, setIncludeChunks] = useState(false);
   const [includeEntities, setIncludeEntities] = useState(false);
@@ -175,6 +177,16 @@ export function SearchDebugView() {
 
   return (
     <div className="space-y-6">
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3"><CardTitle className="text-base">{chinese ? inlineUiText("EP 当前检索链路") : "Current EP retrieval paths"}</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-xs leading-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border bg-background p-3"><b>{chinese ? inlineUiText("单点历史召回（Recall）") : "Recall · focused history"}</b><p className="mt-1 text-muted-foreground">{chinese ? inlineUiText("查找某段经历、事实或实体候选；候选返回后仍需智能体判断是否相关。") : "Retrieve fact, experience, or entity candidates. The Agent still checks their relevance."}</p></div>
+          <div className="rounded-lg border bg-background p-3"><b>{chinese ? inlineUiText("综合历史研究（Research）") : "Research · broader history"}</b><p className="mt-1 text-muted-foreground">{chinese ? inlineUiText("面向多对象、跨会话、跨项目和时间线问题；不是简单重复单点召回。") : "Explore multiple subjects, sessions, projects, and timelines; not simply repeated Recall."}</p></div>
+          <div className="rounded-lg border bg-background p-3"><b>{chinese ? inlineUiText("多维度偏好（Get Preference）") : "Get Preference · conditional guidance"}</b><p className="mt-1 text-muted-foreground">{chinese ? inlineUiText("读取多维度偏好和融合心智模型；不能替代事实检索，也不能覆盖当前请求。") : "Read conditional preferences and fused models. They neither replace evidence retrieval nor override the current request."}</p></div>
+          <div className="rounded-lg border bg-background p-3"><b>{chinese ? inlineUiText("情景定位与原文核验") : "Scenario navigation and source verification"}</b><p className="mt-1 text-muted-foreground">{chinese ? inlineUiText("情景摘要用于定位会话背景；原文读取用于关键结论核验。候选不等于已注入。") : "Scenario summaries locate background. Source reads verify conclusions. Candidate discovery is not proof of delivery."}</p></div>
+          <div className="rounded-lg border bg-background p-3 md:col-span-2 xl:col-span-4">{chinese ? inlineUiText("本页定位：这是直接 Recall 的可视化调试器，展示记忆库的混合候选、实体/分块扩展和检索回执；真实对话中的路由选择、综合研究、偏好读取、情景下钻和最终送达，以“链路”页的实际回执为准。") : "This page debugs direct Recall, its hybrid candidates and entity/chunk expansion. Use Flow for actual conversation routing, Research, preference reads, scenario navigation, and delivery receipts."}</div>
+        </CardContent>
+      </Card>
       {/* Search Input */}
       <Card>
         <CardContent className="pt-6">

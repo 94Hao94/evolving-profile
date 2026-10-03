@@ -6,7 +6,7 @@ import { buildOperationalOverview } from "@/lib/operational-overview";
 import { dataplaneBankUrl, getDataplaneHeaders } from "@/lib/evolving-client";
 import { GET as getRuntime } from "@/app/api/evolving-profile/runtime/route";
 
-const ROOT = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(process.env.HOME ?? homedir(), ".evolving-profile");
+const ROOT = process.env.EVOLVING_PROFILE_STATE_ROOT ?? path.join(homedir(), ".evolving-profile");
 
 async function bankRows(bankId: string, path: string, key: "items" | "operations") {
   try {

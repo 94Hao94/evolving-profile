@@ -398,7 +398,7 @@ def _time_window_guidance_activity(prompt_at, entry_receipts=None, deliveries=No
  records=[];unattributed=[];seen=set()
  sources=list(entry_receipts or [])+list(deliveries or [])
  sources.extend(row for row in (global_activity or [])
-                if str(row.get('tool') or '').rsplit('__',1)[-1] in {'get_preference','read_preference'})
+                if str(row.get('tool') or '').rsplit('__',1)[-1] in {'get_preference','read_preference','get_task_guidance'})
  for row in sources:
   raw=row.get('at')
   if raw is None:continue

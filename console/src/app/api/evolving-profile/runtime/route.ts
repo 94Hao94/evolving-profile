@@ -126,7 +126,7 @@ export async function GET(request?: Request) {
   let backupSettings: Record<string, unknown> = {};
   let guidanceSettings: Record<string, unknown> = {};
   let runtimeSettings: Record<string, any> = {};
-  let releaseManifest: Record<string, any> = { product_version: "4.0", release_channel: "development" };
+  let releaseManifest: Record<string, any> = { product_version: "5.0", release_channel: "contribution" };
   let contextIndex: Record<string, any> = { status: "unavailable", sessions: [], projects: [] };
   let contextProgress: Record<string, any> = { status: "unavailable", total: 0, queued: 0, running: 0, retrying: 0, succeeded: 0, failed: 0 };
   let contextAudit: Record<string, any> = { status: "not_run", error_count: null, warning_count: null };

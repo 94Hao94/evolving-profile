@@ -86,8 +86,8 @@
     "auditLogsDescription": "檢視此記憶庫所有操作的稽核記錄。",
     "llmRequests": "LLM 請求",
     "llmRequestsDescription": "追蹤此記憶庫進行的每一次 LLM 呼叫，包括失敗的呼叫。",
-    "recallAnalyzer": "Recall 分析器",
-    "recallAnalyzerDescription": "使用詳細追蹤資訊和檢索方法分析記憶 Recall。",
+    "recallAnalyzer": "EP 檢索分析器",
+    "recallAnalyzerDescription": "調試目前 EP 的 Recall 候選鏈路；單點歷史使用 Recall，綜合關聯由 Agent 選擇 Research，偏好與情境摘要走獨立入口。",
     "reflect": "Reflect",
     "reflectDescription": "執行一次代理循環：自主收集證據，從記憶庫的視角推理，產生脈絡回應。",
     "memories": "記憶",
@@ -147,7 +147,8 @@
       "memoryBank": "記憶庫",
       "expandSidebar": "展開側邊欄",
       "collapseSidebar": "收起側邊欄",
-      "collapse": "收起"
+      "collapse": "收起",
+      "agentMemory": "智能体记忆"
     },
     "overviewAndOperations": "檢視此記憶庫的概覽統計和背景作業。",
     "operations": "操作",
@@ -165,7 +166,9 @@
     "llmRequestsDisabledMessage": "此伺服器上的 LLM 請求追蹤已停用。請設定 <envVar></envVar> 以啟用。",
     "deleteWillDeleteDetails": "這將刪除 {memories, plural, other {# 條記憶}}、{documents, plural, other {# 個文件}} 和 {links, plural, other {# 個連結}}。",
     "deleteWillDeleteObservations": "這將刪除 {count, plural, other {# 個觀察}}。",
-    "memoryDefense": "記憶防護"
+    "memoryDefense": "記憶防護",
+    "agentMemory": "智能体记忆",
+    "agentMemoryDescription": "查看智能体执行过程记忆"
   },
   "bankProfile": {
     "noBankSelected": "未選擇記憶庫",
@@ -631,6 +634,15 @@
     "previousPage": "上一頁",
     "nextPage": "下一頁",
     "detailTitle": "文件詳情",
+    "tabGeneral": "基本資料",
+    "tabMemories": "記憶組成",
+    "tabChunks": "文字分塊",
+    "documentSection": "文件資料",
+    "world": "事實",
+    "experience": "經歷",
+    "observations": "觀察",
+    "labelContext": "上下文",
+    "metadata": "元資料",
     "detailSubtitle": "原始文件文字和中繼資料",
     "closeButton": "關閉",
     "loadingDocument": "正在載入文件…",
@@ -729,7 +741,8 @@
     "errorLoadingEntityDetail": "載入實體詳情時發生錯誤",
     "errorLoadingEntityGraph": "載入實體圖時發生錯誤",
     "na": "無",
-    "entityCount": "{count, plural, one {# 個實體} other {# 個實體}}"
+    "entityCount": "{count, plural, one {# 個實體} other {# 個實體}}",
+    "lastSeenLabel": "最近出现"
   },
   "mentalModels": {
     "selectBankPrompt": "選擇一個記憶庫以檢視心智模型。",

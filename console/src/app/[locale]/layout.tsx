@@ -6,6 +6,7 @@ import { BankProvider } from "@/lib/bank-context";
 import { FeaturesProvider } from "@/lib/features-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { Toaster } from "@/components/ui/sonner";
+import { LocaleTextSanitizer } from "@/components/locale-text-sanitizer";
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -28,6 +29,7 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className="bg-background text-foreground">
+        <script dangerouslySetInnerHTML={{ __html: `window.__EP_LOCALE__=${JSON.stringify(locale)};` }} />
         <ThemeProvider>
           <FeaturesProvider>
             <BankProvider>
@@ -35,6 +37,7 @@ export default async function LocaleLayout({
             </BankProvider>
           </FeaturesProvider>
         </ThemeProvider>
+        <LocaleTextSanitizer locale={locale} />
         <Toaster />
       </body>
     </html>
