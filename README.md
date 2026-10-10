@@ -254,7 +254,7 @@ private prompts, session transcripts, receipts, caches, or local paths.
 
 The personal distribution is maintained in
 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2),
-currently on `release/5.1.0`. The upstream contribution is
+currently on `release/5.1.0` with prerelease `v5.1.0-rc.2`. The upstream contribution is
 [PR #4](https://github.com/94Hao94/evolving-profile/pull/4). `NOTICE.md` records
 CCY as the public distribution author/maintainer; GitHub account, repository
 owner, upstream project owner, and local Git identity remain separate categories.

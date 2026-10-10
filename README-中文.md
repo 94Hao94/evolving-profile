@@ -192,7 +192,7 @@ http://127.0.0.1:9999。通过共享 MCP/Hook 适配器接入前，不要复制�
 
 ## 来源、个人仓库与作者
 
-个人发行仓库：[ccygod/evolving-profile-2.2](https://github.com/ccygod/evolving-profile-2.2)，当前默认分支为 `release/5.1.0`，预发布版为 [`v5.1.0-rc.1`](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.1)。
+个人发行仓库：[ccygod/evolving-profile-2.2](https://github.com/ccygod/evolving-profile-2.2)，当前默认分支为 `release/5.1.0`，最新预发布版为 [`v5.1.0-rc.2`](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.2)。
 
 上游协作渠道：[PR #4](https://github.com/94Hao94/evolving-profile/pull/4)。两者是同一条 EP 5.1 来源线：个人 fork 用于自有发布，上游 PR 用于贡献协作。`NOTICE.md` 记录公开发行作者/维护者为 CCY；GitHub 账号、仓库拥有者、上游项目拥有者和本机 Git 提交身份分开记录。
 
