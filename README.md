@@ -1,4 +1,4 @@
-# Evolving Profile 5.0
+# Evolving Profile 5.1
 
 <div align="center">
 
@@ -6,12 +6,12 @@
 
 Evidence-aware memory for AI agents — with user knowledge, agent process memory, source-grounded retrieval, and a visible execution chain.
 
-![Version](https://img.shields.io/badge/version-5.0.0-2563eb?style=for-the-badge)
-![Tests](https://img.shields.io/badge/verified-636%20Python%20%7C%20146%20Console-16a34a?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-5.1.0-2563eb?style=for-the-badge)
+![Tests](https://img.shields.io/badge/verification-release%20candidate-f59e0b?style=for-the-badge)
 ![Languages](https://img.shields.io/badge/UI-English%20%2B%20i18n-7c3aed?style=for-the-badge)
-![Status](https://img.shields.io/badge/release-PR%20%233-f59e0b?style=for-the-badge)
+![Status](https://img.shields.io/badge/release-5.1%20RC-f59e0b?style=for-the-badge)
 
-<a href="https://github.com/94Hao94/evolving-profile/pull/3">Review the 5.0 contribution</a> ·
+<a href="https://github.com/94Hao94/evolving-profile">Evolving Profile upstream</a> ·
 <a href="#quick-start">Quick start</a> ·
 <a href="#how-ep-thinks">How EP thinks</a> ·
 <a href="#why-ep">Why EP</a>
@@ -22,7 +22,13 @@ Evidence-aware memory for AI agents — with user knowledge, agent process memor
 
 **Chinese documentation:** [README-中文.md](README-中文.md)
 
-![Evolving Profile memory control plane](docs/assets/ep-hero-banner.png)
+![Evolving Profile memory control plane](docs/assets/ep51-release-hero.png)
+
+EP 5.1 is the release-ready refinement of the 5.0 control plane: it keeps the
+three memory planes and receipt contract, then hardens long-session coverage,
+source-linked scenario state, agent-research projection, and release-grade
+verification. The new release banner above is an architectural illustration,
+not a screenshot or a claim about runtime data.
 
 Evolving Profile (EP) is a long-term memory, evidence, and observability control plane for AI agents. It does not treat a similarity hit as a fact. Instead, it keeps navigation, retrieval, source readback, delivery, and answer-side uncertainty as separate auditable states.
 
@@ -223,7 +229,38 @@ The two skipped Python checks depend on a private rollback fixture that is inten
 5. **[Source of Truth](config/source-of-truth.json)** — which store is authoritative for which fact.
 6. **[Release Notes](docs/RELEASE-NOTES-5.0.0.md)** — migration, limits, and verification evidence.
 
-## What is new in 5.0
+## What is new in 5.1
+
+EP 5.1 keeps the EP 5.0 architecture and makes its hardest operational paths
+more resilient and auditable:
+
+- **Long-session coverage without silent loss**: deterministic, same-turn-safe
+  episode boundaries reduce per-episode pressure while preserving the complete
+  original source. Source-linked fallback drafts remain review-gated rather
+  than being published as facts.
+- **Stricter intent-to-state accounting**: every substantive user request,
+  correction, constraint, and answered request must point to an exact source
+  message and an actual state field. User corrections cannot be misclassified
+  as assistant reports or silently mapped to a later message.
+- **Independent native review provenance**: when an independent agent reviews
+  source coverage, the receipt marks that transport explicitly and does not
+  fabricate a background API request, response hash, or model identity.
+- **Agent Research projection repair**: nested MCP envelopes are unwrapped
+  without copying parent aggregates into child nodes; the topology now keeps
+  agent recall, agent research, returned content, source readback, and answer
+  use visibly distinct.
+- **Evidence-aware fallback behavior**: malformed provider state can create a
+  bounded source-linked candidate for review, but publication still requires
+  exact partition, role, quote, summary-tier, and CAS checks.
+- **Release-safe localization and packaging**: English remains the public
+  default, Simplified Chinese remains available, dynamic route labels stay
+  canonical, and the package excludes personal Banks, prompts, receipts, keys,
+  and machine paths.
+
+The detailed change record is in [`CHANGELOG-5.1.md`](CHANGELOG-5.1.md), and
+the release evidence is in [`docs/RELEASE-NOTES-5.1.0.md`](docs/RELEASE-NOTES-5.1.0.md).
+
+## What was new in 5.0
 
 This release is the 5.0 architecture and runtime package. It keeps the validated 4.0 user-memory model and compatibility routes, and adds a first-class Agent Process Memory plane plus full-chain execution observability.
 
@@ -370,6 +407,23 @@ npm run dev
 
 Initialize the API/database using `api/README.md`, then open the console route for the selected Bank. The distribution never assumes a personal Bank path; configure a new Bank and storage root explicitly.
 
+### One-command local deployment
+
+For a fresh macOS/Linux checkout, the supported one-command path is:
+
+```bash
+./scripts/install-ep51.sh --mode local
+```
+
+The installer performs a preflight, creates an ignored local `.env` from
+`.env.example` when needed, installs Python/Node dependencies when the package
+manager is available, builds the Console, and writes a local launch manifest.
+It never enables JEV, cloud backup, or an external RAG directory by itself, and
+it never copies a production Bank or API key. Use `--dry-run` to inspect the
+commands, `--skip-deps` when dependencies are already installed, and
+`--no-launch` when you only want a verified build. Provider, database, RAG,
+backup, and locale settings remain explicit operator configuration.
+
 ### Validation commands
 
 ```bash
@@ -392,6 +446,6 @@ The release gate also runs the relevant Python Host Adapter, Controller, Guidanc
 
 ## Contribution and release status
 
-This package is prepared on the `release/5.0.0` contribution branch for the upstream [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile), with the sanitized branch hosted in [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2). PR, merge, tag, and GitHub Release states are intentionally recorded separately in [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md). The distribution author remains CCY; Hindsight and related research are acknowledged in [`NOTICE.md`](NOTICE.md) without implying that upstream projects are EP code contributors.
+This package is prepared on the `release/5.1.0` contribution branch for the upstream [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile), with the sanitized branch hosted in [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2). PR, merge, tag, and GitHub Release states are intentionally recorded separately in [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md). The distribution author remains CCY; Hindsight and related research are acknowledged in [`NOTICE.md`](NOTICE.md) without implying that upstream projects are EP code contributors.
 
 ---
