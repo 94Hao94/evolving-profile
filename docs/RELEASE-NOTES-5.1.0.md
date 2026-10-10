@@ -57,8 +57,8 @@
 - 脱敏发行仓库：`https://github.com/ccygod/evolving-profile-2.2`
 - 分支：`release/5.1.0`（fork 已推送）
 - PR：[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)
-- Tag：未创建
-- GitHub Release：未创建
+- Tag：个人 fork 已创建 `v5.1.0-rc.1`
+- GitHub Release：[Evolving Profile 5.1.0-rc.1](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.1)，预发布状态
 
 ## 来源与署名边界
 
