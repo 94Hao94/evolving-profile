@@ -1,7 +1,7 @@
 # Evolving Profile 5.1.0 — Release Notes
 
 发布日期：2026-10-10  
-状态：本地 release candidate，等待本次发行仓库预检、测试和 GitHub 回读
+状态：PR #4 已提交；尚未合并、打 Tag 或创建 GitHub Release
 
 ## 解决的问题
 
@@ -54,7 +54,7 @@
 
 - 上游仓库：`https://github.com/94Hao94/evolving-profile`
 - 脱敏发行仓库：`https://github.com/ccygod/evolving-profile-2.2`
-- 分支：`release/5.1.0`（本地准备中）
-- PR：未创建
+- 分支：`release/5.1.0`（fork 已推送）
+- PR：[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)
 - Tag：未创建
 - GitHub Release：未创建
