@@ -8,9 +8,17 @@ EP 5.1 是一个面向 AI Agent 的证据型记忆控制平面：它把用户知
 
 ![Evolving Profile 记忆控制平面](docs/assets/ep51-release-hero.png)
 
-![EP 记忆平面](docs/assets/ep-memory-planes.svg)
+![EP 记忆平面](docs/assets/ep-memory-planes-zh.svg)
 
-![从常见记忆问题到 EP 解决方案](docs/assets/ep-problem-solution.svg)
+![从常见记忆问题到 EP 解决方案](docs/assets/ep-problem-solution-zh.svg)
+
+![EP5.1 数据丰富的链路页](docs/assets/ep51-flow-data-zh.png)
+
+*这张截图来自真实中文控制台验收：链路页同时展示目录探针、事实与经历规模、偏好/心智模型入口、用户记忆路线、情景判断、Agent 历史读取和最终回答汇聚；它不是静态架构示意，而是“候选—回执—送达—原文回读”可观察性的实际页面。*
+
+![EP5.1 回执详情](docs/assets/ep51-receipt-detail-zh.png)
+
+*点击节点后可以看到最低相关度、记忆平面、返回/排除数量、相关性分层、筛选原因和策略版本。这解决了“看见调用名称，却不知道具体返回了什么、为什么被过滤”的核心排障问题。*
 
 ## 一句话理解
 
@@ -206,8 +214,36 @@ cd ../console && npm ci
 cd .. && npm run dev
 ```
 
+### 一键本地部署
+
+在全新 macOS/Linux 脱敏发行包中，可以先用：
+
+```bash
+./scripts/install-ep51.sh --mode local --no-launch
+```
+
+脚本会执行版本预检、脱敏扫描、依赖检查、Console 生产构建，并写出本地
+启动清单。需要查看而不执行命令时使用 `--dry-run`；已经准备好依赖时使用
+`--skip-deps`；`--no-launch` 保证只构建、不自动启动 API/Console。Provider、
+数据库、外部 RAG、JEV、备份目录和语言选择仍由操作者在 `.env` 与网页配置
+中显式完成，脚本不会导入生产记忆或 API Key。
+
 发布前运行预检、脱敏检查、Python/TypeScript 测试、生产构建和浏览器视觉交互测试。公开仓库不包含 `~/.evolving-profile`、`~/.codex/sessions`、真实回执、缓存、个人 Bank 或 API Key。
 
 EP 能确认工具调用、候选返回、送达和原文回读，但在宿主没有答案采用回执时，不能声称知道 Agent 最终在回答中采用了哪条记忆。情景摘要、过程模式和 RAG 结果都不能替代原始证据。
+
+## 宿主适配现状
+
+EP 5.1 不是只绑定某一个聊天宿主，而是通过 MCP、Hook、Session 标准化和统一
+回执协议接入不同 Agent：
+
+| 宿主 | 5.1 当前适配 | 下一版本计划 |
+| --- | --- | --- |
+| Codex | 当前验证最充分；原生 MCP/Hook、用户/智能体路由、链路图和回执详情均已覆盖 | 增强原生答案采用回执和过程复核绑定 |
+| Claude Code | 可通过 transcript/Hook bridge 接入同一 Controller、Recall/Research 和写回链路 | 增强安装向导、transcript 生命周期和宿主诊断 |
+| Hermes | 可通过 OpenAI-compatible 服务/MCP 路线复用 Bank、Provider/Fallback、RAG/JEV 和审计契约 | 增加 Hermes 专用能力探针和一键配置 |
+
+这里的“高度适配”指共享核心契约、路由和存储可以复用；不同宿主对答案采用、
+原生回执和权限状态的可见程度仍可能不同，不能写成完全相同的行为。
 
 本次版本在 `release/5.0.0` 分支准备，已向上游 [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile) 提交 PR；发行分支位于 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)。GitHub PR、合并、Tag 和 Release 状态分别记录在 [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md)。作者署名、Hindsight 致谢和许可边界见 [`NOTICE.md`](NOTICE.md)。

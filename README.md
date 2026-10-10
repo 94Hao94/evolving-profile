@@ -316,6 +316,17 @@ MERGE -> Context Assembly / Agent Execution -> User Writeback + Agent Writeback
 
 Every node owns its receipt projection. The UI displays candidates discovered, results returned, content delivered, source readback count, answer-side use when independently observable, and an explicit `observed`, `not observed`, `unavailable`, or `pending refresh` state. Clicking a node opens the exact detail card and source IDs behind the number.
 
+![EP5.1 data-rich flow evidence](docs/assets/ep51-flow-data-zh.png)
+
+*A real localized console capture: the map exposes large indexed-memory counts,
+the route branches, and the evidence path. It is included as UI evidence, not as
+a synthetic benchmark or a claim that every prompt should call every route.*
+
+![EP5.1 receipt detail evidence](docs/assets/ep51-receipt-detail-zh.png)
+
+*The detail card makes relevance thresholds, returned/excluded counts, reasons,
+and policy version inspectable instead of hiding them behind a final answer.*
+
 This prevents the earlier failure mode where every child node displayed the same parent count. It also keeps a route that was not called visibly different from a route that was called and returned zero rows.
 
 ## User Memory
@@ -435,6 +446,33 @@ git diff --check
 ```
 
 The release gate also runs the relevant Python Host Adapter, Controller, Guidance, API, and topology contract tests. Browser validation covers loading, empty, error, fallback, click-detail, scroll, and narrow-viewport states. Exact results belong in the current release notes; historical test counts are not reused as current evidence.
+
+## Host compatibility
+
+EP is designed as a host-neutral memory control plane rather than a single-chat
+plugin. The current 5.1 package is highly compatible with:
+
+| Host | Current 5.1 path | What is shared | Next-version direction |
+| --- | --- | --- | --- |
+| Codex | Native MCP/Hook receipts and the Console flow page | User/Agent routes, source-bound packets, receipt projection, scenario summaries | Deeper host-side answer-use and native process-review binding |
+| Claude Code | Transcript/Hook bridge into the same controller and retention path | Session normalization, recall/research, source readback, agent-process routing | More native transcript lifecycle and setup diagnostics |
+| Hermes | OpenAI-compatible service/MCP route with shared state/config contracts | Bank, provider fallback, RAG/JEV switches, audit schema | First-class installer and capability probes for Hermes deployments |
+
+“Compatible” here means the shared contracts and adapters are available; it does
+not claim identical host receipts or identical answer-use visibility. Codex is
+the most deeply exercised host in 5.1. The next version will improve host
+onboarding, per-host diagnostics, and native receipt coverage for Claude Code and
+Hermes.
+
+## Why this README is structured this way
+
+The public documentation follows a practical open-source path: explain the pain
+first, show the system logic, give a real data-rich UI proof, then provide
+environment/deployment instructions, customization boundaries, migration,
+security, and known limits. That makes EP understandable to a new operator
+without exposing private prompts or pretending that a screenshot is a benchmark.
+The Chinese README replaces the diagrams and evidence screenshots with localized
+labels so the visual explanation matches the selected language.
 
 ## Privacy, compatibility, and limits
 

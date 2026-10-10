@@ -17,6 +17,7 @@
 - Native source review 使用独立非 HTTP provenance，未知模型身份不被伪造。
 - Agent Research 嵌套回执解包和节点计数投影保持父子独立。
 - 新增脱敏发行配图和 `scripts/install-ep51.sh` 一键本地部署入口。
+- 公开文档补充 Codex、Claude Code、Hermes 的适配现状与下一版本增强边界；中文 README 使用本地化图示和数据丰富链路/回执截图。
 
 ## 升级与回退
 

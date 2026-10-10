@@ -59,6 +59,17 @@ receipts, native source review, and source-to-state coverage.
 - Keeps JEV, external RAG, cloud backup, and provider credentials opt-in; the
   installer never enables or imports them automatically.
 
+### 5. Host compatibility and documentation
+
+- Documents current high compatibility with Codex, Claude Code, and Hermes
+  through shared MCP/Hook, transcript-normalization, controller, and receipt
+  contracts.
+- Makes Codex the most deeply exercised 5.1 host and explicitly marks Claude
+  Code/Hermes onboarding, native receipt, and capability-probe improvements as
+  next-version work rather than claiming identical behavior today.
+- Adds localized Chinese diagrams and data-rich Chinese console captures so the
+  visual explanation follows the selected README language.
+
 ## Compatibility and migration
 
 - EP 4.0/5.0 user-memory records, route aliases, L0/L1/L2 navigation, and
