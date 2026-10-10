@@ -246,4 +246,18 @@ EP 5.1 不是只绑定某一个聊天宿主，而是通过 MCP、Hook、Session 
 这里的“高度适配”指共享核心契约、路由和存储可以复用；不同宿主对答案采用、
 原生回执和权限状态的可见程度仍可能不同，不能写成完全相同的行为。
 
-本次版本在 `release/5.0.0` 分支准备，已向上游 [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile) 提交 PR；发行分支位于 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)。GitHub PR、合并、Tag 和 Release 状态分别记录在 [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md)。作者署名、Hindsight 致谢和许可边界见 [`NOTICE.md`](NOTICE.md)。
+本次版本在 `release/5.1.0` 分支准备，已向上游 [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile) 提交 [PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；个人发行分支位于 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)。GitHub PR、合并、Tag 和 Release 状态分别记录在 [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md)。作者署名、Hindsight 致谢和许可边界见 [`NOTICE.md`](NOTICE.md)。
+
+## 来源、个人仓库与作者说明
+
+这不是两个互不相关的实现，而是一条来源链：
+
+```text
+上游源码 → 个人 GitHub fork → release/5.1.0 → 向上游提交 PR #4
+94Hao94/evolving-profile    ccygod/evolving-profile-2.2
+```
+
+因此可以同时在个人 GitHub 仓库和上游仓库看到同一条 EP 5.1 来源线。个人
+仓库是你的长期发布和备份渠道；上游 PR 是向原项目贡献的协作渠道。`NOTICE.md`
+明确记录公开发行作者/维护者为 **CCY**。GitHub 账号、仓库拥有者、上游项目
+拥有者和本机 Git 提交身份属于不同的署名字段，不能为了“看起来一致”而混写。

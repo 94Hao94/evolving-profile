@@ -486,4 +486,19 @@ labels so the visual explanation matches the selected language.
 
 This package is prepared on the `release/5.1.0` contribution branch for the upstream [`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile), with the sanitized branch hosted in [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2). PR, merge, tag, and GitHub Release states are intentionally recorded separately in [`docs/RELEASE-LEDGER.md`](docs/RELEASE-LEDGER.md). The distribution author remains CCY; Hindsight and related research are acknowledged in [`NOTICE.md`](NOTICE.md) without implying that upstream projects are EP code contributors.
 
+### Source and authorship
+
+This is one source line, not two unrelated implementations:
+
+```text
+upstream source  →  personal fork  →  release/5.1.0  →  upstream PR #4
+94Hao94/evolving-profile    ccygod/evolving-profile-2.2
+```
+
+The personal fork is the user's GitHub distribution channel and contains the
+same EP 5.1 source line used for the upstream contribution. `NOTICE.md` records
+the public distribution author/maintainer as **CCY**. The GitHub account,
+repository owner, upstream project owner, and local Git commit identity are
+separate attribution fields; this README does not collapse them into one name.
+
 ---

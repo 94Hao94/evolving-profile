@@ -59,3 +59,10 @@
 - PR：[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)
 - Tag：未创建
 - GitHub Release：未创建
+
+## 来源与署名边界
+
+- 个人发行渠道：[`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)，分支 `release/5.1.0`。
+- 上游协作渠道：[`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile)，PR [#4](https://github.com/94Hao94/evolving-profile/pull/4)。
+- 两者来自同一 EP 5.1 发行分支；个人 fork 用于自有发布和备份，上游 PR 用于贡献协作。
+- `NOTICE.md` 的公开发行作者/维护者署名为 CCY；GitHub 账号、仓库拥有者、上游项目拥有者和本机 Git 提交身份不自动等同。

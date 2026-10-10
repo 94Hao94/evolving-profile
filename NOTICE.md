@@ -9,4 +9,7 @@ Preserve the upstream license and notices for any source component that is
 redistributed from an upstream project. This package does not include the
 publisher's private memory data, API credentials, or hosted service account.
 
-Author of this EP 5.1 distribution: CCY.
+Author and maintainer of this EP 5.1 distribution: CCY.
+The personal GitHub distribution is maintained in the `ccygod/evolving-profile-2.2`
+fork; the upstream project and its repository owner remain separate attribution
+categories.
