@@ -14,9 +14,10 @@ type Props = { nodes: TopologyNode[]; edges?: unknown[]; english?: boolean };
 type Anchor = { x: number; y: number; width: number; height: number };
 const W = 1672,
   H = 941,
-  STORAGE = "ep-topology-anchors-v7",
-  TEXT_STORAGE = "ep-topology-frame-text-v7",
-  DELETED_STORAGE = "ep-topology-frame-deleted-v7";
+  STORAGE = "ep-topology-anchors-v9",
+  TEXT_STORAGE = "ep-topology-frame-text-v9",
+  DELETED_STORAGE = "ep-topology-frame-deleted-v9",
+  LAYOUT_MARKER = "ep-topology-layout-v9";
 const POS: Record<string, [number, number, number, number]> = {
   prompt: [2.3, 8.7, 13.8, 8],
   binding: [18.9, 8.7, 12.7, 8],
@@ -175,11 +176,14 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     []
   );
   useEffect(()=>{
-    if(localStorage.getItem("ep-topology-layout-v8")) return;
-    const original=localStorage.getItem(STORAGE);
-    if(original) localStorage.setItem("ep-topology-anchors-v7-before-layout-v8",original);
-    localStorage.setItem(STORAGE,JSON.stringify(draft));
-    localStorage.setItem("ep-topology-layout-v8","1");
+    if(localStorage.getItem(LAYOUT_MARKER)) return;
+    const old=localStorage.getItem("ep-topology-anchors-v7") || localStorage.getItem("ep-topology-anchors-v8");
+    if(old) localStorage.setItem("ep-topology-anchors-before-layout-v9",old);
+    // v9 deliberately starts from the shipped canonical anchors. Older local
+    // layouts were calibrated against a previous bitmap and can shift labels
+    // away from the current background image.
+    localStorage.setItem(STORAGE,JSON.stringify(anchors));
+    localStorage.setItem(LAYOUT_MARKER,"topology-reference-design-v17:1672x941");
   },[]);
   const labels = useMemo(() => {
     const d = {
