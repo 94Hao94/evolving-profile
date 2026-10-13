@@ -27,6 +27,11 @@ describe("confirm a specific alert, never recover the underlying memory", () => 
     expect(functions.isOperationalLaneAcknowledged?.(lane, [{ ...issue, count: 2 }], [attempt], ack)).toBe(false);
     expect(functions.isOperationalLaneAcknowledged?.(lane, [issue, { ...issue, id: "operation:new", sourceId: "new" }], [attempt], ack)).toBe(false);
   });
+  it("re-alerts when a batch acquires a new failed child even if the parent and row count are unchanged", () => {
+    const batch: OperationalIncident = { ...issue, id: "operation:parent", sourceId: "parent", sourceIds: ["parent", "child-a"], taskRowCount: 2 };
+    const ack = functions.acknowledgeOperationalLane({}, lane, [batch], []);
+    expect(functions.isOperationalLaneAcknowledged(lane, [{ ...batch, sourceIds: ["parent", "child-b"] }], [], ack)).toBe(false);
+  });
   it("re-alerts on a new consolidation failure even if the aggregate count is still one", () => {
     const ack = functions.acknowledgeOperationalLane?.({}, lane, [issue], [attempt]);
     const retry = { ...attempt, requestIds: ["r1", "r2"], attemptCount: 2 };

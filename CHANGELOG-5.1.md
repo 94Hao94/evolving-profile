@@ -16,6 +16,18 @@ receipts, native source review, and source-to-state coverage.
 
 ### Background retention hotfix — 2026-10-13
 
+- Source-quote quality retries now receive a bounded, exact-source selector
+  catalog instead of repeating the same malformed draft request. Selectors bind
+  to the actual chunk hash, message role and offsets; paraphrased, stitched,
+  stale or forged quotes remain rejected. The existing retry limit is unchanged.
+- The runtime overview separates failed batches from child task rows using
+  explicit backend lineage, and shows selected-Bank quarantine counts separately
+  from the host-wide dispatcher receipt. Missing or stale evidence is not zero.
+  Brief map refreshes retain a fresh published-directory state without claiming
+  that unpublished semantic material has been verified.
+- Scoped quarantine reconciliation requires an actual completed operation and
+  an unchanged full-row snapshot. It cannot delete another Bank's records or
+  release failed/in-flight work merely because unrelated requests succeeded.
 - Source-linked messages now fragment within the explicit structured budget,
   so provenance envelopes larger than the normal prose target no longer make
   an otherwise valid message impossible to split. Role, original offsets,
@@ -134,6 +146,13 @@ evidence. Historical test counts are not reused as current results.
 ## 主要变化
 
 ### 2026-10-13 后台写入热修复
+
+进一步修复原文引用质量失败后重复同样输入的问题：有界重试可以选择与实际来源
+哈希、角色、位置绑定的原文片段，仍拒绝改写、拼接、过期或伪造引用，不增加重试
+上限。运行概览按后端明确父子关系区分失败批次和任务行，当前记忆库的隔离队列
+与整台主机的调度回执分开显示；缺失回执不显示为零。短暂地图刷新保留新鲜已发布
+目录的可用状态，但不把待整理内容当作已核验摘要。隔离恢复只对真实完成、且完整
+记录快照未变的原批次执行，不清空其他记忆库，不以无关成功掩盖未恢复失败。
 
 修复原文来源包大于普通分块目标时无法分片的问题，仍遵守结构化硬预算，保留
 角色、原文偏移、哈希、引用范围和每轮写入权限。失败重试耗尽或权限禁止的批次

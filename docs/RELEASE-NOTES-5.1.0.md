@@ -69,6 +69,49 @@
 
 ## 2026-10-13 retention hotfix / 后台写入热修复
 
+### Exact-quote recovery and overview follow-up
+
+Content-quality retries now provide deterministic, bounded exact-source quote
+selectors. A selector is accepted only when the current chunk, role, message
+index and source offsets match; quote rewriting and stitching remain invalid.
+The original exact-quote route still works, and partial catalog coverage does
+not imply that uncatalogued source text is absent. Retry count and concurrency
+settings are unchanged; the catalog adds bounded input only on an existing
+quality retry, not on every normal extraction.
+
+The overview uses explicit `parent_operation_id` evidence to group batch failures
+without guessing from text, time or document similarity. It exposes current-Bank
+queue metadata and host-global dispatcher freshness separately, keeps historical
+failures visible after recovery, and represents a brief refresh with a fresh
+published map as updating rather than a false outage. All ten locale catalogs
+include the new UI messages.
+
+Scoped local recovery requires a freshly read completed operation receipt plus
+unchanged full-row fingerprints. A concurrent source change, a wrong Bank or
+operation, or an incomplete snapshot blocks reconciliation. Only the matching
+completed rows are removed; new captures and other Banks are retained.
+
+Follow-up migration: upgrade the API/worker and Console together. Back up the
+queue and original failure receipts before retrying the original operation;
+after actual completion, reconcile only its unchanged quarantined snapshot.
+Do not reset local counters or overwrite the queue with an old backup. Rollback
+restores the prior code/build, not a stale queue over completed or new writes.
+
+Fresh follow-up verification (2026-10-13): Host/Guidance/Status/Controller **1203
+passed + 107 subtests**; scoped API extraction, attribution, retry, chunking and
+lineage projection **229 passed**; Console **78 files / 546 passed**; TypeScript,
+production/standalone build, release preflight and package scanning passed.
+Actual original-operation retries completed, with non-empty source memories,
+and scoped quarantine reconciliation completed. Chinese/English UI language
+switching, refresh, history expansion and a 390px viewport were checked on the
+deployed build. This is not a claim that every API integration test or every
+future provider response succeeds. The RC tag remains unchanged; the fix is
+distributed through the existing release branch and upstream PR.
+
+本次后续修复既解决引用重试的根因，也区分真实失败、隔离记录、主机调度状态和
+历史失败尝试。模型仍可能返回不合格引用或遇到超时；此时保持原文保护和失败隔离，
+不放松事实/来源核验。真实恢复、运行页面和发行包测试均已分别核对。
+
 Source envelopes are bounded by the configured structured cap instead of being
 clamped to the smaller prose chunk target. No source/authority fields are dropped.
 Terminal retry and policy failures are durably quarantined with raw content and

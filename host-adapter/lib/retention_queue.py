@@ -455,6 +455,36 @@ class RetentionQueue:
                 self._write(state)
             return changed
 
+    def reconcile_quarantined_completion(self, bank_id, operation_id, remote_receipt, expected_fingerprints):
+        """CAS recovery after a caller confirms the original remote operation.
+
+        The caller must obtain a fresh scoped API receipt and retain its recovery
+        audit. Never release a quarantine merely because a retry was accepted.
+        """
+        if (not bank_id or not operation_id or not isinstance(remote_receipt, dict)
+                or remote_receipt.get('status') != 'completed'
+                or remote_receipt.get('operation_id') != operation_id
+                or not isinstance(expected_fingerprints, dict) or not expected_fingerprints):
+            raise ValueError('quarantine_completion_receipt_required')
+        with self._locked():
+            state = self._read()
+            rows = [r for r in state['items'] if r.get('bank_id') == bank_id
+                    and isinstance(r.get('retention_quarantine'), dict)
+                    and r['retention_quarantine'].get('operation_id') == operation_id]
+            if not rows and not any(r.get('id') in expected_fingerprints for r in state['items']):
+                return 0  # Replaying an already reconciled completion is harmless.
+            if ({r['id'] for r in rows} != set(expected_fingerprints)
+                    or len(rows) != len(expected_fingerprints)
+                    or any(hashlib.sha256(json.dumps(r,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+                           != expected_fingerprints[r['id']] for r in rows)):
+                raise ValueError('quarantine_source_or_scope_changed')
+            state['items'] = [r for r in state['items'] if not (
+                r.get('bank_id') == bank_id and r.get('id') in expected_fingerprints
+                and isinstance(r.get('retention_quarantine'), dict)
+                and r['retention_quarantine'].get('operation_id') == operation_id)]
+            self._write(state)
+            return len(rows)
+
     def migrate_bank(self, old_bank_id: str, new_bank_id: str, requeue_submitted: bool = False):
         """Atomically move queued work and cursors to another bank."""
         if not old_bank_id or not new_bank_id or old_bank_id == new_bank_id:

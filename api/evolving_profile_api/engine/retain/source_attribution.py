@@ -67,6 +67,7 @@ def attribution_schema(prompt, response_schema, metadata):
             Field(description="Nonempty exact substring of one original message text, supporting this fact."),
         ),
         source_message_index=(int, Field(description="Zero-based index of the original message in this chunk.")),
+        source_quote_ref=(str | None, Field(default=None, description="Optional exact source selector from SOURCE_QUOTE_CATALOG. If selected, source_quote must be empty or exactly its text; keep its role and message index.")),
     )
     schema = create_model("SourceAttributedResponse", facts=(list[witness], ...))
     instruction = (
@@ -74,7 +75,10 @@ def attribution_schema(prompt, response_schema, metadata):
         "Use exact original message text, never nearby user prompts or assistant paraphrases. "
         "Assistant advice is an unconfirmed assistant proposal, never a user rule. "
         "Quoted or recalled old records are repetitions of their original evidence, not new user testimony. "
-        "If no original source witness supports a fact, omit it.\n"
+        "If no original source witness supports a fact, omit it. Return facts: [] when nothing qualifies. "
+        "Never insert ellipses, join nonadjacent spans, or rewrite a source_quote. "
+        "When a retry provides SOURCE_QUOTE_CATALOG, select its source_quote_ref and set source_quote to empty "
+        "instead of retyping; its source_role and source_message_index must still match.\n"
     )
     return prompt + instruction, schema
 
@@ -253,6 +257,43 @@ def iter_source_fragments(message, max_chars):
         start = json.loads(candidate)[0]["source_fragment"]["end"] - _fragment_origin(message)["start"]
 
 
+def source_quote_catalog(chunk):
+    """Bounded retry selectors bound to exact chunk bytes and author/span.
+
+    Selectors are transport aids, not facts. Keep quotation boundaries separate
+    so an old quote cannot inherit authority from adjacent user prose. Missing
+    entries retain the existing exact-quote route, never fuzzy matching.
+    """
+    digest = hashlib.sha256(chunk.encode()).hexdigest()
+    catalog = {"schema": "source-quote-catalog.v1", "chunk_sha256": digest,
+               "coverage": "partial", "entries": []}
+    for index, message in enumerate(source_messages(chunk)):
+        if message.get("role") not in ("user", "assistant"):
+            continue
+        text = _text(message)
+        origin = _fragment_origin(message)
+        points = {0, len(text)}
+        points.update(match.end() for match in re.finditer(r"\n", text))
+        for lower, upper in origin.get("quoted_ranges", []):
+            points.update((max(0, min(len(text), lower - origin["start"])),
+                           max(0, min(len(text), upper - origin["start"]))))
+        cuts = sorted(points)
+        for lower, upper in zip(cuts, cuts[1:]):
+            for start in range(lower, upper, 320):
+                end = min(start + 320, upper)
+                if not text[start:end].strip():
+                    continue
+                entry = {"id": f"{digest}:{index}:{start}:{end}",
+                         "source_message_index": index, "source_role": message["role"],
+                         "start": start, "end": end, "text": text[start:end]}
+                catalog["entries"].append(entry)
+                if len(catalog["entries"]) > 128 or len(json.dumps(catalog, ensure_ascii=False)) > 12000:
+                    catalog["entries"].pop()
+                    return catalog
+    catalog["coverage"] = "full"
+    return catalog
+
+
 def verify_attribution(chunk, raw_fact, metadata):
     """Return canonical text/type/metadata, or reject an unproved source alias."""
     if not requires_attribution(metadata):
@@ -267,12 +308,22 @@ def verify_attribution(chunk, raw_fact, metadata):
     text = _text(message)
     if role not in ("user", "assistant") or role != message.get("role"):
         raise ValueError("source_role_mismatch")
+    selector = raw_fact.get("source_quote_ref")
+    selected = None
+    if selector is not None:
+        if not isinstance(selector, str):
+            raise ValueError("source_quote_selector_invalid")
+        selected = next((e for e in source_quote_catalog(chunk)["entries"] if e["id"] == selector), None)
+        if (not selected or selected["source_message_index"] != index or selected["source_role"] != role
+                or quote not in ("", selected["text"])):
+            raise ValueError("source_quote_selector_invalid")
+        quote = selected["text"]
     if not isinstance(quote, str) or not quote.strip() or quote not in text:
         raise ValueError("source_quote_not_in_original_message")
     # A quote occurring more than once needs an unambiguous source span.
-    start = text.find(quote)
+    start = selected["start"] if selected else text.find(quote)
     if text.find(quote, start + 1) >= 0:
-        supplied_start = raw_fact.get("source_start")
+        supplied_start = selected["start"] if selected else raw_fact.get("source_start")
         if isinstance(supplied_start, int) and text[supplied_start : supplied_start + len(quote)] == quote:
             start = supplied_start
         else:
@@ -321,4 +372,7 @@ def verify_attribution(chunk, raw_fact, metadata):
     }
     if source_ids:
         witness_metadata["source_memory_ids"] = ",".join(source_ids)
+    if selected:
+        witness_metadata["source_quote_ref"] = selector
+        witness_metadata["source_quote_resolution"] = "exact_chunk_catalog_selector"
     return canonical, fact_type, witness_metadata

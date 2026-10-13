@@ -10,7 +10,8 @@ import { useBank } from "@/lib/bank-context";
 import { bankRoute } from "@/lib/bank-url";
 import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, CircleHelp, RefreshCw, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { AttemptGroup, OperationalIncident, OperationalLane, ScanCoverage } from "@/lib/operational-overview";
+import type { AttemptGroup, LocalRetentionEvidence, OperationalIncident, OperationalLane, ScanCoverage } from "@/lib/operational-overview";
+import { dispatcherHealth } from "@/lib/operational-overview";
 import { dismissOperationalDisplay, operationalDismissalStorageKey, parseOperationalDismissals, reconcileOperationalDismissals, visibleOperationalAttempts, visibleOperationalIncidents, type OperationalDismissals } from "@/lib/operational-overview";
 import { acknowledgeOperationalLane, isOperationalLaneAcknowledged, operationalAcknowledgementStorageKey, parseOperationalAcknowledgements, reconcileOperationalAcknowledgements, type OperationalAcknowledgements } from "@/lib/operational-overview";
 
@@ -22,7 +23,8 @@ type Overview = {
   lanes: OperationalLane[];
   incidents: OperationalIncident[];
   attemptHistory: AttemptGroup[];
-  pipeline: { state: "healthy" | "warning" | "critical" | "unknown"; failedMemories: number | null; pendingMemories: number | null; processingOperations?: number | null; queuedOperations?: number | null };
+  pipeline: { state: "healthy" | "warning" | "critical" | "unknown"; failedMemories: number | null; pendingMemories: number | null; processingOperations?: number | null; queuedOperations?: number | null;
+    failedBatches?: number | null; failedTaskRows?: number | null; localRetention?: LocalRetentionEvidence };
   scan: { llmFailures: ScanCoverage; llmFailureGroups: { total: number | null }; failedOperations: ScanCoverage; relatedSuccess: { coverage: string; returned?: number; total?: number } };
 };
 
@@ -30,14 +32,30 @@ export function OperationalEvidenceSummary({ scan, pipeline, showHistory=true, a
   const t = useTranslations("operationalEvidence");
   const locale = useLocale();
   const count = (value: number) => value.toLocaleString(locale);
+  const local = pipeline.localRetention;
   return <div className="space-y-3" data-testid="operational-evidence-summary">
     <div className={`rounded border p-3 ${TONES[acknowledged ? "unknown" : pipeline.state]}`}>
       <h3 className="text-sm font-semibold">{t("currentTitle")}</h3>
       {acknowledged && <p className="mt-1 text-xs">{locale.startsWith("zh") ? "本次提醒已确认，失败源记忆仍待恢复。" : "Alert acknowledged; failed source memories still need recovery."}</p>}
       <p className="mt-1 text-xs">{pipeline.failedMemories == null || pipeline.pendingMemories == null ? t("backlogUnavailable") : `${t("failedMemories", { count: count(pipeline.failedMemories) })} · ${t("pendingMemories", { count: count(pipeline.pendingMemories) })}`}</p>
       {pipeline.processingOperations != null && pipeline.queuedOperations != null && <p className="mt-1 text-xs">{t("activeOperations", { processing: count(pipeline.processingOperations), pending: count(pipeline.queuedOperations) })}</p>}
+      {pipeline.failedBatches !== undefined && <p className="mt-1 text-xs">{pipeline.failedBatches == null ? t("failedBatchCountUnavailable") : t("failedBatches", { count: count(pipeline.failedBatches) })}{pipeline.failedTaskRows != null ? ` · ${t("failedTaskRows", { count: count(pipeline.failedTaskRows) })}` : ""} · {t(scan.failedOperations.coverage)}</p>}
       <p className="mt-1 text-xs text-muted-foreground">{t("currentHelp")}</p>
     </div>
+    {local && <div className="space-y-2 rounded border border-border p-3 text-xs" data-testid="retention-queue-metadata">
+      <p className={`rounded border p-2 ${TONES[dispatcherHealth(local.dispatcher)]}`}><strong>{t("dispatcher")}</strong> · {t(local.dispatcher.status === "stale" ? "dispatcherStale" : local.dispatcher.status === "unavailable" ? "dispatcherUnavailable" : `dispatcherActivity.${local.dispatcher.activity}`)}{local.dispatcher.at ? ` · ${time(local.dispatcher.at, locale)}` : ""}</p>
+      <p className="text-muted-foreground">{t("dispatcherScope")}</p>
+      <p>{local.status === "unavailable" || local.quarantinedRecords == null ? t("queueUnavailable") : t("isolatedRecords", { count: count(local.quarantinedRecords) })}</p>
+      {local.status === "observed" && <>
+        <p>{t("queueCounts", { inflight: local.inflightRecords == null ? t("unknownCount") : count(local.inflightRecords), pending: local.pendingRecords == null ? t("unknownCount") : count(local.pendingRecords), held: local.heldRecords == null ? t("unknownCount") : count(local.heldRecords) })}</p>
+        {local.observedAt && <p className="text-muted-foreground">{t("queueObserved", { at: time(local.observedAt, locale) })}</p>}
+      </>}
+      <p className="text-muted-foreground">{t("quarantineHelp")}</p>
+      {local.quarantineBatches.length > 0 && <details>
+        <summary className="cursor-pointer font-medium">{t("queueBatchDetails")}</summary>
+        <dl className="mt-2 space-y-2">{local.quarantineBatches.map(batch => <div key={batch.operationId}><dt className="break-all font-mono">{batch.operationId}</dt><dd>{t("isolatedRecords", { count: count(batch.count) })}{batch.at ? ` · ${time(batch.at, locale)}` : ""}</dd></div>)}</dl>
+      </details>}
+    </div>}
     {showHistory && <div className="rounded border border-border p-3 text-xs">
       <h3 className="text-sm font-semibold">{t("historyTitle")}</h3>
       <p className="mt-1">{scan.llmFailures.total == null ? t("unknown") : t("attempts", { count: count(scan.llmFailures.total) })} · {t("inspected", { count: count(scan.llmFailures.returned) })} · {scan.llmFailureGroups.total == null ? t("unknown") : t("traceJobs", { count: count(scan.llmFailureGroups.total) })}</p>
@@ -137,12 +155,12 @@ export function OperationalLaneCard({ lane, incident, pipeline, acknowledged, on
   return <article data-testid={`operational-lane-${lane.id}`} data-alert-acknowledged={acknowledged} className={`min-h-36 rounded border-t-4 border-x border-b shadow-sm ${CARD_TONE[tone]}`}>
     <button type="button" onClick={onDetail} disabled={!incident} className="block w-full p-3 text-left disabled:cursor-default enabled:hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-primary">
       <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground"><span>{t(`lanes.${lane.id}`)}</span><Icon className={`h-4 w-4 ${TONES[tone].split(" ")[0]}`} /></div>
-      <div className={`mt-2 text-base font-bold ${TONES[tone].split(" ")[0]}`}>{acknowledged ? confirmedLabel : `${english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" })[lane.state] : LABELS[lane.state]}${lane.incidentCount > 0 ? ` · ${lane.incidentCount}` : ""}`}</div>
+      <div className={`mt-2 text-base font-bold ${TONES[tone].split(" ")[0]}`}>{acknowledged ? confirmedLabel : `${lane.summaryKey === "mapUpdating" ? t("updating") : english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" })[lane.state] : LABELS[lane.state]}${lane.incidentCount > 0 ? ` · ${lane.incidentCount}` : ""}`}</div>
       <div className="mt-1 text-xs font-medium leading-5 text-foreground">{incident ? incident.titleKey ? t(incident.titleKey, { count: incident.count ?? 0, operation: incident.operation ?? "" }) : operationalText(incident.title, english) : lane.summaryKey ? t(lane.summaryKey, { count: (lane.summaryCount ?? 0).toLocaleString(locale) }) : operationalText(lane.summary, english)}</div>
       <div className="mt-2 space-y-1.5 border-t border-current/15 pt-2">
         {lane.checks.map(check => <div key={`${lane.id}:${check.label}`} className="flex items-start gap-2 text-[11px] leading-4">
           <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${DOT_TONE[acknowledged && check.state !== "healthy" ? "unknown" : check.state]}`} />
-          <span className="min-w-0"><strong className="font-semibold">{operationalText(check.label, english)}</strong><span className="text-muted-foreground"> · {check.label === "Consolidation" ? pipeline.failedMemories == null || pipeline.pendingMemories == null ? t("backlogUnavailable") : `${t("failedMemories", { count: pipeline.failedMemories.toLocaleString(locale) })} · ${t("pendingMemories", { count: pipeline.pendingMemories.toLocaleString(locale) })}` : operationalText(check.detail, english)}</span></span>
+          <span className="min-w-0"><strong className="font-semibold">{check.labelKey ? t(check.labelKey) : operationalText(check.label, english)}</strong><span className="text-muted-foreground"> · {check.detailKey ? t(check.detailKey, { count: check.detailCount == null ? t("unknownCount") : check.detailCount.toLocaleString(locale) }) : check.label === "Consolidation" ? pipeline.failedMemories == null || pipeline.pendingMemories == null ? t("backlogUnavailable") : `${t("failedMemories", { count: pipeline.failedMemories.toLocaleString(locale) })} · ${t("pendingMemories", { count: pipeline.pendingMemories.toLocaleString(locale) })}` : operationalText(check.detail, english)}</span></span>
         </div>)}
       </div>
     </button>
@@ -311,7 +329,8 @@ export function OperationalOverview() {
           <DialogHeader><DialogTitle>{selected ? incidentTitle(selected) : ""}</DialogTitle><DialogDescription>{selected ? time(selected.at, locale) : ""}</DialogDescription></DialogHeader>
           {selected && <div className="space-y-3 text-sm">
             <p className="break-words leading-6">{incidentDetail(selected)}</p>
-            <dl className="grid grid-cols-[80px_1fr] gap-2 border-t border-border pt-3 text-xs"><dt className="text-muted-foreground">{inlineUiText("证据来源")}</dt><dd className="break-all">{selected.source}</dd><dt className="text-muted-foreground">{inlineUiText("记录 ID")}</dt><dd className="break-all font-mono">{selected.sourceId ?? inlineUiText("未提供")}</dd><dt className="text-muted-foreground">{inlineUiText("级别")}</dt><dd>{english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" } as Record<string, string>)[selected.severity] : LABELS[selected.severity]}</dd></dl>
+            {selected.sourceIds && selected.taskRowCount != null && <div className="space-y-1 text-xs"><p>{t("failedTaskRows", { count: selected.taskRowCount.toLocaleString(locale) })}</p>{selected.sourceIds.map(id => <p key={id} className="break-all font-mono">{id}</p>)}</div>}
+            <dl className="grid grid-cols-[80px_1fr] gap-2 border-t border-border pt-3 text-xs"><dt className="text-muted-foreground">{inlineUiText("证据来源")}</dt><dd className="break-all">{selected.sourceKey ? t(selected.sourceKey) : selected.source}</dd><dt className="text-muted-foreground">{inlineUiText("记录 ID")}</dt><dd className="break-all font-mono">{selected.sourceId ?? inlineUiText("未提供")}</dd><dt className="text-muted-foreground">{inlineUiText("级别")}</dt><dd>{english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" } as Record<string, string>)[selected.severity] : LABELS[selected.severity]}</dd></dl>
             <button type="button" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline" onClick={() => navigate(selected)}>{inlineUiText("查看对应页面")} <ArrowRight className="h-4 w-4" /></button>
           </div>}
         </DialogContent>

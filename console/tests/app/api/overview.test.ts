@@ -1,12 +1,53 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+const files = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/app/api/evolving-profile/runtime/route", () => ({ GET: async () => Response.json({ services: [] }) }));
 vi.mock("@/lib/evolving-client", () => ({ dataplaneBankUrl: (bank: string, path: string) => `http://bank/${bank}${path}`, getDataplaneHeaders: () => ({}) }));
-vi.mock("node:fs/promises", () => ({ readFile: async () => { throw new Error("missing"); } }));
+vi.mock("node:fs/promises", () => ({ readFile: async (path: string) => {
+  for (const [suffix, value] of files) if (path.endsWith(suffix)) return JSON.stringify(value);
+  throw Object.assign(new Error("missing"), { code: "ENOENT" });
+} }));
 import { GET } from "@/app/api/evolving-profile/overview/[bankId]/route";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); files.clear(); });
 
 describe("overview evidence route", () => {
+  it("projects explicit backend lineage and only selected-Bank queue metadata, keeping the global dispatcher separate", async () => {
+    const at = new Date(Date.now() - 1000).toISOString();
+    files.set("retention/worker-state.json", { status: "idle", at, queue_items: 999, quarantined_items: 999, retry_counts: { SECRET: 3 } });
+    files.set("codex/state/retention-queue.json", { version: 1, sessions: { PRIVATE: 3 }, items: [
+      { id: "q-a", bank_id: "bank-a", content: "PRIVATE SOURCE", session_id: "PRIVATE SESSION", retention_quarantine: { operation_id: "parent-a", at, reason: "retention_retry_exhausted:failed" }, retention_origin_hold: "held" },
+      { id: "q-other", bank_id: "other-bank", content: "OTHER PRIVATE SOURCE", retention_quarantine: { operation_id: "other-op", at } },
+    ] });
+    vi.stubGlobal("fetch", async (value: string) => {
+      const url = new URL(value);
+      if (url.pathname.endsWith("/stats")) return Response.json({ failed_consolidation: 0, pending_consolidation: 0 });
+      if (url.pathname.endsWith("/operations")) return Response.json({ total: 2, operations: url.searchParams.get("status") === "failed" ? [
+        { id: "parent-a", task_type: "batch_retain", status: "failed", created_at: at },
+        { id: "child-a", parent_operation_id: "parent-a", task_type: "retain", status: "failed", created_at: at, result_metadata: { content: "PRIVATE SOURCE" } },
+      ] : [] });
+      return Response.json({ items: [], total: 0 });
+    });
+    const body = await (await GET(new Request("http://console/overview/bank-a"), { params: Promise.resolve({ bankId: "bank-a" }) })).json();
+    expect(body.pipeline.failedBatches).toBe(1);
+    expect(body.pipeline.localRetention).toMatchObject({ status: "observed", quarantinedRecords: 1, inflightRecords: 0, pendingRecords: 0,
+      quarantineBatches: [{ operationId: "parent-a", count: 1, at }], dispatcher: { status: "observed", activity: "idle", at } });
+    expect(JSON.stringify(body)).not.toMatch(/PRIVATE|SECRET|other-op|other-bank|999|result_metadata/);
+  });
+
+  it("reports stale dispatcher receipts and malformed queue evidence explicitly without inventing zero counts", async () => {
+    files.set("retention/worker-state.json", { status: "idle", at: new Date(Date.now() - 600_000).toISOString() });
+    files.set("codex/state/retention-queue.json", { items: [{ bank_id: null, retention_quarantine: {} }] });
+    vi.stubGlobal("fetch", async (value: string) => new URL(value).pathname.endsWith("/operations") ? Response.json({ operations: [], total: 0 }) : Response.json({ items: [], total: 0 }));
+    const body = await (await GET(new Request("http://console/overview/bank-a"), { params: Promise.resolve({ bankId: "bank-a" }) })).json();
+    expect(body.pipeline.localRetention).toMatchObject({ status: "unavailable", quarantinedRecords: null, pendingRecords: null, dispatcher: { status: "stale", activity: "idle" } });
+  });
+  it("rejects malformed selected-Bank operation bindings instead of treating them as pending records", async () => {
+    files.set("codex/state/retention-queue.json", { items: [{ bank_id: "bank-a", operation_id: { content: "PRIVATE" } }] });
+    vi.stubGlobal("fetch", async () => Response.json({ operations: [], items: [], total: 0 }));
+    const body = await (await GET(new Request("http://console/overview/bank-a"), { params: Promise.resolve({ bankId: "bank-a" }) })).json();
+    expect(body.pipeline.localRetention.status).toBe("unavailable");
+    expect(body.pipeline.localRetention.inflightRecords).toBeNull();
+  });
   it("pages failures, reads exact run counts and bank backlog, and reconciles success by trace without returning prompts", async () => {
     const now = Date.now();
     const calls: URL[] = [];

@@ -23,6 +23,57 @@ describe("operational overview", () => {
   const failed = { id: "fail-1", trace_id: "run-a", scope: "consolidation", operation: "consolidation", status: "error", started_at: "2026-09-20T10:00:00Z", error: "ValidationError: deletes.0.observation_id Field required" };
   const success = { id: "success-1", trace_id: "run-a", scope: "consolidation", operation: "consolidation", status: "success", started_at: "2026-09-20T11:00:00Z" };
 
+  it("counts failed batches once using explicit lineage while preserving every failed task locator", () => {
+    const row = { task_type: "retain", status: "failed", created_at: "2026-09-20T11:00:00Z", error_message: "timeout" };
+    const view = buildOperationalOverview({ ...evidence, llm: { status: "observed", items: [] }, operations: { status: "observed", total: 4, items: [
+      { ...row, id: "parent-a", task_type: "batch_retain" }, { ...row, id: "child-a", parent_operation_id: "parent-a" },
+      { ...row, id: "parent-b", task_type: "batch_retain" }, { ...row, id: "child-b", parent_operation_id: "parent-b" },
+    ] } });
+    const failures = view.incidents.filter(issue => issue.id.startsWith("operation:"));
+    expect(failures).toHaveLength(2);
+    expect(failures.find(issue => issue.sourceId === "parent-a")).toMatchObject({ sourceIds: ["parent-a", "child-a"], taskRowCount: 2 });
+    expect(view.pipeline.failedBatches).toBe(2);
+    expect(view.scan.failedOperations).toMatchObject({ returned: 4, total: 4, coverage: "complete" });
+  });
+
+  it("does not deduplicate equal text or timestamps without backend lineage", () => {
+    const row = { task_type: "retain", status: "failed", created_at: "2026-09-20T11:00:00Z", error_message: "identical timeout" };
+    const view = buildOperationalOverview({ ...evidence, llm: { status: "observed", items: [] }, operations: { status: "observed", total: 2, items: [{ ...row, id: "a" }, { ...row, id: "b" }] } });
+    expect(view.pipeline.failedBatches).toBe(2);
+    expect(view.incidents.filter(issue => issue.id.startsWith("operation:"))).toHaveLength(2);
+  });
+
+  it("keeps healthy Bank counts from masking failed batches in the current summary", () => {
+    const view = buildOperationalOverview({ ...evidence, bankStats: { status: "observed", failed_consolidation: 0, pending_consolidation: 0 }, llm: { status: "observed", items: [success] },
+      operations: { status: "observed", total: 1, items: [{ id: "batch-failure", task_type: "batch_retain", status: "failed", created_at: "2026-09-20T11:00:00Z" }] } });
+    expect(view.pipeline.state).toBe("critical");
+  });
+
+  it("separates a fresh idle dispatcher from isolated unresolved retention failures", () => {
+    const view = buildOperationalOverview({ ...evidence, llm: { status: "observed", items: [success] },
+      operations: { status: "observed", total: 2, items: [
+        { id: "parent-a", task_type: "batch_retain", status: "failed", created_at: "2026-09-20T11:00:00Z" },
+        { id: "child-a", parent_operation_id: "parent-a", task_type: "retain", status: "failed", created_at: "2026-09-20T11:00:00Z" },
+      ] },
+      localRetention: { status: "observed", observedAt: "2026-09-20T12:00:00Z", quarantinedRecords: 18, inflightRecords: 0, heldRecords: 18, pendingRecords: 0,
+        quarantineBatches: [{ operationId: "parent-a", count: 18, at: "2026-09-20T11:01:00Z" }],
+        dispatcher: { status: "observed", activity: "idle", at: "2026-09-20T11:59:59Z" } },
+    });
+    expect(view.pipeline.localRetention.quarantinedRecords).toBe(18);
+    expect(view.incidents.find(issue => issue.sourceId === "parent-a")?.severity).toBe("warning");
+    expect(view.lanes.find(lane => lane.id === "retention")?.checks.find(check => check.labelKey === "dispatcher")).toMatchObject({ state: "healthy", detailKey: "dispatcherActivity.idle" });
+    expect(view.lanes.find(lane => lane.id === "retention")?.state).toBe("warning");
+  });
+
+  it("reports a brief refresh using a recent successful map receipt as updating", () => {
+    const view = buildOperationalOverview({ ...evidence, llm: { status: "observed", items: [] }, map: { status: "refreshing", checked_at: "2026-09-20T11:59:59Z", last_success_at: "2026-09-20T11:59:00Z" } });
+    expect(view.lanes.find(lane => lane.id === "map")).toMatchObject({ summaryKey: "mapUpdating" });
+    expect(view.incidents.some(issue => issue.id === "map:refresh")).toBe(false);
+    expect(view.sourceCoverage.map).toBe("refreshing");
+    const stale = buildOperationalOverview({ ...evidence, llm: { status: "observed", items: [] }, map: { status: "refreshing", checked_at: "2026-09-20T11:59:59Z", last_success_at: "2026-09-20T11:50:00Z" } });
+    expect(stale.incidents.some(issue => issue.id === "map:refresh")).toBe(true);
+  });
+
   it("groups failed attempts by trace and class, preserves locators and exact sample coverage", () => {
     const view = buildOperationalOverview({ ...evidence, llm: { status: "observed", total: 190, groupTotal: 41, items: [failed, { ...failed, id: "fail-2" }, success] } });
     expect(view.attemptHistory).toHaveLength(1);

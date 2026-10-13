@@ -3358,6 +3358,10 @@ class OperationResponse(BaseModel):
 
     id: str
     task_type: str
+    parent_operation_id: str | None = Field(
+        default=None,
+        description="Explicit backend parent batch operation ID; null for independent or parent operations.",
+    )
     items_count: int
     document_id: str | None = None
     filename: str | None = Field(

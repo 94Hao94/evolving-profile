@@ -37,6 +37,7 @@ from .source_attribution import (
     is_source_message,
     iter_source_fragments,
     requires_attribution,
+    source_quote_catalog,
     validate_write_policy,
     verbatim_witnesses,
     verify_attribution,
@@ -1563,6 +1564,7 @@ async def _extract_facts_from_chunk(
     last_error: Exception | None = None
 
     usage = TokenUsage()  # Track cumulative usage across retries
+    original_user_message = user_message
     for attempt in range(outer_attempts):
         try:
             initial_backoff = (
@@ -1838,6 +1840,20 @@ async def _extract_facts_from_chunk(
                 logger.warning(
                     f"Got {len(raw_facts) - len(chunk_facts)} malformed facts out of {len(raw_facts)} on attempt {attempt + 1}/{outer_attempts}. Retrying..."
                 )
+                if requires_attribution(metadata):
+                    # Change the failed attempt's input, not its validation.
+                    # Exact selectors avoid repeatedly paraphrased/stitched
+                    # quotes; the same verifier still enforces author and scope.
+                    catalog = source_quote_catalog(chunk)
+                    user_message = original_user_message + (
+                        "\nSource validation rejected candidates from the previous attempt. "
+                        "Reconsider them against the original source. Do not repeat invalid quotes. "
+                        "For an eligible fact you may select source_quote_ref from the catalog, "
+                        "set source_quote to empty, and copy its source_role/source_message_index. "
+                        "Return facts: [] if no meaningful fact has an original witness. "
+                        "Partial catalog is not complete source coverage; original Text remains above.\n"
+                        "SOURCE_QUOTE_CATALOG\n" + json.dumps(catalog, ensure_ascii=False)
+                    )
                 continue
 
             # Every fact the model returned was unusable, on every attempt. Raise

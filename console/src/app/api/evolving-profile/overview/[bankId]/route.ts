@@ -1,7 +1,7 @@
-import { epStatePath, EP_STATE_ROOT, EP_API_ENV, EP_HOST_SESSIONS } from "@/lib/ep-state-paths";
+import { epStatePath, EP_STATE_ROOT } from "@/lib/ep-state-paths";
 import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
-import { buildOperationalOverview, type LlmEvidence } from "@/lib/operational-overview";
+import { buildOperationalOverview, type DispatcherActivity, type LocalRetentionEvidence, type LlmEvidence, type OperationEvidence } from "@/lib/operational-overview";
 import { dataplaneBankUrl, getDataplaneHeaders } from "@/lib/evolving-client";
 import { GET as getRuntime } from "@/app/api/evolving-profile/runtime/route";
 
@@ -22,7 +22,8 @@ async function bankRows(bankId: string, path: string, key: "items" | "operations
       id: row.id, operation: row.operation, scope: row.scope, trace_id: row.trace_id,
       status: row.status, started_at: row.started_at, error: row.error,
       finish_reason: (row.llm_info as Record<string, unknown> | undefined)?.finish_reason,
-    } : { id: row.id, task_type: row.task_type, status: row.status, created_at: row.created_at, error_message: row.error_message });
+    } : { id: row.id, task_type: row.task_type, status: row.status, created_at: row.created_at, error_message: row.error_message,
+      parent_operation_id: typeof row.parent_operation_id === "string" && row.parent_operation_id ? row.parent_operation_id : null });
     return { status: "observed", items, total: typeof body.total === "number" && body.total >= 0 ? body.total : null };
   } catch { return { status: "unavailable" as const, items: [], total: null }; }
 }
@@ -89,6 +90,66 @@ async function mapStatus() {
   catch { return { status: "unknown" }; }
 }
 
+async function localRetentionStatus(bankId: string, now: number): Promise<LocalRetentionEvidence> {
+  const empty: LocalRetentionEvidence = { status: "unavailable", observedAt: null, quarantinedRecords: null, inflightRecords: null, heldRecords: null, pendingRecords: null,
+    quarantineBatches: [], dispatcher: { status: "unavailable", activity: "unknown", at: null } };
+  const activity: Record<string, DispatcherActivity> = { idle: "idle", processing: "processing", submitting: "submitting", submitted: "processing", recovered_acknowledgement: "processing",
+    retry_requested: "retrying", retry_pending: "retrying", retry_quarantined: "isolated", retry_policy_held: "isolated", intent_policy_held: "isolated", disabled: "disabled",
+    worker_error: "error", status_unavailable: "error", retry_unavailable: "error", acknowledgement_conflict: "error", intent_conflict: "error" };
+  const [queue, dispatcher] = await Promise.all([
+    (async () => {
+      try {
+        // Configuration is read solely to resolve the same local queue as the worker.
+        let queuePath = epStatePath("codex/state/retention-queue.json");
+        for (const configPath of [epStatePath("codex/settings.json"), epStatePath("codex.json")]) {
+          try {
+            const config = JSON.parse(await readFile(configPath, "utf8"));
+            if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("invalid_config");
+            if (config.retainQueuePath != null) {
+              if (typeof config.retainQueuePath !== "string" || !config.retainQueuePath.trim()) throw new Error("invalid_queue_path");
+              queuePath = config.retainQueuePath;
+            }
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        }
+        const body = JSON.parse(await readFile(queuePath, "utf8"));
+        if (!Array.isArray(body.items) || body.items.some((row: unknown) => !row || typeof row !== "object" || Array.isArray(row) || typeof (row as Record<string, unknown>).bank_id !== "string" || !(row as Record<string, unknown>).bank_id)) throw new Error("invalid_queue");
+        const rows = body.items.filter((row: Record<string, unknown>) => row.bank_id === bankId);
+        const batches = new Map<string, { operationId: string; count: number; at: string | null }>();
+        let quarantinedRecords = 0, inflightRecords = 0, heldRecords = 0, pendingRecords = 0;
+        for (const row of rows) {
+          if (row.operation_id != null && (typeof row.operation_id !== "string" || !row.operation_id)) throw new Error("invalid_operation_binding");
+          if (row.retention_origin_hold != null && typeof row.retention_origin_hold !== "string") throw new Error("invalid_origin_hold");
+          if (row.retention_quarantine) {
+            const hold = row.retention_quarantine;
+            if (typeof hold !== "object" || Array.isArray(hold) || typeof hold.operation_id !== "string" || !hold.operation_id) throw new Error("invalid_quarantine");
+            quarantinedRecords++;
+            const at = typeof hold.at === "string" && Number.isFinite(Date.parse(hold.at)) ? hold.at : null;
+            const batch = batches.get(hold.operation_id) ?? { operationId: hold.operation_id, count: 0, at };
+            batch.count++;
+            if (at && (!batch.at || Date.parse(at) > Date.parse(batch.at))) batch.at = at;
+            batches.set(hold.operation_id, batch);
+          }
+          if (row.operation_id) inflightRecords++;
+          if (row.retention_origin_hold) heldRecords++;
+          if (!row.operation_id && !row.retention_origin_hold && !row.retention_quarantine) pendingRecords++;
+        }
+        return { status: "observed" as const, observedAt: new Date(now).toISOString(), quarantinedRecords, inflightRecords, heldRecords, pendingRecords, quarantineBatches: [...batches.values()] };
+      } catch { return empty; }
+    })(),
+    (async (): Promise<LocalRetentionEvidence["dispatcher"]> => {
+      try {
+        const row = JSON.parse(await readFile(epStatePath("retention/worker-state.json"), "utf8"));
+        const at = typeof row.at === "string" ? row.at : null;
+        const age = now - Date.parse(at ?? "");
+        if (!Number.isFinite(age) || age < 0) return empty.dispatcher;
+        // The receipt describes the host worker, never per-Bank queue counts.
+        return { status: age > 180_000 ? "stale" : "observed", activity: activity[row.status] ?? "unknown", at };
+      } catch { return empty.dispatcher; }
+    })(),
+  ]);
+  return { ...queue, dispatcher };
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ bankId: string }> }) {
   const { bankId } = await params;
   if (!bankId) return NextResponse.json({ error: "bank_id is required" }, { status: 400 });
@@ -96,7 +157,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
   const start = new Date(now - 24 * 60 * 60 * 1000).toISOString();
   const end = new Date(now + 1).toISOString();
   const failurePath = `/llm-requests?status=error&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`;
-  const [runtimeResponse, llmFailures, failureGroups, latestRequest, failedOps, recentRetain, stats, events, map] = await Promise.all([
+  const [runtimeResponse, llmFailures, failureGroups, latestRequest, failedOps, recentRetain, stats, events, map, localRetention] = await Promise.all([
     getRuntime(),
     pages(bankId, failurePath, "items"),
     bankRows(bankId, `${failurePath}&group=true&count_only=true&limit=1`, "items"),
@@ -104,7 +165,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
     pages(bankId, "/operations?status=failed", "operations"),
     bankRows(bankId, "/operations?type=retain&status=completed&limit=1", "operations"),
     bankStats(bankId),
-    backupEvents(), mapStatus(),
+    backupEvents(), mapStatus(), localRetentionStatus(bankId, now),
   ]);
   const runtime = await runtimeResponse.json();
   const related = await relatedSuccesses(bankId, llmFailures.items, start, end);
@@ -112,8 +173,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
     items: [...llmFailures.items, ...latestRequest.items, ...related.items] as LlmEvidence[], total: llmFailures.total, groupTotal: failureGroups.total,
     relatedSuccessStatus: related.status, relatedTracesChecked: related.checked };
   const operations = { status: failedOps.status === "observed" && recentRetain.status === "observed" ? "observed" as const : "unavailable" as const,
-    items: [...failedOps.items, ...recentRetain.items] as Array<{ id: string; task_type: string; status: string; created_at: string; error_message?: string | null }>, total: failedOps.total, returned: failedOps.items.length };
-  const result = buildOperationalOverview({ now, runtime, backupEvents: events, llm, operations, bankStats: stats, map });
+    items: [...failedOps.items, ...recentRetain.items] as OperationEvidence[], total: failedOps.total, returned: failedOps.items.length };
+  const result = buildOperationalOverview({ now, runtime, backupEvents: events, llm, operations, bankStats: stats, map, localRetention });
   return NextResponse.json({ ...result, bankId },
     { headers: { "Cache-Control": "no-store" } });
 }

@@ -7,7 +7,10 @@ export type OperationalIncident = {
   detail: string;
   at: string | null;
   source: string;
+  sourceKey?: string;
   sourceId?: string;
+  sourceIds?: string[];
+  taskRowCount?: number;
   action: "runtime" | "operations" | "llm-requests" | "flow";
   titleKey?: string;
   detailKey?: string;
@@ -33,7 +36,16 @@ export type OperationalLane = {
   detail: string;
   lastObservedAt: string | null;
   incidentCount: number;
-  checks: Array<{ label: string; state: HealthState; detail: string; at: string | null }>;
+  checks: Array<{ label: string; labelKey?: string; state: HealthState; detail: string; detailKey?: string; detailCount?: number; at: string | null }>;
+};
+
+export type OperationEvidence = { id: string; task_type: string; status: string; created_at: string; error_message?: string | null; parent_operation_id?: string | null };
+export type DispatcherActivity = "idle" | "processing" | "submitting" | "retrying" | "isolated" | "disabled" | "error" | "unknown";
+export type LocalRetentionEvidence = {
+  status: "observed" | "unavailable"; observedAt: string | null;
+  quarantinedRecords: number | null; inflightRecords: number | null; heldRecords: number | null; pendingRecords: number | null;
+  quarantineBatches: Array<{ operationId: string; count: number; at: string | null }>;
+  dispatcher: { status: "observed" | "stale" | "unavailable"; activity: DispatcherActivity; at: string | null };
 };
 
 export type OperationalDismissals = Record<string, { kind: "state" | "receipt" | "attempt"; category?: OperationalIncident["category"]; clearedAt: number }>;
@@ -42,8 +54,10 @@ const receiptIncident = (row: OperationalIncident) => /^(operation:|model:|backu
 // Poll timestamps for stateful checks are not new incidents. Receipt identity
 // and substantive state changes are; hiding must never change health evidence.
 function incidentDisplayKey(row: OperationalIncident) {
-  return JSON.stringify(["issue",row.id,row.category,row.severity,row.sourceId??null,row.count??null,row.operation??null,
-    row.titleKey??row.title,row.detailKey??row.detail,receiptIncident(row)?row.at:null]);
+  const key = ["issue",row.id,row.category,row.severity,row.sourceId??null,row.count??null,row.operation??null,
+    row.titleKey??row.title,row.detailKey??row.detail,receiptIncident(row)?row.at:null];
+  // Preserve existing display keys for sources without batch lineage.
+  return JSON.stringify(row.sourceIds ? [...key,[...row.sourceIds].sort(),row.taskRowCount??null] : key);
 }
 function attemptDisplayKey(row: AttemptGroup) {
   return JSON.stringify(["attempt",row.traceId??row.id,row.operation,row.scope,row.errorClass,[...row.requestIds].sort()]);
@@ -135,7 +149,8 @@ type Input = {
   };
   backupEvents: Array<{ at: string; status: string; code: string; detail: string }>;
   llm: { status: "observed" | "unavailable"; currentStatus?: "observed" | "unavailable"; items: LlmEvidence[]; total?: number | null; groupTotal?: number | null; relatedSuccessStatus?: "observed" | "partial" | "unavailable"; relatedTracesChecked?: string[] };
-  operations: { status: "observed" | "unavailable"; items: Array<{ id: string; task_type: string; status: string; created_at: string; error_message?: string | null }>; total?: number | null; returned?: number };
+  operations: { status: "observed" | "unavailable"; items: OperationEvidence[]; total?: number | null; returned?: number };
+  localRetention?: LocalRetentionEvidence;
   bankStats?: { status: "observed" | "unavailable"; failed_consolidation?: number; pending_consolidation?: number; operations_by_status?: Record<string, number> };
   map: { status: string; checked_at?: string; error_type?: string; last_success_at?: string; stale_after_seconds?: number; semantic_status?: string; semantic_worker_status?: string; semantic_error_type?: string };
 };
@@ -196,9 +211,35 @@ function bytes(value: number | null | undefined) {
   return `${value} B`;
 }
 
+// Only an explicit backend link establishes batch identity. Similar error text,
+// timestamps or document IDs are never evidence that operations share a batch.
+function failedOperationBatches(rows: OperationEvidence[], now: number) {
+  const parents = new Map(rows.filter(row => row.parent_operation_id).map(row => [row.id, row.parent_operation_id!]));
+  const groups = new Map<string, OperationEvidence[]>();
+  for (const row of rows.filter(row => row.status === "failed" && recent(row.created_at, now))) {
+    let root = row.id;
+    const visited = new Set<string>();
+    while (parents.has(root) && !visited.has(root)) { visited.add(root); root = parents.get(root)!; }
+    // Malformed cyclic lineage must not merge independent failures.
+    if (visited.has(root)) root = row.id;
+    const group = groups.get(root) ?? [];
+    if (!group.some(item => item.id === row.id)) group.push(row);
+    groups.set(root, group);
+  }
+  return groups;
+}
+
+const missingLocalRetention: LocalRetentionEvidence = { status: "unavailable", observedAt: null, quarantinedRecords: null, inflightRecords: null, heldRecords: null, pendingRecords: null, quarantineBatches: [], dispatcher: { status: "unavailable", activity: "unknown", at: null } };
+export function dispatcherHealth(dispatcher: LocalRetentionEvidence["dispatcher"]): HealthState {
+  if (dispatcher.status !== "observed" || dispatcher.activity === "unknown") return "unknown";
+  return ["error", "disabled", "retrying"].includes(dispatcher.activity) ? "warning" : "healthy";
+}
+
 export function buildOperationalOverview(input: Input) {
   const { now, runtime } = input;
   const incidents: OperationalIncident[] = [];
+  const localRetention = input.localRetention ?? missingLocalRetention;
+  const failedBatches = failedOperationBatches(input.operations.items, now);
   const history = attemptGroups(input);
   const latestLlm = (input.llm.currentStatus ?? input.llm.status) === "observed" ? [...input.llm.items].filter((row) => recent(row.started_at, now)).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0] : undefined;
   const failedMemories = input.bankStats?.status === "observed" ? input.bankStats.failed_consolidation ?? null : null;
@@ -226,14 +267,21 @@ export function buildOperationalOverview(input: Input) {
     add({ id: `model:${latestLlm.id}`, category: "model", severity: code === "authentication" ? "critical" : "warning", title: `最近模型请求失败 · ${code}`, titleKey: "latestFailure", detailKey: `advice.${code}`, detail: `错误类别：${code}。请查看相应请求诊断；历史失败尝试不等于当前连接不可用。`, at: latestLlm.started_at, source: "模型请求回执", sourceId: latestLlm.id, action: "llm-requests" });
   }
   if (failedMemories != null && failedMemories > 0) add({ id: "retention:failed-memories", category: "retention", severity: "critical", title: `当前 ${failedMemories} 条源记忆加工失败`, titleKey: "failedMemories", count: failedMemories, detailKey: "failedMemoryHelp", detail: "Bank 当前失败源记忆仍需恢复；其他请求成功不会清除这些失败。", at: null, source: "Bank /stats", action: "operations" });
-  for (const operation of input.operations.items.filter((row) => recent(row.created_at, now) && row.status === "failed")) {
+  for (const [batchId, rows] of failedBatches) {
+    const operation = rows.find(row => row.id === batchId) ?? rows[0];
     const isRetain = /retain/i.test(operation.task_type);
     const code = classifyOperationalError(operation.error_message);
-    add({ id: `operation:${operation.id}`, category: "retention", severity: isRetain ? "critical" : "warning", title: `${operation.task_type} 操作失败`, titleKey: "operationFailed", operation: operation.task_type, detail: `错误类别：${code}；请打开操作详情核对`, detailKey: `advice.${code}`, at: operation.created_at, source: "Bank 操作回执", sourceId: operation.id, action: "operations" });
+    const isolated = localRetention.status === "observed" && localRetention.quarantineBatches.some(batch => batch.operationId === batchId && batch.count > 0);
+    add({ id: `operation:${batchId}`, category: "retention", severity: isRetain && !isolated ? "critical" : "warning", title: `${operation.task_type} 批次失败`, titleKey: isRetain ? "failedBatch" : "operationFailed", operation: operation.task_type, detail: `错误类别：${code}；请打开操作详情核对`, detailKey: `advice.${code}`, at: operation.created_at, source: "Bank 操作回执", sourceKey: "bankOperationReceipt", sourceId: batchId, sourceIds: rows.map(row => row.id), taskRowCount: rows.length, action: "operations" });
   }
+  const unmatchedQuarantine = localRetention.quarantineBatches.filter(batch => !failedBatches.has(batch.operationId));
+  if (localRetention.status === "observed" && (localRetention.quarantinedRecords ?? 0) > 0 && (!failedBatches.size || unmatchedQuarantine.length))
+    add({ id: "retention:quarantine", category: "retention", severity: "warning", title: "已隔离的保留记录仍待恢复", titleKey: "quarantineTitle", detail: "队列原始记录保留；隔离失败不会自动清除。", detailKey: "quarantineHelp", count: localRetention.quarantinedRecords!, at: localRetention.observedAt, source: "本机队列元数据", sourceKey: "queueMetadataReceipt", sourceIds: unmatchedQuarantine.map(batch => batch.operationId), action: "operations" });
   const mapAge = now - Date.parse(input.map.checked_at ?? "");
   const mapStale = Number.isFinite(mapAge) && mapAge > (input.map.stale_after_seconds ?? 180) * 1000;
-  if (input.map.status !== "ready" || mapStale) {
+  const lastMapSuccessAge = now - Date.parse(input.map.last_success_at ?? "");
+  const mapUpdating = input.map.status === "refreshing" && !mapStale && Number.isFinite(lastMapSuccessAge) && lastMapSuccessAge >= 0 && lastMapSuccessAge <= (input.map.stale_after_seconds ?? 180) * 1000;
+  if ((input.map.status !== "ready" && !mapUpdating) || mapStale) {
     add({ id: "map:refresh", category: "map", severity: input.map.status === "failed" ? "warning" : "unknown", title: "记忆地图更新未确认", detail: `状态 ${mapStale ? "核对过期" : input.map.status}${input.map.error_type ? ` · ${input.map.error_type}` : ""}；旧地图不能用来排除新资料`, at: input.map.checked_at ?? null, source: "地图更新回执", action: "flow" });
   }
   if (input.map.semantic_status && !["ready", "fresh_with_pending_changes"].includes(input.map.semantic_status)) {
@@ -250,7 +298,7 @@ export function buildOperationalOverview(input: Input) {
     { id: "backup", label: "备份与恢复", observed: Boolean(backup), at: backupAt, ok: "最近备份已核验", unknown: "备份状态未核验" },
     { id: "model", label: "模型与 API Key", observed: (input.llm.currentStatus ?? input.llm.status) === "observed" && latestLlm?.status === "success", at: latestLlm?.started_at ?? null, ok: "最近模型调用成功", unknown: runtime.model?.apiKey ? "已配置密钥，近期连通性未核验" : "密钥未配置或连通性未核验" },
     { id: "retention", label: "记忆保留", observed: input.operations.status === "observed" && input.operations.items.some((row) => /retain/i.test(row.task_type) && row.status === "completed" && recent(row.created_at, now)), at: input.operations.items[0]?.created_at ?? null, ok: "最近保留已完成", unknown: "近期保留回执未核验" },
-    { id: "map", label: "地图更新", observed: input.map.status === "ready" && !mapStale && recent(input.map.checked_at, now), at: input.map.checked_at ?? null, ok: "源版本已核对", unknown: "目录同步状态未核验" },
+    { id: "map", label: "地图更新", observed: mapUpdating || input.map.status === "ready" && !mapStale && recent(input.map.checked_at, now), at: input.map.checked_at ?? null, ok: "源版本已核对", unknown: "目录同步状态未核验" },
     { id: "service", label: "本机服务", observed: Boolean(runtime.services?.length), at: null, ok: "已探测服务在线", unknown: "服务状态未探测" },
   ];
   const successLlm = latestLlm?.status === "success" ? latestLlm : undefined;
@@ -268,10 +316,15 @@ export function buildOperationalOverview(input: Input) {
       detail: successLlm ? `最近成功 ${compactTime(successLlm.started_at)} · ${successLlm.operation}` : runtime.model?.apiKey ? "API Key 已配置，近期调用未核验" : "API Key 未配置" }],
     retention: [{ label: "Retain", state: successRetain ? "healthy" : input.operations.status === "observed" ? "warning" : "unknown", at: successRetain?.created_at ?? null,
       detail: successRetain ? `最近完成 ${compactTime(successRetain.created_at)} · ${successRetain.id.slice(0, 12)}` : "最近 24 小时未找到完成回执" }, ...(input.bankStats ? [{ label: "Consolidation", state: pipelineState, at: null,
-      detail: failedMemories == null || pendingMemories == null ? "当前源记忆统计不可用" : `失败 ${failedMemories} 条 · 待处理 ${pendingMemories} 条` }] : [])],
+      detail: failedMemories == null || pendingMemories == null ? "当前源记忆统计不可用" : `失败 ${failedMemories} 条 · 待处理 ${pendingMemories} 条` }] : []), ...(input.localRetention ? [
+      { label: "本机调度器", labelKey: "dispatcher", state: dispatcherHealth(localRetention.dispatcher), at: localRetention.dispatcher.at,
+        detail: "本机调度器回执", detailKey: localRetention.dispatcher.status === "stale" ? "dispatcherStale" : localRetention.dispatcher.status === "unavailable" ? "dispatcherUnavailable" : `dispatcherActivity.${localRetention.dispatcher.activity}` },
+      { label: "隔离队列", labelKey: "queueIsolation", state: localRetention.status === "unavailable" ? "unknown" as const : (localRetention.quarantinedRecords ?? 0) > 0 ? "warning" as const : "healthy" as const, at: localRetention.observedAt,
+        detail: "当前 Bank 队列元数据", detailKey: localRetention.status === "unavailable" ? "queueUnavailable" : "isolatedRecords", detailCount: localRetention.quarantinedRecords ?? undefined },
+    ] : [])],
     map: [
-      { label: "结构目录", state: input.map.status === "ready" && !mapStale ? "healthy" : input.map.status === "failed" ? "warning" : "unknown", at: input.map.checked_at ?? null,
-        detail: input.map.status === "ready" && !mapStale ? `最近核对 ${compactTime(input.map.checked_at)}` : mapStale ? "核对超过 3 分钟" : `状态 ${input.map.status}` },
+      { label: "结构目录", state: mapUpdating || input.map.status === "ready" && !mapStale ? "healthy" : input.map.status === "failed" ? "warning" : "unknown", at: input.map.checked_at ?? null,
+        ...(mapUpdating ? { detailKey: "mapUpdating" } : {}), detail: mapUpdating ? "更新中；最近已发布目录仍可用" : input.map.status === "ready" && !mapStale ? `最近核对 ${compactTime(input.map.checked_at)}` : mapStale ? "核对超过 3 分钟" : `状态 ${input.map.status}` },
       { label: "语义目录", state: input.map.semantic_worker_status === "failed" ? "warning" : ["ready", "fresh_with_pending_changes"].includes(input.map.semantic_status || "") ? "healthy" : "unknown", at: input.map.checked_at ?? null,
         detail: input.map.semantic_worker_status === "failed" ? `本轮未发布 · ${input.map.semantic_error_type || "质量检查未通过"}` : input.map.semantic_status === "fresh_with_pending_changes" ? "已发布版本可用 · 新增资料排队整理" : input.map.semantic_status === "ready" ? "已覆盖当前源版本" : "尚未发布有效摘要" },
     ],
@@ -283,6 +336,7 @@ export function buildOperationalOverview(input: Input) {
     const state: HealthState = own.length ? maxState(own.map((row) => row.severity)) : itemChecks.length ? maxState(itemChecks.map((row) => row.state)) : spec.observed ? "healthy" : "unknown";
     const pending = spec.id === "retention" && !own.length && pendingMemories != null && pendingMemories > 0;
     return { id: spec.id, label: spec.label, state, summary: own[0]?.title || (pending ? `待处理 ${pendingMemories} 条源记忆` : state === "healthy" ? spec.ok : spec.unknown),
+      ...(spec.id === "map" && mapUpdating && !own.length ? { summaryKey: "mapUpdating" } : {}),
       ...(pending ? { summaryKey: "pendingMemories", summaryCount: pendingMemories } : {}),
       detail: itemChecks.map((row) => `${row.label}：${row.detail}`).join("；"), lastObservedAt: spec.at, incidentCount: own.length, checks:itemChecks };
   });
@@ -290,7 +344,9 @@ export function buildOperationalOverview(input: Input) {
   return { schema: "evolving-profile.operational-overview.v1", generatedAt: new Date(now).toISOString(), windowHours: 24,
     overall: lanes.some((row) => row.state === "critical") ? "critical" : lanes.some((row) => row.state === "warning") ? "warning" : lanes.some((row) => row.state === "unknown") ? "unknown" : "healthy",
     lanes, incidents, attemptHistory: history,
-    pipeline: { state: pipelineState, failedMemories, pendingMemories, processingOperations: input.bankStats?.operations_by_status?.processing ?? null, queuedOperations: input.bankStats?.operations_by_status?.pending ?? null },
+    pipeline: { state: maxState([pipelineState, ...incidents.filter(row => row.category === "retention").map(row => row.severity)]), failedMemories, pendingMemories, failedBatches: input.operations.status === "observed" ? failedBatches.size : null,
+      failedTaskRows: input.operations.status === "observed" ? [...failedBatches.values()].reduce((sum, rows) => sum + rows.length, 0) : null,
+      localRetention, processingOperations: input.bankStats?.operations_by_status?.processing ?? null, queuedOperations: input.bankStats?.operations_by_status?.pending ?? null },
     scan: { llmFailures: coverage(history.reduce((sum, group) => sum + group.attemptCount, 0), input.llm.total, input.llm.status),
       llmFailureGroups: { total: input.llm.groupTotal ?? null },
       failedOperations: coverage(input.operations.returned ?? input.operations.items.filter((row) => row.status === "failed").length, input.operations.total, input.operations.status),
