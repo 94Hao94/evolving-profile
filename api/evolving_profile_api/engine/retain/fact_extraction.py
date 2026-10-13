@@ -716,7 +716,13 @@ def _iter_conversation_chunks(turns: list[dict], max_chars: int, structured_limi
         if turn_unit_size > structured_limit or (is_source_message(turn) and turn_unit_size + 2 > structured_limit):
             yield from _flush()
             if is_source_message(turn):
-                for fragment in iter_source_fragments(turn, min(structured_limit, max_chars)):
+                # A source witness carries a provenance envelope (role, byte
+                # offsets, quote ranges and hashes). That envelope can be
+                # slightly larger than the normal extraction chunk target.
+                # Use the explicit structured budget here; clamping it to the
+                # normal max_chars budget makes even a one-character fragment
+                # impossible and stalls the whole retention queue.
+                for fragment in iter_source_fragments(turn, structured_limit):
                     emitted = True
                     yield fragment
                 continue

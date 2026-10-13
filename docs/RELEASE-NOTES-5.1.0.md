@@ -66,3 +66,41 @@
 - 上游协作渠道：[`94Hao94/evolving-profile`](https://github.com/94Hao94/evolving-profile)，PR [#4](https://github.com/94Hao94/evolving-profile/pull/4)。
 - 两者来自同一 EP 5.1 发行分支；个人 fork 用于自有发布和备份，上游 PR 用于贡献协作。
 - `NOTICE.md` 的公开发行作者/维护者署名为 CCY；GitHub 账号、仓库拥有者、上游项目拥有者和本机 Git 提交身份不自动等同。
+
+## 2026-10-13 retention hotfix / 后台写入热修复
+
+Source envelopes are bounded by the configured structured cap instead of being
+clamped to the smaller prose chunk target. No source/authority fields are dropped.
+Terminal retry and policy failures are durably quarantined with raw content and
+the prior operation/batch/submission lineage preserved; other eligible batches
+continue. Ordinary rescans do not release quarantine, and completion remains the
+only event that removes raw queue items.
+
+Migration: back up the local queue, dispatcher state and source files. Upgrade
+the API extraction code and background dispatcher together. Restart the
+extraction worker to load the new code; the periodic dispatcher loads its update
+on the next run. For a previously failed operation, preflight its source with the
+resolved Bank budgets, then explicitly retry its original operation ID. Keep
+old failure evidence; do not reset counters or submit the same content under a
+new identity. Quarantine does not mean successful extraction or data deletion.
+
+Model schema/source-quote failures and provider timeouts remain possible during
+backlog processing. They retain bounded retries and terminal quarantine; this
+hotfix does not weaken source verification or promise every model extraction
+will succeed. Accumulated queues drain asynchronously under existing settings.
+
+Rollback: restore the backed-up source and worker state only after reconciling
+remote completion; never restore an old queue snapshot over new captures or
+already completed writes. Leave quarantined raw items intact for scoped recovery.
+
+Fresh verification (2026-10-13): Host/Guidance/Status/Controller 1196 passed and
+107 subtests; API chunking/streaming/legacy parity/source authority/config guards
+187 passed; Console 78 files / 532 tests passed. The original blocked operation
+completed under its original ID and normal background submissions resumed.
+These are bounded test suites and runtime recovery evidence, not a claim that
+the entire API integration suite or every accumulated summary has passed.
+
+本次同时修复来源包分块和失败批次阻塞调度：原文与旧操作来源保留，确认完成才
+从队列移除；后续正常批次恢复处理。补写按原有配置串行推进，不改 API Key、模型
+或并发。原先的 RC Tag/Release 保持不可变；当前修复通过 `release/5.1.0` 分支和
+上游 PR #4 同步，不将已提交 PR 冒称已合并或新 Release 已发布。

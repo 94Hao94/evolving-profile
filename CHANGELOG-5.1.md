@@ -14,6 +14,26 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
+### Background retention hotfix — 2026-10-13
+
+- Source-linked messages now fragment within the explicit structured budget,
+  so provenance envelopes larger than the normal prose target no longer make
+  an otherwise valid message impossible to split. Role, original offsets,
+  hashes, quote ranges and per-turn write policy remain intact; the structured
+  cap still rejects oversized envelopes.
+- Exhausted or policy-blocked failed operations move to persistent local
+  quarantine. Raw items and original operation lineage stay available, while
+  later eligible batches can proceed. Ordinary rescans cannot silently release
+  quarantine. Unknown/in-flight operations retain the existing serial gate.
+- Recovery retries the original remote operation after the chunking fix;
+  acceptance alone never removes local raw items. Only confirmed completion
+  reconciles them. Quarantined failures need scoped recovery, not a blind
+  retry-counter reset.
+- Regression coverage includes healthy-batch progress after a failed batch,
+  quarantine persistence, source attribution, structured hard caps and
+  idempotent re-chunking. Release version auditing recognizes `5.1` and `5.1.0`
+  as the same product version, without equating different patches or previews.
+
 ### 1. Long-session scenario coverage
 
 - Adds deterministic episode boundaries after a bounded number of user-message
@@ -112,6 +132,14 @@ evidence. Historical test counts are not reused as current results.
 宿主回执、独立原文复核，以及用户原句到情境状态的逐条覆盖。
 
 ## 主要变化
+
+### 2026-10-13 后台写入热修复
+
+修复原文来源包大于普通分块目标时无法分片的问题，仍遵守结构化硬预算，保留
+角色、原文偏移、哈希、引用范围和每轮写入权限。失败重试耗尽或权限禁止的批次
+进入持久隔离，保留原文和旧操作来源，但不再堵住后续正常批次；普通扫描不会
+解除隔离。未知/处理中操作仍保持串行保护。恢复使用原操作 ID，只有确认完成
+才清理队列原文，禁止通过清空队列或重置重试次数掩盖失败。
 
 1. **长会话情境覆盖**：按安全的用户消息边界分段，同一轮消息不拆开；分段只
    是传输和覆盖保护，不擅自宣称用户开启了新任务。标准/完整摘要预算提高，

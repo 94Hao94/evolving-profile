@@ -254,7 +254,7 @@ class RetentionQueue:
         now = _utcnow()
         groups = {}
         for item in state["items"]:
-            if item.get("operation_id") or item.get('retention_origin_hold'):
+            if item.get("operation_id") or item.get('retention_origin_hold') or item.get('retention_quarantine'):
                 continue
             groups.setdefault(item["project_id"], []).append(item)
 
@@ -339,7 +339,7 @@ class RetentionQueue:
             # held audit, and derive only eligible turn items with stable lineage.
             derived = []
             for item in state['items']:
-                if item.get('operation_id') or item.get('write_policy'):
+                if item.get('operation_id') or item.get('write_policy') or item.get('retention_quarantine'):
                     continue
                 messages = transcript_messages(item.get('content', ''))
                 turns = retention_turns(messages)
@@ -363,7 +363,7 @@ class RetentionQueue:
                     changed = True
             state['items'].extend(derived)
             for item in state['items']:
-                if item.get('operation_id'):continue
+                if item.get('operation_id') or item.get('retention_quarantine'):continue
                 if item.get('session_id') in config.get('diagnosticSessionIds',[]):
                     if (item.get('metadata') or {}).get('prompt_origin')!='test_probe':
                         item.setdefault('metadata',{})['prompt_origin']='test_probe';changed=True
@@ -420,6 +420,40 @@ class RetentionQueue:
                 kept.append(item)
             state["items"] = kept
             self._write(state)
+
+    def quarantine_operation(self, operation_id: str, reason: str) -> int:
+        """Hold a permanently failing operation without blocking later batches.
+
+        Raw queue items remain recoverable and auditable. Clearing only the
+        transient operation binding lets the dispatcher continue with newer
+        user turns while ``retention_origin_hold`` prevents an automatic
+        re-submit loop.
+        """
+        if not operation_id:
+            return 0
+        with self._locked():
+            state = self._read()
+            changed = 0
+            for item in state["items"]:
+                if item.get("operation_id") != operation_id:
+                    continue
+                item["retention_quarantine"] = {
+                    "operation_id": operation_id,
+                    "batch_id": item.get("batch_id"),
+                    "submitted_at": item.get("submitted_at"),
+                    "reason": reason,
+                    "at": _utcnow().isoformat(),
+                }
+                item.pop("operation_id", None)
+                item.pop("batch_id", None)
+                item.pop("submitted_at", None)
+                item["retention_origin_hold"] = reason
+                if reason.startswith("retention_retry_exhausted:"):
+                    item["retention_retry_exhausted"] = True
+                changed += 1
+            if changed:
+                self._write(state)
+            return changed
 
     def migrate_bank(self, old_bank_id: str, new_bank_id: str, requeue_submitted: bool = False):
         """Atomically move queued work and cursors to another bank."""

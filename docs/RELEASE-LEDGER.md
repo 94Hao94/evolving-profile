@@ -10,3 +10,10 @@
 | 5.1.0 | 个人 fork 的 `release/5.1.0` 已设为默认分支，并发布最新预发布版 `v5.1.0-rc.2`；同时已向上游提交 PR #4，尚未合并。README 已整理为完整产品介绍、部署指南和 Agent 安装提示词。 | 个人仓库 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)；[最新预发布版 v5.1.0-rc.2](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.2)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`ep51-release-hero.png`](assets/ep51-release-hero.png)；预检、脱敏、166 Python、531 Console、TypeScript、生产构建和一键部署通过 | 沿用 NOTICE 的 CCY 发行署名；5.1 的 native review 仍明确区分非 HTTP provenance，不将未暴露的模型身份写成确定事实。依赖审计关键漏洞为 0，仍有 8 个高/中等级告警已记录。 |
 
 下一次发布前先运行 `python3 scripts/release-preflight.py --json`，用当次 GitHub 读回修正仓库 URL、PR 状态和贡献者记录，不沿用旧快照。
+
+### 2026-10-13：5.1 后台写入热修复
+
+本次仍为产品 5.1.0 的贡献分支热修复：结构化来源分块预算、持久失败隔离和后续
+批次继续调度；迁移/回退与当次验证见 `RELEASE-NOTES-5.1.0.md`。个人发行分支及
+上游 PR #4 使用同一修复提交。已有 `v5.1.0-rc.2` Tag/Release 不移动，不自动
+合并朋友仓库的主分支；实际同步结果以当前 PR head 与远端分支 SHA 回读为准。

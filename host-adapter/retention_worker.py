@@ -38,6 +38,7 @@ def run_once(config,root):
         rows=q._read()['items']
         report={**base,'status':status,'at':datetime.now(timezone.utc).isoformat(),'queue_items':len(rows),
                 'inflight_items':sum(bool(r.get('operation_id')) for r in rows),
+                'quarantined_items':sum(bool(r.get('retention_quarantine')) for r in rows),
                 'held_items':sum(bool(r.get('retention_origin_hold')) for r in rows),**extra}
         atomic(state_path,report);return report
     if not config.get('autoRetain',True): return finish('disabled')
@@ -51,10 +52,16 @@ def run_once(config,root):
         if statuses[op] in ('failed','cancelled'):
             operation_rows=[r for r in rows if r.get('operation_id')==op]
             if any(item_write_exclusion(r) or retention_exclusion(r.get('project'),[r.get('session_id')],config) for r in operation_rows):
+                q.quarantine_operation(op, 'knowledge_write_policy_requires_scoped_recovery')
                 return finish('retry_policy_held',operation_id=op,bank_id=bank,
                               reason='knowledge_write_policy_requires_scoped_recovery')
             attempts=base['retry_counts'].get(op,0)
-            if attempts>=config.get('retainWorkerMaxRetries',3): return finish('retry_limit_reached',operation_id=op,bank_id=bank)
+            if attempts>=config.get('retainWorkerMaxRetries',3):
+                quarantined = q.quarantine_operation(
+                    op,
+                    f"retention_retry_exhausted:{statuses[op]}",
+                )
+                return finish('retry_quarantined',operation_id=op,bank_id=bank,quarantined_items=quarantined)
             try:
                 client._request('POST',f"/v1/default/banks/{urllib.parse.quote(bank,safe='')}/operations/{op}/retry",timeout=10)
                 base['retry_counts'][op]=attempts+1

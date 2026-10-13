@@ -88,6 +88,37 @@ class RetentionWorkerTest(unittest.TestCase):
         self.assertEqual(self.run_worker()['status'],'retry_requested')
         self.assertEqual(self.queue._read()['items'][0]['operation_id'],'op1')
         self.assertEqual(len(self.posts),1)
+
+    def test_retry_exhaustion_quarantines_bad_batch_and_allows_newer_batches(self):
+        self.capture('bad','2020-01-01T00:00:00Z')
+        self.capture('newer','2020-01-01T00:00:00Z')
+        first=self.queue._select_batches(self.queue._read(),force_tail=True)[0]
+        self.assertTrue(self.queue.mark_submitted(first['batch_id'],'op1',item_ids=first['item_ids']))
+        state=self.root/'retention/worker-state.json'
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps({'retry_counts':{'op1':3},'next_retry_at_epoch':0}))
+        self.status='failed'
+        self.assertEqual(self.run_worker()['status'],'retry_quarantined')
+        rows=self.queue.snapshot()['items']
+        bad=next(row for row in rows if row['project']=='bad')
+        self.assertTrue(bad['retention_retry_exhausted'])
+        self.assertIn('retention_retry_exhausted',bad['retention_origin_hold'])
+        self.assertNotIn('operation_id',bad)
+        self.assertEqual(bad['retention_quarantine']['operation_id'],'op1')
+        self.assertEqual(bad['content'],'真实用户原话')
+        # The failed batch is held, but the next user batch is still eligible.
+        self.assertEqual(self.run_worker()['status'],'submitted')
+        self.assertEqual(len(self.posts),1)
+        # Re-running ready_batches must never silently clear the terminal hold.
+        self.status='completed'
+        self.run_worker()
+        remaining=self.queue.snapshot()['items']
+        self.assertEqual(len(remaining),1)
+        self.assertEqual(remaining[0]['project'],'bad')
+        self.assertTrue(remaining[0]['retention_retry_exhausted'])
+        self.assertIn('retention_retry_exhausted',remaining[0]['retention_origin_hold'])
+        self.assertEqual(self.run_worker()['status'],'idle')
+        self.assertEqual(len(self.posts),1)
     def test_configured_priority_tail_uses_the_shorter_age(self):
         self.queue.capture(session_id='priority',message_count=1,bank_id='test-bank',project='priority',content='已完成的有意义任务',metadata={'priority_tail':'true'},captured_at=datetime.now(timezone.utc)-timedelta(seconds=1200))
         self.assertEqual(self.run_worker()['status'],'submitted')
@@ -99,6 +130,9 @@ class RetentionWorkerTest(unittest.TestCase):
         self.status='failed'
         self.assertEqual(self.run_worker()['status'],'retry_policy_held')
         self.assertEqual(self.status,'failed')
+        self.assertEqual(self.queue.snapshot()['items'][0]['content'],content)
+        self.capture('newer','2020-01-01T00:00:00Z')
+        self.assertEqual(self.run_worker()['status'],'submitted')
         self.assertEqual(self.queue.snapshot()['items'][0]['content'],content)
     def test_lost_ack_missing_operation_cannot_resend_a_forbidden_intent(self):
         import retention_worker

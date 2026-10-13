@@ -7,10 +7,12 @@ large inputs where spelling out every chunk would be unwieldy.
 """
 
 import json
+import hashlib
 
 import pytest
 
 from evolving_profile_api.engine.retain.fact_extraction import chunk_text
+from evolving_profile_api.engine.retain.source_attribution import verify_attribution
 
 # ---------------------------------------------------------------------------
 # Plain text
@@ -57,6 +59,58 @@ def test_chunk_text_large():
     combined = " ".join(chunks)
     # Account for possible whitespace differences
     assert len(combined.replace(" ", "")) >= len(text.replace(" ", "")) * 0.95
+
+
+@pytest.mark.parametrize("role", ["user", "assistant"])
+def test_source_witness_uses_structured_budget_for_provenance_envelope(role):
+    """A large source envelope must not fail because the normal target is smaller."""
+    body = "助手过程记录。" * 3000
+    ranges = [[i, i + 2] for i in range(0, 2000, 8)]
+    message = {
+        "role": role,
+        "content": body,
+        "source_record": {
+            "transcript_path": "/tmp/session.jsonl",
+            "byte_offset": 123,
+            "raw_line_sha256": "a" * 64,
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "message_id": "message-1",
+            "original_message_start": 0,
+            "original_message_end": len(body),
+            "original_message_length": len(body),
+            "original_message_content_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "original_message_quoted_ranges": ranges,
+        },
+        "write_policy": {"knowledge_allowed": True},
+    }
+    chunks = chunk_text(json.dumps([message], ensure_ascii=False), max_chars=3000, structured_chunk_size=12000)
+    assert len(chunks) >= 2
+    fragments = [json.loads(chunk)[0] for chunk in chunks]
+    assert "".join(fragment["content"] for fragment in fragments) == body
+    assert all(fragment["source_fragment"]["original_length"] == len(body) for fragment in fragments)
+    assert all(len(chunk) <= 12000 for chunk in chunks)
+    assert all(chunk_text(chunk, max_chars=3000, structured_chunk_size=12000) == [chunk] for chunk in chunks)
+    metadata = {"source_attribution_required": "role_quote_v1"}
+    # A quoted span remains repetition, never new user testimony; an ordinary
+    # span retains its real author rather than acquiring assistant authority.
+    for start, repeated in [(0, True), (4, False)]:
+        quote = body[start:start + 2]
+        _, kind, evidence = verify_attribution(chunks[0], {
+            "source_role": role, "source_message_index": 0,
+            "source_quote": quote, "source_start": start,
+        }, metadata)
+        assert evidence["source_start"] == str(start)
+        assert evidence["original_source_content_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+        assert evidence["independent_user_evidence"] == str(role == "user" and not repeated).lower()
+        assert kind == ("world" if role == "user" and not repeated else "experience")
+
+
+def test_source_envelope_over_structured_cap_remains_rejected():
+    message = {"role": "user", "content": "原文。" * 6000,
+               "source_record": {"message_id": "x" * 14000}}
+    with pytest.raises(ValueError, match="source_envelope_exceeds_chunk_budget"):
+        chunk_text(json.dumps([message], ensure_ascii=False), 3000, structured_chunk_size=12000)
 
 
 def test_chunk_text_64k():

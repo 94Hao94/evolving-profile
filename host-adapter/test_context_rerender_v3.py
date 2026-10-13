@@ -39,7 +39,8 @@ class ContextRerenderV3Tests(unittest.TestCase):
         draft=validate_state_draft(original,state,model='test',user_claim_protocol='user_constraints_corrections_whole_source_clause.v1')
         rebuilt=RERENDER.rebuild_rerender_draft(original,draft)
         self.assertEqual(rebuilt['state_claim_protocol'],'user_constraints_corrections_whole_source_clause.v1')
-        self.assertEqual(rebuilt['state']['constraints'][0]['text'],'不要公开密钥，只有本机使用')
+        user_claims=rebuilt['state']['constraints']+rebuilt['state']['corrections']
+        self.assertIn({'text':'不要公开密钥，只有本机使用','message_ids':['id1']},user_claims)
 
     def test_rerender_cannot_drop_protocol_to_accept_negation_loss(self):
         original=source([('user','不要公开密钥'),('assistant','已答复')])
@@ -47,7 +48,11 @@ class ContextRerenderV3Tests(unittest.TestCase):
                'constraints':[claim('不要公开密钥','id1')],'corrections':[],
                'assistant_reports':[claim('已答复','id2')],'unresolved':[]}
         draft=validate_state_draft(original,state,model='test',user_claim_protocol='user_constraints_corrections_whole_source_clause.v1')
-        draft['state']['constraints'][0]['text']='公开密钥'
+        # The current validator normalizes explicit negation into corrections;
+        # test the actual canonical claim rather than a stale array position.
+        user_claims=draft['state']['constraints']+draft['state']['corrections']
+        target=next(c for c in user_claims if c['text']=='不要公开密钥')
+        target['text']='公开密钥'
         with self.assertRaisesRegex(ValueError,'scenario_user_claim_not_verbatim'):
             RERENDER.rebuild_rerender_draft(original,draft)
 

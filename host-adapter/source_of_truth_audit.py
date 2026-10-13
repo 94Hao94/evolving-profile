@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,10 @@ def audit() -> dict[str, Any]:
     check("release_manifest_valid", manifest is not None, manifest_error or "ok")
     check("runtime_settings_valid", runtime is not None, runtime_error or "ok")
     if manifest and runtime_copy:
-        check("release_copy_matches_product", manifest.get("product_version") == runtime_copy.get("product_version"), f"repo={manifest.get('product_version')} runtime={runtime_copy.get('product_version')}")
+        def product_version(value):
+            match = re.fullmatch(r"(\d+)\.(\d+)(?:\.(\d+))?", str(value))
+            return tuple(int(part or 0) for part in match.groups()) if match else value
+        check("release_copy_matches_product", product_version(manifest.get("product_version")) == product_version(runtime_copy.get("product_version")), f"repo={manifest.get('product_version')} runtime={runtime_copy.get('product_version')}")
     elif manifest and not runtime_copy:
         check("release_copy_present", False, runtime_copy_error or "missing")
     primary = (runtime or {}).get("providers", {}).get("primary", {}) if runtime else {}
