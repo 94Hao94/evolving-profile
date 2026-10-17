@@ -292,3 +292,10 @@ EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/cc
 - [完整部署](docs/DEPLOYMENT-中文.md) · [分宿主接入](docs/HOST-SETUP-中文.md) · [Agent 安装话](docs/AGENT-SETUP-中文.md)
 - [更新日志](CHANGELOG-5.1.md) · [当前补丁说明](docs/RELEASE-NOTES-5.1.1.md)
 - [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)
+
+## 基于 Hindsight 开发
+
+**Evolving Profile 基于 [Hindsight](https://github.com/vectorize-io/hindsight) 开发。**
+Hindsight 提供上游记忆基础；EP 在此基础上构建用户与智能体记忆组织、条件化偏好、
+宿主集成和可观察控制层。感谢 Hindsight 项目及其贡献者的工作。
+使用和再分发相关代码时，请保留 [NOTICE](NOTICE.md) 以及适用的上游许可证与版权声明。

@@ -14,6 +14,18 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
+### Runtime guidance argument boundary — 2026-10-18
+
+- Validate task objects before Prompt identity binding, so malformed Agent
+  calls cannot raise a Python mapping AttributeError in the shared preference path.
+- Reject malformed recovery events with actionable field errors; do not silently
+  reinterpret runtime_events arrays or event/details into canonical evidence.
+- Return invalid-argument errors for these failures and keep the stdio process
+  alive for a corrected retry; do not recursively refresh on invalid guidance input.
+- Explicitly acknowledge Hindsight as the development foundation in both README
+  footers and NOTICE. Retrieval thresholds, source verification and stored memory
+  are unchanged.
+
 ### Shared topology calibration and capability presentation — 2026-10-17
 
 - Preserved the operator's actual Chrome-visible node calibration in one SVG

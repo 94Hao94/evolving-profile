@@ -342,3 +342,12 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 - [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
 - [Changelog](CHANGELOG-5.1.md) · [Current patch notes](docs/RELEASE-NOTES-5.1.1.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)
+
+## Built on Hindsight
+
+**Evolving Profile is developed on top of [Hindsight](https://github.com/vectorize-io/hindsight).**
+Hindsight provides the upstream memory foundation; EP builds its user/agent
+memory organization, conditional preferences, host integration and observable
+control plane on that foundation. Credit for the upstream work belongs to the
+Hindsight project and its contributors. Preserve [NOTICE](NOTICE.md) and all
+applicable upstream licenses and notices when using or redistributing the code.

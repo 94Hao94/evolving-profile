@@ -7,6 +7,34 @@ import json
 from pathlib import Path
 
 
+class GuidanceInputError(ValueError):
+    """Safe, actionable argument failure; never echo arbitrary caller values."""
+    def __init__(self, field, expected, reason='invalid_arguments'):
+        self.field = field
+        self.expected = expected
+        super().__init__(f'{reason}: {field} must be {expected}')
+
+
+def validate_preference_request(request):
+    if not isinstance(request, dict):
+        raise GuidanceInputError('arguments', 'an object')
+    task = request.get('task', {})
+    if not isinstance(task, dict):
+        raise GuidanceInputError('task', 'an object, e.g. {"objective":"current task"}')
+    for field in ('objective', 'current_user_message', 'context_summary', 'phase'):
+        if field in task and not isinstance(task[field], str):
+            raise GuidanceInputError('task.' + field, 'a string')
+    for field in ('previous_user_messages', 'current_constraints', 'domains', 'media',
+                  'resolved_entities', 'unresolved_references'):
+        if field in task and (not isinstance(task[field], list) or
+                              any(not isinstance(value, str) for value in task[field])):
+            raise GuidanceInputError('task.' + field, 'an array of strings')
+    if 'runtime_events' in task and (not isinstance(task['runtime_events'], list) or
+                                   any(not isinstance(value, dict) for value in task['runtime_events'])):
+        raise GuidanceInputError('task.runtime_events', 'an array of objects')
+    return task
+
+
 def resolve_prompt_binding(check_id, event_at, home=None):
     check_id = str(check_id or '').strip()
     if not check_id: return {'state': 'unbound_missing_check_id'}
@@ -59,8 +87,9 @@ def resolve_prompt_binding(check_id, event_at, home=None):
 
 
 def bind_preference_request(request, *, home=None, event_at=None):
+    supplied_task = validate_preference_request(request)
     identity_keys = {'session_id', 'session_ids', 'project_id', 'project_ids', 'task_id', 'task_ids', 'agent_roles'}
-    task = {key: value for key, value in (request.get('task') or {}).items() if key not in identity_keys}
+    task = {key: value for key, value in supplied_task.items() if key not in identity_keys}
     now = event_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
     binding = resolve_prompt_binding(request.get('check_id'), now, home)
     if binding.get('state') == 'prompt_bound' and all(binding.get(key) for key in ('session_id', 'turn_id', 'hook_invocation_id')):

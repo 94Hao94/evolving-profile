@@ -23,6 +23,7 @@ from pathlib import Path
 GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path(__file__).resolve().parents[1] / "guidance"))
 if GUIDANCE_V1_SRC not in sys.path:
     sys.path.insert(0, GUIDANCE_V1_SRC)
+from context_binding import GuidanceInputError, validate_preference_request
 from evidence_workspace import discover, search, read_page, source_witness, record_stdout, DEFAULT_ROOT
 from source_safety import mask_text, mask_value
 from topic_catalog import TopicCatalog,knowledge_review,redact_unreviewed_page,merge_catalog_rows
@@ -991,7 +992,7 @@ def _route_receipt_counts(receipt):
         'returned' if receipt['returned_count'] > 0 else 'source_navigation_returned' if receipt.get('source_navigation_returned_count') else 'tool_called_empty' if events else 'not_started')
     return receipt
 
-def _begin_tool_call(params, message_id, *, started_at=None):
+def _begin_tool_call(params, message_id, *, started_at=None, bind_prompt=True):
     """Freeze occurrence attribution before dispatch, independent of completion."""
     started_at = started_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
     args = dict(params.get('arguments') or {})
@@ -1002,7 +1003,7 @@ def _begin_tool_call(params, message_id, *, started_at=None):
             'tool_call_id':str(host_call_id) if host_call_id else 'mcp:'+str(uuid.uuid4()),
             'host_call_id':host_call_id,'mcp_request_id':message_id,'invocation_started_at':started_at,
             'caller_context':{key:meta[key] for key in ('session_id','turn_id') if isinstance(meta.get(key),str)},
-            'binding_at_start':_prompt_binding_for_check_id(args.get('check_id'),started_at)}
+            'binding_at_start':_prompt_binding_for_check_id(args.get('check_id'),started_at) if bind_prompt else {'state':'unbound_invalid_arguments'}}
 
 def _record_failed_tool_call(tool, args, error, event_at):
     check_id = str(args.get('check_id') or '').strip()
@@ -1585,6 +1586,7 @@ def read_preference(args):
     return {'content':[{'type':'text','text':json.dumps(guidance_value(args),ensure_ascii=False)}],'isError':False}
 
 def preference(args):
+    validate_preference_request(args)
     if PREFERENCE_TOOL is None:
         return {'content':[{'type':'text','text':json.dumps({'coverage':'unavailable','errors':['guidance_runtime_import_'+str(_GUIDANCE_V1_IMPORT_ERROR)]},ensure_ascii=False)}],'isError':True}
     repo=load_repository(GUIDANCE_V1_CONFIG)
@@ -1593,6 +1595,8 @@ def preference(args):
     result['delivery']={'transport':'mcp_tool_result','host_visibility':'unknown','answer_use':'not_measured'}
     return {'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':False}
 def runtime_guidance(args):
+    from runtime_recovery import validate_runtime_guidance_request
+    validate_runtime_guidance_request(args)
     if RUNTIME_GUIDANCE_TOOL is None:
         return {'content':[{'type':'text','text':json.dumps({'coverage':'unavailable','errors':['guidance_runtime_import_'+str(_GUIDANCE_V1_IMPORT_ERROR)]},ensure_ascii=False)}],'isError':True}
     result=refresh_runtime_guidance(load_repository(GUIDANCE_V1_CONFIG),args)
@@ -2325,6 +2329,22 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
             reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,JEV_RISK_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_RECALL_TOOL,AGENT_RESEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_WORKSPACE_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
         elif method == "tools/call":
             params = request.get("params") or {}
+            if params.get('name') in {'refresh_runtime_guidance', 'user_preference', 'get_preference', 'get_task_guidance'}:
+                try:
+                    original_args = params.get('arguments', {})
+                    if params['name'] == 'refresh_runtime_guidance':
+                        from runtime_recovery import validate_runtime_guidance_request
+                        validate_runtime_guidance_request(original_args)
+                    else:
+                        validate_preference_request(original_args)
+                        if params['name'] in {'user_preference', 'get_preference'} and (
+                            not isinstance(original_args.get('check_id'), str) or not original_args['check_id'].strip()):
+                            raise GuidanceInputError('check_id', 'a non-empty current Prompt check_id string')
+                except GuidanceInputError:
+                    # Record a distinct failure occurrence without resolving identity
+                    # or preserving unvalidated caller data in the audit envelope.
+                    CURRENT_TOOL_CALL = _begin_tool_call({'name': params['name']}, message_id, bind_prompt=False)
+                    raise
             CURRENT_TOOL_CALL=_begin_tool_call(params,message_id)
             if params.get('name') == 'memory_check':
                 args=params.get('arguments') or {}
@@ -2412,7 +2432,7 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
         recovery = None
         try:
             failed_name = str((request.get('params') or {}).get('name') or '') if isinstance(request, dict) else ''
-            if failed_name in {'user_recall', 'user_research', 'user_preference', 'agent_recall', 'agent_research', 'recall', 'research', 'read_research', 'get_preference', 'read_source'}:
+            if not isinstance(exc, GuidanceInputError) and failed_name in {'user_recall', 'user_research', 'user_preference', 'agent_recall', 'agent_research', 'recall', 'research', 'read_research', 'get_preference', 'read_source'}:
                 failed_args = (request.get('params') or {}).get('arguments') or {}
                 objective = str(failed_args.get('query') or failed_args.get('task', {}).get('objective') or 'EP工具调用失败后的运行恢复')
                 recovery_result = runtime_guidance({
@@ -2423,5 +2443,9 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
         except Exception as recovery_error:
             recovery = {'state': 'failed', 'service': 'runtime_guidance', 'error': type(recovery_error).__name__}
         error_payload = {"code": -32000, "message": str(exc)}
+        if isinstance(exc, GuidanceInputError):
+            error_payload = {"code": -32602, "message": str(exc),
+                             "data": {"field": exc.field, "expected": exc.expected,
+                                      "retryable_with_corrected_arguments": True}}
         if recovery is not None: error_payload['data'] = {'recovery': recovery, 'ep_history_verification': 'failed'}
         reply(request.get("id") if "request" in locals() else None, error=error_payload)

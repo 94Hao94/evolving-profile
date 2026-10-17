@@ -67,7 +67,7 @@ PREFERENCE_TOOL["inputSchema"]["required"] = list(dict.fromkeys(
 ))
 RUNTIME_GUIDANCE_TOOL = {
     "name": "refresh_runtime_guidance",
-    "description": "当前任务执行中出现关键工具失败、超时或能力不可用时，携带已观察到的失败事实补查一次相关指导。只影响当前任务，不写入长期偏好，也不把替代验证冒充为原能力通过。",
+    "description": "当前任务执行中出现关键工具失败、超时或能力不可用时，携带已观察到的失败事实补查一次相关指导。task 必须为含 objective 的对象，不是字符串；runtime_event 为含 failure 的单个对象，不使用 runtime_events 数组或 event/details 字段。只影响当前任务，不写入长期偏好，也不把替代验证冒充为原能力通过。",
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
         "check_id": {"type": "string", "description": "当前 UserPromptSubmit check_id；缺失时只返回无任务身份限制的指导。"},
         "task": {"type": "object", "additionalProperties": True, "properties": {
