@@ -4,15 +4,16 @@ import { ActionButton } from "@/components/ui/action-button";
 import { RelevanceAuditDetails } from "./recall-policy-settings";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TopologyNode } from "@/lib/topology-spec";
-import { resolveTopologyLayout, type Anchor } from "@/lib/topology-layout";
+import { defaultTopologyLayout, resolveTopologyLayout, validateTopologyLayout, topologyFailureView, TOPOLOGY_CANVAS, type TopologyLayout, type Anchor } from "@/lib/topology-layout";
 import { nodeMetric, nodePurpose, summarizeReceiptScopes } from "@/lib/topology-presentation";
 import { inlineUiText } from "@/lib/inline-i18n";
 import { SourceNavigationDetails } from "./source-navigation-details";
 import { ReturnedContentDetails } from "./returned-content-details";
 
 type Props = { nodes: TopologyNode[]; edges?: unknown[]; english?: boolean };
-const W = 1672,
-  H = 941,
+const W = TOPOLOGY_CANVAS.width,
+  H = TOPOLOGY_CANVAS.height,
+  SHARED_CACHE = "ep-topology-shared-layout-v1",
   STORAGE = "ep-topology-anchors-v7",
   TEXT_STORAGE = "ep-topology-frame-text-v7",
   DELETED_STORAGE = "ep-topology-frame-deleted-v7";
@@ -99,7 +100,12 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     [message, setMessage] = useState("");
   const [draft, setDraft] = useState<Record<string, Anchor>>(() => resolveTopologyLayout(null));
   const [texts, setTexts] = useState<Record<string, string>>({});
-  const [deleted, setDeleted] = useState<string[]>([]);
+  const [deleted, setDeleted] = useState<string[]>(() => defaultTopologyLayout().deleted);
+  const [shared, setShared] = useState<TopologyLayout>(defaultTopologyLayout);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [layoutWarning, setLayoutWarning] = useState(false);
+  const [hasLegacy, setHasLegacy] = useState(false);
+  const legacy = useRef<Pick<TopologyLayout, "anchors" | "texts" | "deleted"> | null>(null);
   const drag = useRef<{
     id: string;
     mode: "move" | "resize";
@@ -112,18 +118,41 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     []
   );
   useEffect(()=>{
-    // First render and SSR share the same defaults. Read custom data after
-    // hydration; never rewrite an existing edit merely by opening the page.
-    try { setDraft(resolveTopologyLayout(JSON.parse(localStorage.getItem(STORAGE) || "null"))); } catch { /* use calibrated defaults */ }
+    const controller=new AbortController();let active=true;
+    setLayoutReady(false);
+    // Preserve old per-origin edits as an explicit recovery draft. Never let
+    // an arbitrary old browser cache silently overwrite the shared layout.
     try {
-      const saved=JSON.parse(localStorage.getItem(TEXT_STORAGE) || "{}");
-      if(saved && typeof saved==="object" && !Array.isArray(saved))setTexts(Object.fromEntries(Object.entries(saved).filter(([,value])=>typeof value==="string")) as Record<string,string>);
-    } catch { /* retain locale labels */ }
-    try {
-      const saved=JSON.parse(localStorage.getItem(DELETED_STORAGE) || "[]");
-      if(Array.isArray(saved))setDeleted(saved.filter((id):id is string=>typeof id==="string"));
-    } catch { /* retain all nodes */ }
-  },[]);
+      const old=JSON.parse(localStorage.getItem(STORAGE)||"null");
+      if(old && typeof old==="object" && !Array.isArray(old) && Object.keys(old).length){
+        const anchors=resolveTopologyLayout(old), oldTexts=JSON.parse(localStorage.getItem(TEXT_STORAGE)||"{}"), oldDeleted=JSON.parse(localStorage.getItem(DELETED_STORAGE)||"[]");
+        const labels:TopologyLayout["texts"]={en:{},zh:{}};
+        if(oldTexts && typeof oldTexts==="object" && !Array.isArray(oldTexts))for(const [id,text] of Object.entries(oldTexts)){
+          if(Object.hasOwn(anchors,id) && typeof text==="string" && text.length<=200)labels[/[\u3400-\u9fff]/.test(text)?"zh":"en"][id]=text;
+        }
+        legacy.current={anchors,texts:labels,deleted:Array.isArray(oldDeleted)?oldDeleted.filter((id):id is string=>typeof id==="string" && Object.hasOwn(anchors,id)):[]};
+        setHasLegacy(true);
+      }
+    }catch{/* Browser storage can be disabled; server saving still works. */}
+    const apply=(value:TopologyLayout)=>{
+      setShared(value);setDraft(value.anchors);setTexts(value.texts[english?"en":"zh"]);setDeleted(value.deleted);
+    };
+    void (async()=>{
+      try {
+        const response=await fetch("/api/evolving-profile/topology-layout",{cache:"no-store",signal:controller.signal});
+        if(!response.ok)throw new Error("layout_load_failed");
+        const value=validateTopologyLayout(await response.json());
+        if(!active)return;apply(value);setLayoutWarning(false);
+        try{localStorage.setItem(SHARED_CACHE,JSON.stringify(value));}catch{/* optional cache only */}
+      }catch{
+        if(!active)return;setLayoutWarning(true);
+        let cached:unknown=null;try{cached=JSON.parse(localStorage.getItem(SHARED_CACHE)||"null");}catch{/* storage is optional */}
+        const fallback=topologyFailureView({layout:shared,texts},cached,english);
+        setShared(fallback.layout);setDraft(fallback.layout.anchors);setTexts(fallback.texts);setDeleted(fallback.layout.deleted);
+      }finally{if(active)setLayoutReady(true);}
+    })();
+    return ()=>{active=false;controller.abort();};
+  },[english]);
   const labels = useMemo(() => {
     const d = {
       "label-serial": english
@@ -146,7 +175,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     [nodes, texts, deleted]
   );
   const begin = (e: React.PointerEvent, id: string, mode: "move" | "resize") => {
-    if (!editMode) return;
+    if (!editMode || !layoutReady) return;
     const a = draft[id] || {x:0,y:0,width:10,height:6};
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     drag.current = { id, mode, sx: e.clientX, sy: e.clientY, origin: a };
@@ -180,21 +209,28 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     });
   };
   const save = async () => {
-    localStorage.setItem(STORAGE, JSON.stringify(draft));
-    localStorage.setItem(TEXT_STORAGE, JSON.stringify(texts));
-    localStorage.setItem(DELETED_STORAGE, JSON.stringify(deleted));
-    setMessage(english ? "Saved" : "已保存");
+    const input={...shared,anchors:draft,texts:{...shared.texts,[english?"en":"zh"]:texts},deleted};
+    const response=await fetch("/api/evolving-profile/topology-layout",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error==="layout_revision_conflict"
+      ? english?"A newer layout was saved elsewhere. Reload before saving; this draft was not applied.":"其他页面已保存新版布局。请刷新核对后再保存，本草稿未覆盖新版。"
+      : english?"Shared layout was not saved. Check the service and retry; previous settings are preserved.":"共享布局未保存，请检查服务后重试；原设置已保留。");
+    const value=validateTopologyLayout(result);setShared(value);setLayoutWarning(false);
+    try{localStorage.setItem(SHARED_CACHE,JSON.stringify(value));}catch{/* The server, not browser cache, owns successful saving. */}
+    setMessage(english ? `Shared layout saved · v${value.revision}` : `已保存共享布局 · v${value.revision}`);
     setTimeout(() => setMessage(""), 2200);
   };
   const reset = async () => {
     setDraft(resolveTopologyLayout(null));
     setTexts({});
-    setDeleted([]);
+    setDeleted(defaultTopologyLayout().deleted);
     setEditing(null);
-    localStorage.removeItem(STORAGE);
-    localStorage.removeItem(TEXT_STORAGE);
-    localStorage.removeItem(DELETED_STORAGE);
-    setMessage(english ? "Reset" : "已重置");
+    setMessage(english ? "Default draft loaded; save to apply." : "已载入默认草稿，保存后才会生效。");
+  };
+  const restoreLegacy=async()=>{
+    const value=legacy.current;if(!value)return false;
+    setDraft(value.anchors);setTexts(value.texts[english?"en":"zh"]);setDeleted(value.deleted);setEditing(null);
+    setMessage(english?"Old browser draft loaded, not saved.":"已载入本浏览器旧草稿，尚未保存。");
   };
   const frame = (id: string, label: string, node?: TopologyNode) => {
     const a = draft[id] || {x:0,y:0,width:10,height:6},
@@ -285,7 +321,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     );
   };
   return (
-    <section className="reference-topology-shell" data-testid="topology-engine-lab">
+    <section className="reference-topology-shell" data-testid="topology-engine-lab" aria-busy={!layoutReady} data-layout-revision={shared.revision} data-layout-ready={layoutReady}>
       <div className="reference-topology-head">
         <div>
           <p className="topology-kicker">{english ? "EXECUTION TOPOLOGY" : "执行拓扑"}</p>
@@ -310,6 +346,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                 ? "Live projection"
                 : "实时投影"}
           </span>
+          <span role="status" data-testid="topology-layout-status">{!layoutReady ? (english?"Loading layout…":"正在加载布局…") : layoutWarning ? (english?"Shared layout unavailable · cached/default view":"共享布局暂不可用 · 显示缓存或默认布局") : shared.revision ? (english?`Shared layout v${shared.revision}`:`共享布局 v${shared.revision}`) : (english?"Calibrated default layout":"已校准的默认布局")}</span>
           <a
             className="reference-anchor-link"
             aria-label={editMode ? (english ? "Exit layout editor" : "退出布局编辑") : (english ? "Edit layout" : "编辑布局")}
@@ -324,9 +361,11 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                 type="button"
                 resetKey={JSON.stringify({ draft, texts, deleted })}
                 onAction={save}
+                disabled={!layoutReady}
               >
                 {english ? "Save layout" : "保存布局"}
               </ActionButton>
+              {hasLegacy && <ActionButton variant="outline" type="button" disabled={!layoutReady} onAction={restoreLegacy}>{english?"Load old browser draft":"载入本浏览器旧草稿"}</ActionButton>}
               {message && <span className="reference-save-feedback">{message}</span>}
               <ActionButton
                 variant="outline"
@@ -345,7 +384,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
         <details className="min-w-0" data-testid="topology-node-index"><summary className="cursor-pointer">{english ? "Keyboard node index" : "键盘节点入口"}</summary><div className="absolute z-20 grid max-h-80 max-w-xl gap-1 overflow-auto rounded border bg-card p-3 shadow-lg">{frames.map(({id,label,node})=><button key={id} type="button" aria-label={`${english ? "Open receipt: " : "打开回执："}${label}`} className="rounded border px-3 py-2 text-left text-sm hover:bg-muted" onClick={()=>setSelected(node)}>{label}</button>)}</div></details>
       </div>
       <div className="reference-topology-stage" style={{overflow:"auto",maxHeight:zoom===1 ? "none" : undefined}}>
-        <svg style={{width:`${zoom*100}%`,minWidth:zoom>1 ? W : undefined,height:"auto",maxWidth:"none"}} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMin meet" aria-label={english ? "Execution topology with receipt nodes" : "执行链路与回执节点"}>
+        <svg style={{width:`${zoom*100}%`,minWidth:zoom>1 ? W : undefined,height:"auto",aspectRatio:`${W} / ${H}`,maxWidth:"none",visibility:layoutReady?"visible":"hidden"}} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMin meet" aria-label={english ? "Execution topology with receipt nodes" : "执行链路与回执节点"}>
           <image
             href="/assets/topology-reference-design-v17.png"
             x="0"

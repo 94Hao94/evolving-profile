@@ -14,6 +14,24 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
+### Shared topology calibration and capability presentation — 2026-10-17
+
+- Preserved the operator's actual Chrome-visible node calibration in one SVG
+  coordinate plane, removed viewport-dependent double-scaling of label fonts,
+  and replaced the English/Chinese README flow captures.
+- Layout Save now writes installation-shared, revisioned settings; stale-tab
+  saves and competing writes are rejected, previous settings retained, and
+  corrupt/unavailable data reported rather than silently reset. Old per-origin
+  browser data remains an explicit recovery draft. Text overrides are locale-specific.
+- Strengthened product introductions with all five preference dimensions,
+  source-linked user-memory capabilities and agent-process taxonomy, backed by
+  new bilingual capability guides. No fictional benchmark or model-weight
+  training claim is introduced.
+
+中文：链路采用实际 Chrome 校准坐标和安装级共享保存，不再仅依赖网址各自的缓存；
+保留旧草稿，阻止旧页面覆盖新版，字号随同一 SVG 缩放。README 展开五维偏好、
+融合心智模型和用户/智能体记忆维度，图像换为分语言的真实校准界面。
+
 ### 5.1.1 — Host-specific deployment guidance — 2026-10-17
 
 - Added English/Chinese, source-checked backend startup, configuration ownership,

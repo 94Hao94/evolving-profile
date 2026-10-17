@@ -430,6 +430,10 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .reference-unified-node span { font-size:11px; line-height:1.15; }
 .reference-unified-node.is-compact strong { font-size:13px; line-height:1.15; }
 .reference-unified-node:focus-visible { outline:3px solid #1467b8; outline-offset:-3px; background:rgb(255 255 255 / 72%); }
+/* SVG text lives in the same canonical units as its bitmap and anchors.
+   Viewport vw fonts would scale once with the viewport and again with SVG. */
+.reference-unified-node.reference-label-node { font-size:15px; }
+.reference-unified-input { font-size:14px; }
 .reference-topology-stage:has(> svg[style]) { max-height:calc(100vh - 260px); }
 .reference-topology-shell .topology-modal-card p { overflow-wrap:anywhere; white-space:pre-wrap; }
 .reference-svg-labels text { font-size:13px; }

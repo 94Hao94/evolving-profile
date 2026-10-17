@@ -2,9 +2,11 @@
 
 <div align="center">
 
-**Personal context. Reusable agent experience. Observable memory workflows.**
+**Turn past conversations into personal context—and past work into reusable agent experience.**
 
-Make long-running AI collaboration easier to continue, inspect, and control.
+Source-linked memory about you, how you work, and how your agent gets things done.
+
+**Multi-dimensional evidence distillation · Five-dimensional preferences · Reusable agent experience · Observable execution**
 
 [简体中文](README-中文.md) · [Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
 
@@ -13,19 +15,23 @@ Make long-running AI collaboration easier to continue, inspect, and control.
 You have explained the project before. Your agent has solved a similar problem before.
 Why do you still have to repeat the context—and watch it take the same detour?
 
-**Evolving Profile (EP)** organizes user knowledge, agent process experience, and
-external documents as separate memory planes, then coordinates the useful routes
-for the current task. Its console helps you inspect not only what was found, but
-what was returned, what delivery evidence exists, and what still needs checking.
+**Evolving Profile (EP)** distills conversations and execution evidence into
+**multi-dimensional personal memory and reusable agent experience**. It keeps
+your facts, relationships, decisions and working preferences connected to their
+sources, while separately organizing what the agent tried, where it failed,
+how it recovered and which strategies have supporting verification.
 
-It is more than a place to store conversation text: it is a memory and evidence
-workflow for continuing real work across conversations.
+The result is context for continuing work: an agent can find the right project,
+adapt to how you prefer to collaborate, and consult relevant execution experience.
+The console lets you inspect the extracted memory, correct preferences and trace
+the evidence behind retrieval and delivery. Optional external documents remain
+a separate knowledge source.
 
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
 ## See the workflow
 
-![Actual English EP console: parallel user-memory, agent-memory and external-document routes, with prompt-bound receipt counters](docs/assets/ep51-flow-data-20261017-en.png)
+![Actual English EP console: calibrated shared layout with parallel user-memory, agent-memory and external-document routes](docs/assets/ep511-flow-calibrated-20261017-en.jpg)
 
 A real console capture of an existing historical audit record, cropped to exclude
 the private Prompt list. Historical source attribution is not a natural-user benchmark. Branches are
@@ -47,8 +53,9 @@ empty result, an excluded candidate and unknown host visibility are different st
 
 | Capability | Practical value |
 | --- | --- |
-| **User memory** | Keep facts, experiences, entities, multi-dimensional preferences and mental-model references organized instead of repeatedly explaining everything. |
-| **Agent process memory** | Retain traces, failures, repairs, capability observations and reusable strategy candidates—not just the final answer. |
+| **Personal context with sources** | Organize facts, states, experiences, entities and relationships, with time and original evidence for checking earlier decisions. |
+| **Five-dimensional preferences** | Adapt communication, learning, reasoning, collaboration and delivery to the task; inspect conditions, exceptions and cross-dimensional mental-model references. |
+| **Agent experience that can be re-evaluated** | Connect trajectories and observations to failures, repairs, reusable strategy candidates, capability observations and migration/revalidation. |
 | **Layered scenario navigation** | Locate the relevant Session and stage before expanding context or reading original evidence. |
 | **Separate external knowledge** | Search your selected document collection without treating a PDF as your personal history or preference. |
 | **Observable memory routes** | Diagnose whether a problem occurred during retrieval, admission, return, delivery or source readback. |
@@ -56,6 +63,29 @@ empty result, an excluded candidate and unknown host visibility are different st
 
 These capabilities provide structured evidence and reusable context; they do not
 guarantee that every old memory is correct or every future task will improve.
+
+## Personalization beyond a list of likes
+
+EP extracts preferences across **five dimensions**, so personalization can affect
+how a task is understood, discussed, executed and checked.
+
+| Dimension | What it can capture | Illustrative preference |
+| --- | --- | --- |
+| **Communication & presentation** | Wording, tone, structure and visual presentation | “For status updates, lead with the result and then give the evidence.” |
+| **Learning & understanding** | Explanation order, examples and learning methods | “Introduce a concrete example before the abstract mechanism.” |
+| **Analysis & decision-making** | Evidence standards, alternatives and decision criteria | “Compare the tradeoffs and say which option you recommend.” |
+| **Execution & collaboration** | Initiative, task scope, coordination and checkpoints | “Continue within the agreed scope; ask when the scope changes.” |
+| **Quality & delivery** | Verification, acceptance criteria and deliverable expectations | “Render the document and inspect its pages before delivery.” |
+
+These are examples, not installed defaults. An extracted preference can retain
+its scope, applicability, exceptions, supporting quotes, review status and
+superseding corrections. The console supports manual correction of its text and
+conditions. **Fusion mental models** connect reviewed preferences across dimensions
+to offer a broader reference for how someone works; they remain traceable,
+conditional interpretations rather than a fixed personality assessment.
+
+For the complete memory taxonomy, lifecycle and source-to-implementation map,
+see [What EP can remember](docs/MEMORY-CAPABILITIES.md).
 
 ## Three memory planes, different responsibilities
 
@@ -71,6 +101,8 @@ repaired the problem and what verification was observed. It organizes failures,
 repair patterns, strategies, capability observations and transfer/revalidation.
 Experience remains scoped to tasks, tools, time and available evidence; it is
 not automatically installed as a Skill or a permanent command for newer models.
+This is adaptation through stored evidence, selection and revalidation; EP does
+not retrain the underlying model's weights.
 
 **External RAG** is for an operator-selected collection of PDF, Word, Markdown
 and other supported files. It offers lexical/vector retrieval, reciprocal-rank
@@ -122,6 +154,17 @@ turning it into a verified fact. Relevance controls can retain weak background
 while excluding unrelated content; relevance is not a truth score.
 
 ## Typical uses
+
+**An illustrative project handoff:** a proposal changes from an early draft to an
+approved scope. EP can help locate the right Session, the later correction and
+the original wording, while separately consulting preferences about how to
+present the final document. A shared organization name alone is insufficient
+to merge two projects.
+
+**An illustrative repair:** an agent previously fixed a rendering failure.
+Process memory can preserve the attempt, failure, repair and verification, then
+offer a relevant strategy candidate for another task. A changed model or toolchain
+still needs an applicability check; an old success is not a universal recipe.
 
 - **Resume a project:** locate earlier decisions, constraints and corrections
   without merging unrelated projects from the same organization.

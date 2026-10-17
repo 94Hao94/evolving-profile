@@ -184,6 +184,18 @@ State files and managed service controls are operator-local. An alternate
 control the default installation's daemons. Several host readers remain home-
 scoped, so changing that variable alone does not create full multi-instance isolation.
 
+**Flow layout:** use the chain page's gear → Save layout. Geometry is shared in
+this installation's `config/topology-layout.json` under its state root; the badge
+shows the shared revision. Browser origins/ports do not own separate saved
+geometry anymore. Existing v7 browser settings are preserved as an explicit
+unsaved recovery draft; loading a draft does not publish it. A conflicting tab
+cannot overwrite newer settings. Text overrides are separated by language.
+If a save lock survives a process crash, the UI reports busy rather than breaks
+another writer's lock: verify the owning process has exited before operator
+recovery, and preserve the current file and `.previous`. Do not delete state to
+make the diagram look green. A different state root is a different installation,
+not a shared layout server across unrelated machines.
+
 ## 6. Automatic capture, extraction and optional workers
 
 MCP explicit reads work separately from automation. [Host setup](HOST-SETUP.md)
