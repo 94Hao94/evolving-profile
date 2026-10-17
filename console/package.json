@@ -1,6 +1,6 @@
 {
   "name": "@evolving-profile/console",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "description": "Evolving Profile control center",
   "bin": {
     "evolving-profile-console": "./bin/cli.js"

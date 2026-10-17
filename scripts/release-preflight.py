@@ -34,6 +34,17 @@ def inspect(root):
     else:
         major, minor, _ = version.split(".")
         display_version = f"{major}.{minor}"
+        manifest_path = root / 'config' / 'release-manifest.json'
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+                if not isinstance(manifest, dict):
+                    raise ValueError('manifest must be an object')
+            except (OSError, ValueError):
+                issues.append('invalid_release_manifest')
+            else:
+                if manifest.get('product_version') != version:
+                    issues.append('release_manifest_version_mismatch')
         if first_line(root / "README.md") not in {f"# Evolving Profile {display_version}", "# Evolving Profile"}:
             issues.append("readme_version_mismatch")
         if first_line(root / "NOTICE.md") != f"# Attribution — Evolving Profile {display_version}":

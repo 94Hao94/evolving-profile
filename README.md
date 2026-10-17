@@ -161,6 +161,12 @@ statuses are not erased merely to make a dashboard green.
 
 ## Quick start
 
+**Start here:** [complete backend/web deployment](docs/DEPLOYMENT.md) →
+[choose your host](docs/HOST-SETUP.md) → [copy its Agent request](docs/AGENT-SETUP.md).
+The existing contribution branch is named `release/5.1.0`; the current product
+patch is read from [VERSION](VERSION). Branch names and old RC assets are not
+automatic version indicators.
+
 ### Requirements
 
 - Python **3.11+**, `uv`, Node.js **20.9+**, npm and Git.
@@ -202,7 +208,7 @@ provided. JEV, cloud backup and external RAG are not enabled by installation.
 From the repository root, in separate terminals:
 
 ```bash
-uv run --project api evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
+uv run --project api --env-file .env evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
 ```
 
 ```bash
@@ -213,6 +219,11 @@ Open [the local Console](http://127.0.0.1:9999). Create your own Bank and verify
 health, real page interactions and the chosen model route.
 See [complete setup, upgrade and rollback](docs/LOCAL-SETUP.md).
 
+For host tools also start the **QueryController**, using the fresh-install
+contract/policy and exact command in [deployment step4](docs/DEPLOYMENT.md#4-start-backend-and-web-ui).
+The copyable route uses `personal-memory`; the current stdio adapter does not
+switch Banks merely because `EP_BANK_ID` or a Console selector changes.
+
 **API/Console startup is not full host integration.** Controller, Hook, Guidance
 and background workers have separate setup and readiness requirements. An API
 HTTP MCP handshake does not certify host `user_recall`, `agent_research` or
@@ -222,40 +233,41 @@ context delivery. Do not expose local ports publicly without access control.
 
 ## Let your agent set it up
 
-Give this to an agent with terminal and browser permission:
+Pick the actual host below. Paste the sentence together with the linked full
+request when you want the complete checklist; terminal/browser permission and
+your own credentials are still required.
 
-```text
-Install Evolving Profile release/5.1.0 from
-https://github.com/ccygod/evolving-profile-2.2 in a new directory.
-Read README, docs/LOCAL-SETUP.md and api/README.md first.
-Run ./scripts/install-ep51.sh --mode local --no-launch; do not skip fresh dependencies.
-Configure my own database, chat and embedding routes through a safe local
-credential flow. Never invent credentials, overwrite an existing installation
-or copy private Banks, transcripts, receipts or .env files.
-Start API and production Console, verify health and real browser interactions,
-and open http://127.0.0.1:9999. If a port is occupied, use a free port and update
-the related URLs; do not kill an unrelated process.
-Separately inspect the host integration and tell me which MCP/Hook/worker
-steps are verified, unavailable or still require configuration.
-Do not call a build “running,” an HTTP handshake “full host integration,”
-or a failed check “complete.” Do not enable optional external services without my choice.
-```
+| Agent surface | One-sentence installation request |
+| --- | --- |
+| **Codex desktop / CLI** | Install the current EP branch following `docs/DEPLOYMENT.md` and the Codex section of `docs/HOST-SETUP.md`; start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
+| **Claude Code CLI** | Follow EP's deployment and Claude CLI guides, start my local backend/UI, register its stdio MCP with `claude mcp add` and verify a real read without claiming untested automatic recording. |
+| **Claude Code desktop, local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
+| **Claude Desktop, ordinary Chat** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
 
-For **Codex**, prioritize the existing EP MCP/Hook route. For **Claude Code** and
-**Hermes**, use the shared adapter contracts but verify each host's transcript
-lifecycle and capabilities separately. This prompt delegates setup work; it
-does not make missing services or credentials appear automatically.
+Repository for each request:
+`https://github.com/ccygod/evolving-profile-2.2`, branch `release/5.1.0`.
+**[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
+They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
+effective configuration, optional features and safe stopping/rollback.
 
 ## Host compatibility
 
 | Host | Current position | Do not assume |
 | --- | --- | --- |
 | **Codex** | Most deeply exercised MCP/Hook, memory-route, scenario and receipt path | Every black-box answer has an adoption receipt |
-| **Claude Code** | Shared Controller/MCP and transcript/Hook bridge can be reused | Identical native lifecycle or one-command onboarding |
+| **Claude Code CLI** | Documented stdio registration recipe; verify native reads on the target host | Automatic transcript/Hook capture certified by MCP visibility |
+| **Claude Code desktop — Code tab** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
+| **Claude Desktop — Chat** | Separate local MCP JSON recipe | A bundled `.mcpb` installer, Code hooks or automatic Chat history capture |
 | **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
 
 Dedicated Claude Code/Hermes onboarding and adaptation remain improvement work
-for a subsequent version. No equal-validation claim is made.
+for a subsequent version. Recipes are now explicit; full native lifecycle
+certification is not implied. No equal-validation claim is made.
+
+For recommended modules, relevance, Provider/fallback, model/index matching,
+RAG/JEV and backup settings, read [web configuration guidance](docs/DEPLOYMENT.md#5-configuration-recommendations-in-the-web-ui).
+**A saved UI Provider profile and the manual API's `.env` are not automatically
+the same configuration.** Verify the effective profile before claiming changes applied.
 
 ## Reliability, privacy and limits
 
@@ -268,7 +280,7 @@ for a subsequent version. No equal-validation claim is made.
 - All-history semantic accuracy and answer benefit are not globally certified.
 
 Product version: [`VERSION`](VERSION). Current release status, actual checks,
-dependency risks and known limits belong in the [release notes](docs/RELEASE-NOTES-5.1.0.md)
+dependency risks and known limits belong in the [release notes](docs/RELEASE-NOTES-5.1.1.md)
 and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
 See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
 production-classified and full-workspace audit results and retained RC risks.
@@ -284,5 +296,6 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 
 - [中文介绍](README-中文.md)
 - [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
-- [Changelog](CHANGELOG-5.1.md) · [Release notes](docs/RELEASE-NOTES-5.1.0.md)
+- [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
+- [Changelog](CHANGELOG-5.1.md) · [Current patch notes](docs/RELEASE-NOTES-5.1.1.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)

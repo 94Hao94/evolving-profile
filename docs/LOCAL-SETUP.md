@@ -1,5 +1,11 @@
 # Local setup / 本地安装与启动
 
+New installations should follow the complete [deployment](DEPLOYMENT.md),
+[host-specific registration](HOST-SETUP.md) and [Agent requests](AGENT-SETUP.md).
+中文入口：[完整部署](DEPLOYMENT-中文.md)、[各宿主接入](HOST-SETUP-中文.md)、
+[给 Agent 的话](AGENT-SETUP-中文.md)。This page retains build/upgrade/rollback details;
+it is not a substitute for the Controller, Bank and host-readiness steps.
+
 ## One command: build, not launch / 一条命令：构建，不是启动
 
 Use a new source checkout with Python 3.11+, `uv`, Node.js **20.9+** and npm:

@@ -2,7 +2,8 @@
   "schema": "evolving-profile.source-of-truth.v1",
   "principle": "每类事实只有一个可写权威；其他文件必须标记为投影、缓存、回执或历史证据。",
   "authorities": {
-    "product_release": {"path": "config/release-manifest.json", "role": "唯一产品版本、发布通道和 schema 版本登记"},
+    "product_release": {"path": "VERSION", "role": "唯一产品版本；发行 manifest 的 product_version 必须与此一致并通过预检"},
+    "release_metadata": {"path": "config/release-manifest.json", "role": "发布通道和 schema 版本登记；产品版本为 VERSION 的受核验投影"},
     "runtime_configuration": {"path": "~/.evolving-profile/config/runtime-settings.json", "role": "模块开关、路由、Provider、RAG 和检索模型活动配置"},
     "guidance_configuration": {"path": "~/.evolving-profile/config/guidance-settings.json", "role": "Get Preference 候选预算和探测策略"},
     "backup_configuration": {"path": "~/.evolving-profile/config/backup-settings.json", "role": "备份周期、位置、保留和校验策略"},
@@ -13,7 +14,7 @@
   },
   "projections": {
     "provider_env": {"path": "~/.evolving-profile/profiles/evolving-profile-api.env", "authority": "runtime_configuration", "write_policy": "只允许由配置应用流程生成，禁止手工作为第二配置源"},
-    "release_runtime_copy": {"path": "~/.evolving-profile/config/release-manifest.json", "authority": "product_release", "write_policy": "部署时复制并校验，不单独编辑"},
+    "release_runtime_copy": {"path": "~/.evolving-profile/config/release-manifest.json", "authority": "release_metadata", "write_policy": "部署时复制并校验，不单独编辑"},
     "context_index": {"path": "~/.evolving-profile/context/context-index.json", "authority": "raw_context", "write_policy": "可删除重建，不能反向覆盖原始 Session"},
     "process_graph_api": {"path": "console /api/evolving-profile/runtime", "authority": "agent_process_memory", "write_policy": "只读运行投影"},
     "rag_indexes": {"path": "runtime-settings.rag.root_path/index", "authority": "external_rag", "write_policy": "模型或分块变化时标记 rebuild_required"}

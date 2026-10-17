@@ -44,6 +44,35 @@ class ReleasePreflightTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("missing_changelog", json.loads(result.stdout)["issues"])
 
+    def test_stale_release_manifest_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            (root / 'config').mkdir()
+            (root / 'config/release-manifest.json').write_text(json.dumps({'product_version':'3.0.0'}))
+            result = self.run_preflight(root)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('release_manifest_version_mismatch', json.loads(result.stdout)['issues'])
+
+    def test_malformed_release_manifest_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            (root / 'config').mkdir()
+            (root / 'config/release-manifest.json').write_text('[]')
+            result = self.run_preflight(root)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('invalid_release_manifest', json.loads(result.stdout)['issues'])
+
+    def test_matching_release_manifest_allows_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            (root / 'config').mkdir()
+            (root / 'config/release-manifest.json').write_text(json.dumps({'product_version':'4.0.0'}))
+            result = self.run_preflight(root)
+        self.assertEqual(result.returncode, 0)
+
     def test_stale_readme_and_notice_block_release(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

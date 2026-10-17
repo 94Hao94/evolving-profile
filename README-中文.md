@@ -139,6 +139,11 @@ flowchart TB
 
 ## 快速开始
 
+**第一次安装看这里：**[后端与网页完整部署](docs/DEPLOYMENT-中文.md) →
+[选择具体宿主](docs/HOST-SETUP-中文.md) → [复制对应 Agent 提示词](docs/AGENT-SETUP-中文.md)。
+现有贡献分支仍叫 `release/5.1.0`，当前补丁版本读 [VERSION](VERSION)，
+不能根据分支名或旧 RC 下载包判断最新版。
+
 ### 环境要求
 
 - Python **3.11+**、`uv`、Node.js **20.9+**、npm 和 Git。
@@ -176,7 +181,7 @@ API、Controller 和宿主配置应使用同一个 Bank ID；只切换网页下�
 在仓库根目录、分别打开两个终端：
 
 ```bash
-uv run --project api evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
+uv run --project api --env-file .env evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
 ```
 
 ```bash
@@ -186,6 +191,10 @@ node --env-file=.env console/bin/cli.js --hostname 127.0.0.1 --port 9999 --api-u
 打开[本地控制台](http://127.0.0.1:9999)，创建自己的 Bank，验证健康接口、实际页面点击
 及所选模型路线。详见[完整安装、升级与回退](docs/LOCAL-SETUP.md)。
 
+接宿主工具还要启动 **QueryController**，最小合约、访问策略和完整命令见
+[部署第4步](docs/DEPLOYMENT-中文.md#4-拉起后端和网页)。复制路线使用 `personal-memory`；
+当前 stdio 适配器不会仅因 `EP_BANK_ID` 或网页选择器变化就改用其他 Bank。
+
 **API/Console 能启动，不等于宿主已完整接入。** Controller、Hook、Guidance 和后台
 Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿主 `user_recall`、
 `agent_research` 或上下文送达。不要在没有访问控制的情况下公开本地端口。
@@ -194,35 +203,36 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 
 ## 让智能体帮你安装
 
-把下面这段交给有终端和浏览器权限的智能体：
+先选实际入口。一句话可以说明目标，需要完整执行时连同下方链接中的长版提示词一起复制；
+智能体仍需终端/浏览器权限和你自己的凭据。
 
-```text
-在新目录中，从 https://github.com/ccygod/evolving-profile-2.2
-安装 release/5.1.0 分支的 Evolving Profile。
-先读 README、docs/LOCAL-SETUP.md 和 api/README.md。
-执行 ./scripts/install-ep51.sh --mode local --no-launch，首次安装不要跳过依赖。
-通过安全的本地凭据配置流程设置我自己的数据库、聊天模型与向量模型。
-不要编造凭据、覆盖现有安装，或复制私人 Bank、transcript、回执及 .env。
-实际启动 API 与生产 Console，检查健康接口和真实浏览器点击，打开 http://127.0.0.1:9999。
-端口被占用时选其他空闲端口并同步相关网址，不要终止不相干的进程。
-另外检查宿主接入，分别说明 MCP、Hook、Worker 哪些已验证、哪些不可用、哪些还要配置。
-不要把构建完成说成正在运行，把 HTTP 握手说成完整接入，或把失败检查说成成功。
-未经我的选择，不开启额外的外部服务。
-```
+| Agent 入口 | 一句话安装要求 |
+| --- | --- |
+| **Codex 桌面端 / CLI** | 按 EP 的 `docs/DEPLOYMENT-中文.md` 和 `docs/HOST-SETUP-中文.md` 的 Codex 部分安装当前发行分支，拉起后端与网页，只注册一个 EP，并实际验证记忆查询与允许记录任务的自动捕获。 |
+| **Claude Code CLI** | 按 EP 部署及 Claude CLI 指南拉起本机后端与网页，用 `claude mcp add` 注册 stdio 工具并做真实读取，不把未经验证的自动记录说成完成。 |
+| **Claude Code 桌面端，本地 Code 页** | 按 EP 桌面 Code 指南安装，复用正确的 MCP 且不重复注册，拉起后端与网页，在这次桌面会话内验证实际工具。 |
+| **Claude Desktop 普通 Chat** | 按 EP 本地 MCP 指南连接已运行的后端；没有终端/浏览器工具就给出独立 CLI/Code 后端安装要求，不声称 Chat 已部署系统服务。 |
 
-**Codex** 优先使用现有 EP MCP/Hook 路线。**Claude Code、Hermes** 可以复用共享适配契约，
-但要分别核对 transcript 生命周期与宿主能力。
-这段提示词是把安装工作交给智能体，不会让缺少的服务或凭据自动出现。
+各提示词的源码地址均为 `https://github.com/ccygod/evolving-profile-2.2`，分支 `release/5.1.0`。
+**[完整分宿主提示词（含 Hermes）直接复制](docs/AGENT-SETUP-中文.md)。**
+长版包括备份合并、绝对路径、健康检查、网页点击、工具/捕获验收、配置生效、可选项和停止回退。
 
 ## 宿主兼容性
 
 | 宿主 | 当前定位 | 不应直接推断 |
 | --- | --- | --- |
 | **Codex** | 当前实际验证较充分的 MCP/Hook、记忆路由、情景与回执路线 | 所有黑盒回答都提供了答案采用回执 |
-| **Claude Code** | 可复用共享 Controller/MCP 和 transcript/Hook 桥接契约 | 原生生命周期和一键接入已与 Codex 一致 |
+| **Claude Code CLI** | 已有明确 stdio 注册步骤，目标宿主需实际验证查询 | 看到 MCP 就代表自动 transcript/Hook 捕获已认证 |
+| **Claude Code 桌面 Code 页** | 本地会话可复用受支持的 CLI 配置，另有专项步骤 | CLI 工具列表证明桌面/云端/SSH 也已完成 |
+| **Claude Desktop 普通 Chat** | 独立的本地 MCP JSON 接法 | 已有 `.mcpb` 一键包、Code Hook 或自动抓取全部聊天 |
 | **Hermes** | 可复用共享记忆服务及兼容的 MCP/API 契约 | 能力探针、回执与安装流程已经完全相同 |
 
-Claude Code、Hermes 的专用接入和适配增强仍是后续版本方向，不宣称三种宿主具有同等验证程度。
+专项步骤已补全，但 Claude Code、Hermes 的原生生命周期增强和完整验收仍是后续方向，
+不因文档有命令就宣称与 Codex 同等程度的完整适配。
+
+网页的模块、相关度、Provider/fallback、模型与索引、RAG/JEV 和备份建议见
+[配置怎么调](docs/DEPLOYMENT-中文.md#5-网页配置怎么调)。
+**网页保存的 Provider profile 和手动 API 的 `.env` 不自动相等，必须核对后端实际读取的配置。**
 
 ## 可靠性、隐私与边界
 
@@ -233,7 +243,7 @@ Claude Code、Hermes 的专用接入和适配增强仍是后续版本方向，�
 - 全部历史的语义准确率和最终回答收益未取得全局认证。
 
 产品版本读取 [`VERSION`](VERSION)。实际发布状态、测试、依赖风险和已知限制
-见[发布说明](docs/RELEASE-NOTES-5.1.0.md)与[发布记录](docs/RELEASE-LEDGER.md)，
+见[发布说明](docs/RELEASE-NOTES-5.1.1.md)与[发布记录](docs/RELEASE-LEDGER.md)，
 不在多个固定徽章中重复维护“最新版”。
 依赖的生产分类审计、完整工作区审计和保留的 RC 风险分别见[依赖风险说明](docs/DEPENDENCY-RISKS.md)。
 
@@ -246,5 +256,6 @@ EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/cc
 
 - [English README](README.md)
 - [本地安装与回退](docs/LOCAL-SETUP.md) · [API 配置](api/README.md)
-- [更新日志](CHANGELOG-5.1.md) · [发布说明](docs/RELEASE-NOTES-5.1.0.md)
+- [完整部署](docs/DEPLOYMENT-中文.md) · [分宿主接入](docs/HOST-SETUP-中文.md) · [Agent 安装话](docs/AGENT-SETUP-中文.md)
+- [更新日志](CHANGELOG-5.1.md) · [当前补丁说明](docs/RELEASE-NOTES-5.1.1.md)
 - [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)

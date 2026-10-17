@@ -1,4 +1,4 @@
-# Evolving Profile 5.1.0
+# Evolving Profile 5.1.1
 
 > English release notes first. 中文更新说明见本文后半部分。
 
@@ -13,6 +13,22 @@ those planes meet: long sessions, incomplete provider drafts, nested host
 receipts, native source review, and source-to-state coverage.
 
 ## Main changes
+
+### 5.1.1 — Host-specific deployment guidance — 2026-10-17
+
+- Added English/Chinese, source-checked backend startup, configuration ownership,
+  Codex and separate Claude CLI/Code-tab/Chat onboarding instructions.
+- Added copyable per-host agent setup requests and explicit acceptance levels;
+  protocol compatibility is not represented as verified host automation.
+- Added fresh-install Controller contract/policy examples. Existing user state,
+  credentials and history are not overwritten or imported by the examples.
+- Advanced the product patch version and checked its release-manifest projection
+  during preflight. Existing contribution branch/PR and historical RC tags remain
+  separate from the current product version and a new GitHub Release.
+
+中文：5.1.1 补全不同宿主的部署、Agent 提示词、后台启动和配置建议；
+Codex、Claude Code CLI、桌面 Code 与普通 Chat 分开说明。安装构建不等于完整接入，
+未实测能力不写成完成；已有 RC 标签不移动，用户私人运行配置不自动替换。
 
 ### Publication hardening and product documentation — 2026-10-17
 
