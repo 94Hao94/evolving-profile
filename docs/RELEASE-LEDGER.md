@@ -2,12 +2,41 @@
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
+**当前补丁：5.1.1**，以 [VERSION](../VERSION) 为产品版本权威。
+维护分支沿用 `release/5.1.0` 以续接同一个 PR，不代表安装补丁仍为5.1.0。
+旧 RC 标签/下载资产没有更新；要获取此补丁请使用当前发行分支或下方精确提交。
+
 | 产品版本 | 已核实状态 | 证据 | 署名边界 |
 | --- | --- | --- | --- |
 | 3.0.0 | 发行包已在 fork 的 `release/3.0.0` 分支提交；向上游 `main` 的 PR #1 于 2026-09-24 合并。截至 2026-09-26，上游未列出 Tag 或 GitHub Release。 | [PR #1](https://github.com/94Hao94/evolving-profile/pull/1)，合并提交 `545c03c`；本地发行分支提交 `2186354` | NOTICE 署名 CCY；Git 历史另含 `apple` 和 `zouhao` 提交身份，不能仅凭邮箱确定公开贡献署名。 |
 | 4.0.0 | 本地发行分支 `release/4.0.0` 已推送到 fork，已向上游提交 PR #2；尚未合并、打 Tag 或创建 GitHub Release。 | 本地提交 `9490f1b`；[PR #2](https://github.com/94Hao94/evolving-profile/pull/2)；预检通过；Host 295（含 2 个可选回滚测试跳过）、Controller 179、Guidance 73、Console 144、生产构建通过 | 继续沿用 NOTICE 的 CCY 发行署名；Git 提交身份仍不自动等于公开贡献署名。 |
 | 5.0.0 | 发行分支已推送到 fork，并已向上游提交 PR #3；尚未合并、打 Tag 或创建 GitHub Release。 | 当前分支 `release/5.0.0`；发布提交 `461ce97`，最新文档/审计提交 `e7600f8`；[PR #3](https://github.com/94Hao94/evolving-profile/pull/3)；发布说明 [`RELEASE-NOTES-5.0.0.md`](RELEASE-NOTES-5.0.0.md)；链路配图 [`assets/flow-topology-5.0.jpg`](assets/flow-topology-5.0.jpg)及 README 视觉资产；门禁：636 Python passed、2 skipped、35 subtests，Console 146 passed，API 10 passed，构建和脱敏扫描通过 | 继续沿用 NOTICE 的 CCY 发行署名；Agent Process Memory、链路观测和 5.0 文档是本次 EP 贡献，不将 Hindsight 或其他上游项目写成 EP 代码贡献者。 |
 | 5.1.0 | 2026-10-17 修复和产品文档已推送个人 `release/5.1.0`，现有上游 PR #4 已读回相同代码提交；PR 尚未合并。旧 `v5.1.0-rc.2` 仍是旧预发布产物，不包含本次分支更新；未创建新 Tag 或 Release。 | [个人发行分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.0)；[代码提交 24f6be4](https://github.com/ccygod/evolving-profile-2.2/commit/24f6be4cabfee3b066893c427200c68eb0a33fd5)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`DEPENDENCY-RISKS.md`](DEPENDENCY-RISKS.md)。本次证据见下方日期记录。 | 沿用 NOTICE 的 CCY 发行署名；native review 区分非 HTTP 来源与未知模型身份。生产分类依赖审计 0；完整工作区 36 条，0 critical。不是全部依赖或全部历史语义的零风险认证。 |
+
+### 2026-10-17：5.1.1 部署与分宿主接入文档补丁
+
+代码与文档提交 [5ee5043](https://github.com/ccygod/evolving-profile-2.2/commit/5ee50433070a482383fce1f86cbfcbe1ab400a40)
+已推送个人发行分支；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)
+读回相同 SHA，OPEN、未合并。本页随后只追加核实记录，最终 head 以远端读回为准。
+没有新 Tag/GitHub Release，没有移动旧 RC1/RC2，没有合并上游主分支。
+
+中英文 README 入口、[完整部署](DEPLOYMENT-中文.md)、[分宿主配置](HOST-SETUP-中文.md)、
+[Agent 安装提示词](AGENT-SETUP-中文.md)及[补丁说明](RELEASE-NOTES-5.1.1.md)已更新。
+Codex、Claude Code CLI、桌面本地 Code、普通 Chat 分开；包含后台启动、配置归属、
+网页建议、自动化边界、停止重启、备份与逐项验收。不把命令配方冒称已通过 Claude 原生全链路。
+
+当次验证：Python **2146 passed、3 skipped、107 subtests**；Console **90文件/629项**；
+TypeScript、干净 `npm ci` 和5.1.1生产/standalone构建通过。3项跳过为2个外部旧版回滚
+集成和1个显式选择才执行的操作员本机状态审计；后者不能要求待发布源码擅自升级私人运行环境。
+新隔离状态用例仍实际检查版本漂移，并证明不会改写旧状态。
+文档34个Shell片段语法、6个JSON片段、102个本地链接检查通过；两个README各3个导航锚点、
+30个本地目标经GitHub渲染检查无缺失。最小公开Controller配置在隔离状态实际启动并返回healthy，
+stdio初始化列出34工具；0后台模型请求，不证明实际Provider连通或Claude宿主生命周期。
+独立首次读者/代码审查的Important问题已修正，最终无Critical/Important未解决项。
+
+这是公开发行包与文档补丁；未覆盖用户本机配置、密钥、Bank、Hook和运行服务。
+安装器仍仅构建，Claude自动捕获、`.mcpb`包、云/SSH宿主及全部历史提炼没有因此新增认证。
+此前[依赖风险](DEPENDENCY-RISKS.md)保持披露，不冒称全部风险清零。
 
 下一次发布前先运行 `python3 scripts/release-preflight.py --json`，用当次 GitHub 读回修正仓库 URL、PR 状态和贡献者记录，不沿用旧快照。
 
