@@ -7,7 +7,7 @@
 | 3.0.0 | 发行包已在 fork 的 `release/3.0.0` 分支提交；向上游 `main` 的 PR #1 于 2026-09-24 合并。截至 2026-09-26，上游未列出 Tag 或 GitHub Release。 | [PR #1](https://github.com/94Hao94/evolving-profile/pull/1)，合并提交 `545c03c`；本地发行分支提交 `2186354` | NOTICE 署名 CCY；Git 历史另含 `apple` 和 `zouhao` 提交身份，不能仅凭邮箱确定公开贡献署名。 |
 | 4.0.0 | 本地发行分支 `release/4.0.0` 已推送到 fork，已向上游提交 PR #2；尚未合并、打 Tag 或创建 GitHub Release。 | 本地提交 `9490f1b`；[PR #2](https://github.com/94Hao94/evolving-profile/pull/2)；预检通过；Host 295（含 2 个可选回滚测试跳过）、Controller 179、Guidance 73、Console 144、生产构建通过 | 继续沿用 NOTICE 的 CCY 发行署名；Git 提交身份仍不自动等于公开贡献署名。 |
 | 5.0.0 | 发行分支已推送到 fork，并已向上游提交 PR #3；尚未合并、打 Tag 或创建 GitHub Release。 | 当前分支 `release/5.0.0`；发布提交 `461ce97`，最新文档/审计提交 `e7600f8`；[PR #3](https://github.com/94Hao94/evolving-profile/pull/3)；发布说明 [`RELEASE-NOTES-5.0.0.md`](RELEASE-NOTES-5.0.0.md)；链路配图 [`assets/flow-topology-5.0.jpg`](assets/flow-topology-5.0.jpg)及 README 视觉资产；门禁：636 Python passed、2 skipped、35 subtests，Console 146 passed，API 10 passed，构建和脱敏扫描通过 | 继续沿用 NOTICE 的 CCY 发行署名；Agent Process Memory、链路观测和 5.0 文档是本次 EP 贡献，不将 Hindsight 或其他上游项目写成 EP 代码贡献者。 |
-| 5.1.0 | 个人 fork 的 `release/5.1.0` 已设为默认分支，并发布最新预发布版 `v5.1.0-rc.2`；同时已向上游提交 PR #4，尚未合并。README 已整理为完整产品介绍、部署指南和 Agent 安装提示词。 | 个人仓库 [`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2)；[最新预发布版 v5.1.0-rc.2](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.2)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`ep51-release-hero.png`](assets/ep51-release-hero.png)；预检、脱敏、166 Python、531 Console、TypeScript、生产构建和一键部署通过 | 沿用 NOTICE 的 CCY 发行署名；5.1 的 native review 仍明确区分非 HTTP provenance，不将未暴露的模型身份写成确定事实。依赖审计关键漏洞为 0，仍有 8 个高/中等级告警已记录。 |
+| 5.1.0 | 2026-10-17 修复和产品文档已推送个人 `release/5.1.0`，现有上游 PR #4 已读回相同代码提交；PR 尚未合并。旧 `v5.1.0-rc.2` 仍是旧预发布产物，不包含本次分支更新；未创建新 Tag 或 Release。 | [个人发行分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.0)；[代码提交 24f6be4](https://github.com/ccygod/evolving-profile-2.2/commit/24f6be4cabfee3b066893c427200c68eb0a33fd5)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`DEPENDENCY-RISKS.md`](DEPENDENCY-RISKS.md)。本次证据见下方日期记录。 | 沿用 NOTICE 的 CCY 发行署名；native review 区分非 HTTP 来源与未知模型身份。生产分类依赖审计 0；完整工作区 36 条，0 critical。不是全部依赖或全部历史语义的零风险认证。 |
 
 下一次发布前先运行 `python3 scripts/release-preflight.py --json`，用当次 GitHub 读回修正仓库 URL、PR 状态和贡献者记录，不沿用旧快照。
 
@@ -19,6 +19,35 @@
 head `674c461641be0c019aae52088d3cddad77f90b6e`；不能据此声称当前本地工作已在远端。
 此次代码/安装文档独立复核已通过；完整产品稳定性、全部历史语义质量与答案收益
 不因候选测试通过而自动取得认证。下一次外部发布须再次读回实际提交与状态。
+
+### 2026-10-17：随后授权的 RC 分支与贡献 PR 同步
+
+这是上述“本地准备”之后单独获授权的外部同步，不改写此前的未发布记录。
+代码提交 `24f6be4cabfee3b066893c427200c68eb0a33fd5` 已推送至个人发行分支，
+GitHub PR #4 的 head 也已读回同一 SHA，状态 OPEN；后续本页的证据补记为文档提交。
+旧 RC1/RC2 标签保持原提交，没有新建 Tag/Release，也没有合并上游 `main`。
+需要本次更新的用户应选择发行分支或上述代码提交，而不是下载旧 RC2 资产。
+
+本次独立审查覆盖新增变更及此前批准的冻结候选：一项旧版回滚测试的可选路径
+检查缺陷经失败用例复现后修复，未实际执行历史回滚脚本。当前验证为：
+
+- Python Host/Guidance/Controller/Status/发布脚本：**2142 passed、2 skipped、107 subtests**。
+  两项跳过是未配置外部资产的历史 EP2.1 回滚集成，不算通过。
+- Console：**90 文件、629 测试通过**；限定 API 回归 **56 通过**；TypeScript、
+  SDK 与生产/standalone 构建通过。限定 API 测试不是全部外部集成认证。
+- 正常 source-map、模板转义、选择器 AST 和真实 Typography 编译探针通过；
+  生产分类审计 0、完整工作区 36 条（29 high、6 moderate、1 low、0 critical），
+  四个残余 advisory 的范围与输入条件见风险文档，不隐去生成源码的已知问题。
+- GitHub 实际下载的 **1719 个源码文件**与批准清单逐文件哈希一致，重新通过源码
+  隐私扫描、结构预检和隔离的 stdio MCP `initialize` / `tools/list`：34 个工具，
+  包含用户/智能体 Recall、Research、偏好、情景摘要和原文读取入口。
+  该探针不调用模型，不证明宿主送达、回答采纳或全部历史提炼完成。
+- 中英文 README 使用分别切换语言后的真实界面截图；去除私人 Prompt 侧栏，
+  保留“送达未知”等实际状态。图像经过目视与原始像素一致性检查，非合成效果指标。
+
+本地私人状态没有随发行包上传。分发默认路径、配置覆盖与合成测试数据已做可移植性
+处理；私有服务磁盘代码核对不代表每个已运行 MCP 进程重新加载。当前记录是有边界
+的 RC 贡献更新，不是所有宿主、平台、诊断语言或历史答案收益的稳定认证。
 
 ### 2026-10-13：5.1 后台写入热修复
 
