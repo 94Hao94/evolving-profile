@@ -270,7 +270,7 @@ class PromptOriginResolver:
             (stat.st_size==state['size'] and stat.st_mtime_ns!=state['mtime'])):
             if self.bytes_left<=0 or time.monotonic()>self.deadline:
                 return [],{'state':'partial','indexed_prefix_bytes':0,'source_bytes':stat.st_size,'witness_revalidation':'budget_exhausted'}
-            state={'inode':stat.st_ino,'revision':revision,'size':stat.st_size,'mtime':stat.st_mtime_ns,'cursor':0,'tail_at':None,'turns':{},'anchors':{},'skip_record':False,'oversized_user_gap':False}
+            state={'inode':stat.st_ino,'revision':revision,'size':stat.st_size,'mtime':stat.st_mtime_ns,'cursor':0,'tail_at':None,'tail_start':None,'turns':{},'anchors':{},'skip_record':False,'oversized_user_gap':False}
             if key not in _TURN_CACHE and len(_TURN_CACHE)>=SOURCE_INDEX_LIMIT:_TURN_CACHE.pop(next(iter(_TURN_CACHE)))
             _TURN_CACHE[key]=state
         else:
@@ -283,11 +283,21 @@ class PromptOriginResolver:
             if state['cursor']<stat.st_size:
                 end=self._scan_segment(path,state,state['cursor'],262144 if shallow else SCAN_CHUNK,aligned=True)
                 if end is not None:state['cursor']=end
-            if not shallow and stat.st_size>SCAN_CHUNK and state['tail_at']!=stat.st_size:
-                self._scan_segment(path,state,max(0,stat.st_size-SCAN_CHUNK),SCAN_CHUNK);state['tail_at']=stat.st_size
+            if not shallow and stat.st_size>SCAN_CHUNK:
+                # Tool-heavy active turns can push the user record beyond one
+                # final chunk. Reserve half the remaining shared budget for
+                # exact proof and other sources; never expand the total cap.
+                tail_length=min(8*SCAN_CHUNK,max(0,self.bytes_left//2))
+                tail_start=max(0,stat.st_size-tail_length)
+                if tail_length and (state['tail_at']!=stat.st_size or state.get('tail_start') is None or tail_start<state['tail_start']):
+                    end=self._scan_segment(path,state,tail_start,tail_length)
+                    if end is not None:state['tail_at']=stat.st_size;state['tail_start']=tail_start
             if not shallow and turn not in state['turns'] and state['cursor']<stat.st_size:self._time_probe(path,state,row)
         matches=[];fresh_state=None
         for item in state['turns'].get(turn,[]):
+            # Cached text/fingerprint only selects candidates. Every matching
+            # locator must still pass a fresh exact raw-byte hash below.
+            if not _matches_witness(row,item):continue
             length=item.get('message_record_bytes',0)
             if length<1 or self.bytes_left<length or time.monotonic()>self.deadline:
                 fresh_state='budget_exhausted';continue
@@ -297,7 +307,7 @@ class PromptOriginResolver:
                 stream.seek(item['source_byte_offset']);raw=stream.read(length)
             self.bytes_left-=len(raw)
             if len(raw)!=length or hashlib.sha256(raw).hexdigest()!=item['message_sha256']:
-                state['turns']={};state['anchors']={};state['cursor']=0;state['tail_at']=None
+                state['turns']={};state['anchors']={};state['cursor']=0;state['tail_at']=None;state['tail_start']=None
                 state['skip_record']=False;state['oversized_user_gap']=False
                 fresh_state='source_changed';matches=[];break
             if _matches_witness(row,item):matches.append(item)

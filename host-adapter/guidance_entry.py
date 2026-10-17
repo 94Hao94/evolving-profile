@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import sys
@@ -20,8 +21,8 @@ from task_state import TaskStateStore
 from lib.memory_policy import classify_memory_policy
 from entry_navigation import build_navigation_map
 
-GUIDANCE_SRC = Path("/Users/apple/.evolving-profile/runtime/guidance")
-GUIDANCE_CONFIG = Path("/Users/apple/.evolving-profile/guidance-v1/guidance-v1.json")
+GUIDANCE_SRC = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path(__file__).resolve().parents[1] / "guidance")))
+GUIDANCE_CONFIG = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json")))
 RECEIPT_ROOT = Path.home() / ".evolving-profile/audit/guidance-entry-receipts"
 MAX_TOKENS = 5000
 MAX_CANDIDATES = 6
@@ -126,6 +127,7 @@ def build_request(hook_input: dict, prompt: str, context_ref: str, *, memory_pol
     phase = _phase(value)
     return {
         "context_ref": context_ref,
+        "check_id": context_ref.removeprefix('entry:') if context_ref.startswith('entry:') else None,
         "task": {
             "objective": value or "本轮用户消息入口检查",
             "current_user_message": value,

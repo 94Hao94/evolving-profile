@@ -17,6 +17,14 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();await rm(root,{recursive:true,force:true});});
 async function save(){await writeFile(path.join(root,"context/context-index.json"),JSON.stringify(index));await writeFile(path.join(root,"context/context-bank-associations.json"),JSON.stringify(associations));}
+it("keeps service-probe diagnostics textual when an unconfigured endpoint returns HTML",async()=>{
+ await save();vi.stubGlobal("fetch",async()=>new Response("<!DOCTYPE html>unavailable",{status:501}));
+ const {GET}=await import("@/app/api/evolving-profile/runtime/route");
+ const response=await GET(req("bankId=bank-a"));expect(response.status).toBe(200);
+ const value=await response.json();
+ expect(value.services[0].detail).toBe("HTTP 501");
+ expect(value.services[0].status).toBe("attention");
+});
 it.each([
  ["session","session:foreign",{bank_id:"bank-b"}],
  ["nested source reference","session:foreign",{bank_id:"bank-a",source_refs:[{bank_id:"bank-b",source_id:"foreign-source"}]}],

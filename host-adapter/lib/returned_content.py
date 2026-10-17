@@ -24,6 +24,21 @@ def returned_items(value):
     if not _body_allowed(value):
         return []
     rows = []
+    if value.get('source') == 'scenario_coverage_ledger':
+        view = value.get('view')
+        if view == 'requirements' and isinstance(value.get('requirements'), list):
+            rows = [(row, 'scenario_requirement') for row in value['requirements']]
+        elif view == 'relations' and isinstance(value.get('relations'), list):
+            for row in value['relations']:
+                if not isinstance(row, dict) or not _body_allowed(row):
+                    continue
+                body = json.dumps(row, ensure_ascii=False, sort_keys=True)
+                rows.append(({'id': hashlib.sha256(body.encode()).hexdigest(), 'text': body}, 'scenario_relation'))
+        elif view == 'source' and value.get('source_readback') is True and value.get('raw_source_status') == 'source_read':
+            raw = value.get('raw_source')
+            if isinstance(raw, dict) and _body_allowed(raw) and isinstance(raw.get('text'), str) and raw['text']:
+                rows = [({'id': str(value.get('scenario_id') or '') + ':' + str(value.get('snapshot_id') or '') + ':raw',
+                          'text': raw['text'], 'source_locator': {'locators': raw.get('locators', [])}}, 'original_source')]
     for key in ('memories', 'records', 'items', 'results', 'sources'):
         if isinstance(value.get(key), list):
             rows.extend((item, 'process_candidate' if value.get('source') == 'agent_process_memory' else 'returned_candidate') for item in value[key])
@@ -46,7 +61,7 @@ def returned_items(value):
         if not _body_allowed(row):
             continue
         body = next((row.get(k) for k in ('text', 'text_preview', 'content', 'summary', 'title') if isinstance(row.get(k), str)), '')
-        identity = row.get('id') or row.get('process_memory_id') or row.get('unit_id') or row.get('scenario_id')
+        identity = row.get('id') or row.get('process_memory_id') or row.get('requirement_id') or row.get('unit_id') or row.get('scenario_id')
         if not identity and row.get('section_id'):
             identity = f"{row.get('model_id') or 'section'}:{row['section_id']}"
         if not identity and not body:
@@ -64,6 +79,23 @@ def returned_items(value):
             item['readback_tool'] = 'read_agent_process_memory'
         result.append(item)
     return result
+
+
+def original_message_readback_count(value, tool):
+    """Original transcript messages, distinct from Bank read_source or adoption."""
+    if not isinstance(value, dict):
+        return 0
+    if tool == 'read_agent_process_memory':
+        return int(bool((value.get('raw_source') or {}).get('text')))
+    if tool not in {'read_scenario_summary', 'read_context_summary'} or value.get('source') != 'scenario_coverage_ledger':
+        return 0
+    if not any(item['source_role'] == 'original_source' for item in returned_items(value)):
+        return 0
+    locators = (value.get('raw_source') or {}).get('locators')
+    if not isinstance(locators, list):
+        return 0
+    return len({row['raw_line_sha256'] for row in locators
+                if isinstance(row, dict) and isinstance(row.get('raw_line_sha256'), str) and row['raw_line_sha256']})
 
 
 def preview_items(items):

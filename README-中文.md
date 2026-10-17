@@ -1,212 +1,250 @@
 # Evolving Profile
 
-> English: [README.md](README.md)
+<div align="center">
 
-**普通记忆系统记住“说过什么”；Evolving Profile（EP）记住：哪些是证据、从哪条路线找到、是否真的送达、当前情境是什么，以及下一步怎样更可靠地行动。**
+**让 AI 理解你、复用经验，并看清记忆如何参与每一次任务。**
 
-![版本](https://img.shields.io/badge/当前版本-5.1.0-2563eb?style=for-the-badge)
-![验证](https://img.shields.io/badge/验证-发行候选版-f59e0b?style=for-the-badge)
-![接口](https://img.shields.io/badge/接口-MCP%20%7C%20Hook%20%7C%20HTTP-7c3aed?style=for-the-badge)
+面向长期 AI 协作的个人记忆、智能体过程经验与可观察工作流。
 
-![EP 记忆与执行控制平面](docs/assets/ep51-release-hero.png)
+[English](README.md) · [快速开始](#ep-quick-start) · [工作逻辑](#ep-how-it-works) · [让智能体安装](#ep-agent-setup) · [发布状态](docs/RELEASE-LEDGER.md)
 
-## 一句话理解
+</div>
 
-EP 不是把所有对话塞进一个向量库，而是把用户记忆、智能体过程记忆、情景上下文、外部资料、原文证据、工具回执和当前任务放在一条可审计的控制链中：
+你已经解释过这个项目，智能体也解决过相似问题。
+为什么换一个会话，还要重新交代背景，甚至看着它再次走同样的弯路？
 
-```text
-当前 Prompt → 判断缺口 → 选择路线 → 召回候选 → 核对来源 → 组装上下文包
-            → Agent 执行 → 用户/智能体写回 → 审计回执 → 最终回答
-```
+**Evolving Profile（EP）**将用户知识、智能体过程经验与外部资料分开组织，再围绕
+当前任务协调使用。你不仅能保留自己的事实、偏好和项目背景，也能积累智能体
+执行任务时的失败、修复与可复用策略，并通过网页检查各条记忆路线的证据状态。
 
-## 它解决什么痛点
+它不只保存“聊过什么”，还为继续做事提供可定位、可检查、可控制的长期上下文。
 
-- 相似度命中被误当成事实；
-- 用户事实、项目局部决定和智能体临时方案混在一起；
-- 情景摘要不完整，却把整个项目历史无边界注入；
-- Recall 找到了候选，但候选没有返回、没有送达或没有回读原文；
-- 调用了工具但返回 0 条，页面却无法区分“未调用”和“调用后为空”；
-- 外部 PDF/Word 资料与 EP 内部记忆互相污染；
-- 为弱模型准备的旧经验强行影响未来更强的新模型；
-- 每轮都启用全部提炼器，带来 Token、延迟和路由混乱。
+![概念示意图：三路来源经过检查、检索与可审计回答流程；不是实际界面截图](docs/assets/ep51-release-hero.png)
 
-EP 的核心不是“记得更多”，而是让这些问题变成不同状态、不同证据和不同可修复路径。
+## 先看实际工作流
 
-## EP 的完整逻辑
+![真实中文控制台：用户记忆、智能体记忆和外部资料的并行路线及当前回执计数](docs/assets/ep51-flow-data-20261017-zh.png)
+
+截图来自实际控制台中的既有历史审计记录，裁去了左侧私人 Prompt 列表；
+历史来源归属不作为自然用户样本基准。图中的分支代表可选路线，
+**不是每一轮都必须调用全部功能**。数字属于选中记录的可观察回执，不是召回准确率，
+也不能单独证明最终回答采用了其中内容。
+
+<details>
+<summary>不只看图，还可以检查每个节点的回执</summary>
+
+![真实中文回执详情：展示当前节点可观察到的调用证据](docs/assets/ep51-receipt-detail-20261017-zh.png)
+
+没有回执、已调用但返回空、候选被排除、宿主送达未知，是不同的状态。
+点击节点检查对应证据，比笼统地说“AI 忘了”更容易找到原因。
+
+</details>
+
+## 六项核心能力
+
+| 能力 | 为实际工作带来什么 |
+| --- | --- |
+| **用户记忆** | 分开组织事实、经历、实体、多维度偏好与心智模型参考，减少反复解释背景。 |
+| **智能体过程记忆** | 不只保存最终答案，也保留轨迹、失败、修复、能力观测和可复用策略候选。 |
+| **分层情景导航** | 先定位 Session 和任务阶段，再按需展开背景或回读原文。 |
+| **外部知识隔离协同** | 资料文件夹可以参与任务，但 PDF 不会因此冒充你的历史经历或个人偏好。 |
+| **记忆链路可观察** | 区分检索、筛选、返回、送达与原文回读，帮助定位问题发生在哪一步。 |
+| **模块化配置** | 按需要配置记忆模块、模型服务、检索模型、可选判断器和预算。 |
+
+这些能力提供的是结构化证据和可复用上下文，不代表所有旧记忆都正确，
+也不承诺每项任务都会自动提升效果。
+
+## 三类记忆，各司其职
+
+![用户记忆、智能体过程经验与外部 RAG 分开管理，再汇入当前任务的上下文包](docs/assets/ep-memory-planes-zh.svg)
+
+**用户记忆**包含事实、经历、实体与关系、观察、条件化多维度偏好、心智模型参考和
+情景导航。偏好应保留条件与例外；项目局部要求不能悄悄变成永久全局规则。
+
+**智能体过程记忆**关注尝试了什么、哪里失败、如何修复、观测到什么验证，以及经验
+是否适用于当前任务。失败事件、修复模式、过程策略、能力观测和迁移再验证各有位置。
+它不是自动安装的 Skill，也不是强加给未来更强模型的永久命令。
+
+**外部 RAG**用于操作者选择的 PDF、Word、Markdown 等资料集合，支持词法/向量检索、
+倒数排名融合（RRF）、可选模型重排，以及索引兼容性与重建控制。
+它是可选的外部知识路线，不是 EP 内部记忆必须再走一遍的第二套索引。
+
+<a id="ep-how-it-works"></a>
+
+## 一次任务如何使用 EP
 
 ```mermaid
 flowchart TB
-    S[Prompt · 工具 · 文件 · 回执] --> U
-    S --> A
-    S --> R
-    subgraph U[用户记忆]
-      U1[事实 · 经历 · 实体]
-      U2[偏好 · 观察 · 心智模型]
-    end
-    subgraph A[智能体过程记忆]
-      A1[轨迹 · 失败 · 修复]
-      A2[能力 · 策略 · 再验证]
-    end
-    subgraph R[外部 RAG]
-      R1[词法 · 向量 · RRF · Rerank]
-      R2[可选 JEV 审查]
-    end
-    U --> P[受控上下文包]
-    A --> P
-    R --> P
-    P --> X[Agent 执行]
-    X --> W[可审计写回]
+    Q[当前请求与已有上下文] --> D{还有值得补充的信息缺口吗}
+    D -->|没有| X[智能体利用当前上下文执行]
+    D -->|有| R[选择相关路线]
+    R --> U[用户偏好 / 用户召回 / 用户研究]
+    R --> A[智能体召回 / 研究 / 过程证据]
+    R --> E[外部 RAG：已启用且任务相关时]
+    U --> C[核对范围与来源]
+    A --> C
+    E --> C
+    C --> P[组装当前任务的上下文]
+    P --> X
+    X --> W[符合条件的增量写回与审计]
 ```
 
-### 三个记忆平面
+同一个任务可以同时需要用户背景与智能体经验，因此允许组合路线；
+用户明确限定来源时，以当前要求为准。
 
-1. **用户记忆**：事实、经历、实体与关系、观察、多维度偏好、心智模型和情景摘要。
-2. **智能体过程记忆**：轨迹、失败事件、修复模式、能力观测、过程策略、迁移与再验证。
-3. **外部 RAG**：只检索操作者指定的 PDF、DOCX、Markdown 和数据目录，不自动污染 EP 内部记忆。
+### 先导航，必要时再深入
 
-三条路线可以在同一个上下文包中协同，但不会互相冒充来源。
+情景摘要分为**紧凑、标准、完整三层**，用于定位会话、阶段、条件与后续纠正，
+并不替代精确原话。
 
-### 证据状态必须分开
+三层仍不够时，可以走有界的 Session/Project 原始历史读取路线。涉及人名、金额、
+版本、否定、冲突和正式交付内容时，再按可用来源定位回读原文。
+不同定位使用不同读取工具：本地 transcript 路径不等于 Bank 的 `read_source` ID。
+
+### 证据状态分开，记忆才更可控
 
 ```text
-候选 ≠ 已返回 ≠ 已送达 ≠ 已回读原文 ≠ 已确认答案采用
+发现候选 ≠ 已返回 ≠ 已观测送达 ≠ 已读原文 ≠ 已确认答案采用
 ```
 
-点击链路节点可以看到候选数、返回数、送达数、排除原因、相关度档位、策略版本、来源 ID 和原文回读状态。
+弱相关或未确认内容可以保留为查证线索，但不能自动升级成事实。
+相关度设置可以保留弱相关背景并排除无关内容；相关度本身不是正确性评分。
 
-## 真实链路和数据规模
+## 适合哪些场景
 
-![EP5.1 数据丰富的中文链路页](docs/assets/ep51-flow-data-zh.png)
+- **跨会话继续项目：** 找到此前决定、约束与纠正，避免把同一机构的不同项目混为一谈。
+- **适配协作习惯：** 根据当前任务读取条件化偏好，而不是把所有偏好塞进每个回答。
+- **复用执行经验：** 检索过去的调试或制作经验，再核对前提是否仍然成立。
+- **结合外部资料工作：** 对照个人历史与外部文档，同时保留来源边界。
+- **排查记忆似乎失效：** 检查实际路线和回执，而不是仅凭回答猜测系统是否工作。
 
-上图来自真实中文控制台验收，展示了大规模记忆目录、事实/经历/实体数量、偏好与心智模型入口、用户记忆路线、情景判断、历史读取和回答汇聚。它不是静态架构图，而是实际页面中的可观察证据。
+## 功能配置与成本控制
 
-![EP5.1 中文回执详情](docs/assets/ep51-receipt-detail-zh.png)
+网页提供用户/智能体记忆模块、Provider/Fallback、Embedding/Rerank、外部 RAG、
+情景摘要、JEV、备份和审计等设置。记录、检索和上下文使用职责不同；
+关闭模块不等于删除已存数据。
 
-点击详情后，可以看到相关度最低阈值、记忆平面、返回/排除数量、强中弱相关分布、筛选原因和策略版本，解决“为什么召回、召回了什么、为什么没有送达”的问题。
+- 按需选择本地或在线检索模型；保存名称不等于模型可加载，实际路径/服务和索引签名需要验证。
+- 只为希望参与检索的资料集合启用外部 RAG。
+- **JEV 是可选判断辅助：** 可参与已配置的路由或证据审查环节，不替代召回器，也不写入事实。
+  关闭或不可用时，保持对应规则托底以及明确的未知/错误状态。
+- 高风险判断需要单独主动启用；它不覆盖宿主原有的权限与来源核验边界。
+- 后台提炼、在线向量服务和判断服务可能消耗 Provider Token；
+  本地模型也有内存和启动成本。通过模块开关、按需展开、分页和预算控制，而不是假定记忆免费。
 
-![EP 记忆平面](docs/assets/ep-memory-planes-zh.svg)
+安装器不会开启实验性全历史模型试验。历史记录可能处于待审、保护或未知状态；
+系统不会为了让面板变绿而抹去这些状态。
 
-![从问题到 EP 解法](docs/assets/ep-problem-solution-zh.svg)
+<a id="ep-quick-start"></a>
 
-## 情景摘要与原文回读
+## 快速开始
 
-情景摘要不是事实来源，而是导航层：
+### 环境要求
 
-```text
-compact → standard → full → 有界 Session/Project 原文 → read_source
-```
+- Python **3.11+**、`uv`、Node.js **20.9+**、npm 和 Git。
+- 完整 API 需要 PostgreSQL/pgvector；内嵌数据库路线须明确安装 `embedded-db` extra。
+- 可用的聊天模型与向量模型路线；聊天 Coding Plan 不一定提供向量服务。
+- 本机实际验证平台为 macOS；Linux 需核对平台依赖，未认证 Windows 原生安装。
 
-精确人名、金额、版本、状态、否定、冲突和正式交付内容，需要继续回读原文。摘要不完整时，不会默认把整个 Project 历史塞入上下文。
-
-## 智能体过程记忆
-
-```text
-P0 轨迹 → P1 事件 → P2 失败事件 → P3 修复模式 → P4 技能候选
-```
-
-每条过程经验都带任务族、阶段、模型、工具、项目/Session 范围、前置条件、反例、验证质量、样本量和再验证记录。Agent 自己说“完成”不能单独升级为技能。
-
-干预强度会随证据调整：`观察 → 提示 → 建议 → 脚手架 → 防护`。
-
-## 外部 RAG 与 JEV
-
-外部 RAG 支持词法检索、向量检索、RRF、Rerank、索引签名和重建提示。Embedding、Rerank、Provider/Fallback、JEV 都能在网页端独立配置。
-
-JEV 是可选的后处理判断器，不负责召回和写入事实，可用于证据充分性、EP/RAG 路由、故障阶段和高风险门控。关闭或不可用时由确定性规则和明确的 unknown 状态托底。
-
-## 环境要求
-
-- macOS 或 Linux；
-- Python 3.11+ 与 `uv`；
-- Node.js 20+ 与 npm；
-- 完整 API 数据平面需要 PostgreSQL；
-- 可选的本地 Embedding/Rerank 运行时；
-- 可选外部 RAG 目录；
-- 用于 LLM 工作的 OpenAI-compatible 或其他 Provider。
-
-## 部署方式
-
-### 一键本地部署
+### 1. 一键安装构建
 
 ```bash
+git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 
-脚本会执行版本预检、依赖检查、脱敏扫描、Console 生产构建并生成本地启动清单。常用选项：
+脚本执行预检与来源文本扫描，安装基础依赖，**先构建 SDK 再构建 Console**，
+并生成本地启动清单；只在 `.env` 不存在时创建模板。
+**它不会启动服务，也不会自动注册 MCP/Hook。**
+
+`--dry-run` 用于不写文件的预演；`--skip-deps` 只用于这个目录已经装好依赖时，
+首次安装不要使用。
+
+### 2. 配置自己的服务
+
+按 [API 配置说明](api/README.md) 填写本地 `.env`，准备数据库与向量服务。
+基础安装不包含内嵌 PostgreSQL 或本地 ML，按选定路线安装相应 extra。
+API、Controller 和宿主配置应使用同一个 Bank ID；只切换网页下拉菜单，
+不等于已配置宿主的记忆命名空间。
+
+发行包不包含作者的生产 Bank、私有对话、凭据或模型权重。
+安装也不会默认开启 JEV、云备份和外部 RAG。
+
+### 3. 启动 API 与网页
+
+在仓库根目录、分别打开两个终端：
 
 ```bash
-./scripts/install-ep51.sh --dry-run
-./scripts/install-ep51.sh --mode local --skip-deps --no-launch
+uv run --project api evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
 ```
-
-脚本不会导入生产 Bank、Prompt、Session、回执、API Key 或外部 RAG；JEV、云备份和外部 RAG 也不会被默认打开。
-
-### 手动部署
 
 ```bash
-cp .env.example .env
-cd api && uv sync
-cd ../console && npm ci
-cd .. && npm run dev
+node --env-file=.env console/bin/cli.js --hostname 127.0.0.1 --port 9999 --api-url http://127.0.0.1:8888
 ```
 
-然后打开：`http://127.0.0.1:9999`。首次运行请创建自己的 Bank，并在网页端配置 Provider、存储路径、备份、RAG 和语言。
+打开[本地控制台](http://127.0.0.1:9999)，创建自己的 Bank，验证健康接口、实际页面点击
+及所选模型路线。详见[完整安装、升级与回退](docs/LOCAL-SETUP.md)。
 
-## 给 Agent 的自动安装提示词
+**API/Console 能启动，不等于宿主已完整接入。** Controller、Hook、Guidance 和后台
+Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿主 `user_recall`、
+`agent_research` 或上下文送达。不要在没有访问控制的情况下公开本地端口。
 
-### Codex
+<a id="ep-agent-setup"></a>
+
+## 让智能体帮你安装
+
+把下面这段交给有终端和浏览器权限的智能体：
 
 ```text
-从 https://github.com/ccygod/evolving-profile-2.2 克隆 release/5.1.0 到新的目录。
-执行 ./scripts/install-ep51.sh --mode local --skip-deps --no-launch，检查预检、脱敏
-扫描和构建结果；通过后运行 npm run dev，并打开 http://127.0.0.1:9999。
-不要导入任何生产 Bank、历史 Session、回执或 API Key。任何检查失败都要报告准确原因，
-不能把安装失败说成完成。
+在新目录中，从 https://github.com/ccygod/evolving-profile-2.2
+安装 release/5.1.0 分支的 Evolving Profile。
+先读 README、docs/LOCAL-SETUP.md 和 api/README.md。
+执行 ./scripts/install-ep51.sh --mode local --no-launch，首次安装不要跳过依赖。
+通过安全的本地凭据配置流程设置我自己的数据库、聊天模型与向量模型。
+不要编造凭据、覆盖现有安装，或复制私人 Bank、transcript、回执及 .env。
+实际启动 API 与生产 Console，检查健康接口和真实浏览器点击，打开 http://127.0.0.1:9999。
+端口被占用时选其他空闲端口并同步相关网址，不要终止不相干的进程。
+另外检查宿主接入，分别说明 MCP、Hook、Worker 哪些已验证、哪些不可用、哪些还要配置。
+不要把构建完成说成正在运行，把 HTTP 握手说成完整接入，或把失败检查说成成功。
+未经我的选择，不开启额外的外部服务。
 ```
 
-### Claude Code
-
-```text
-使用 ccygod/evolving-profile-2.2 的 release/5.1.0 分支，在新目录完成本地安装。
-先执行 scripts/install-ep51.sh 的预检与脱敏检查，再构建并启动 Console，打开
-http://127.0.0.1:9999。通过共享 MCP/Hook 适配器接入前，不要复制私有对话、Bank、回执或 Key。
-最后报告源码版本、测试结果和实际网页地址。
-```
-
-### Hermes
-
-```text
-使用 ccygod/evolving-profile-2.2 的 release/5.1.0 分支。
-运行 ./scripts/install-ep51.sh --mode local --skip-deps --no-launch，按 api/README.md
-启动 API/Console，并打开 http://127.0.0.1:9999。只有我明确配置后才能启用 JEV、外部 RAG、
-云备份或生产记忆。
-```
+**Codex** 优先使用现有 EP MCP/Hook 路线。**Claude Code、Hermes** 可以复用共享适配契约，
+但要分别核对 transcript 生命周期与宿主能力。
+这段提示词是把安装工作交给智能体，不会让缺少的服务或凭据自动出现。
 
 ## 宿主兼容性
 
-| 宿主 | 当前状态 | 边界与下一步 |
+| 宿主 | 当前定位 | 不应直接推断 |
 | --- | --- | --- |
-| Codex | 当前验证最充分：MCP/Hook、链路图、场景摘要、Agent Recall/Research 和回执详情 | 继续增强原生答案采用回执 |
-| Claude Code | 可通过 transcript/Hook bridge 复用 Controller、Recall/Research 和写回 | 下一版本增强安装向导、transcript 生命周期和诊断 |
-| Hermes | 可通过 OpenAI-compatible/MCP 路线复用 Bank、Provider/Fallback、RAG/JEV 和审计契约 | 下一版本增加 Hermes 能力探针与专用配置向导 |
+| **Codex** | 当前实际验证较充分的 MCP/Hook、记忆路由、情景与回执路线 | 所有黑盒回答都提供了答案采用回执 |
+| **Claude Code** | 可复用共享 Controller/MCP 和 transcript/Hook 桥接契约 | 原生生命周期和一键接入已与 Codex 一致 |
+| **Hermes** | 可复用共享记忆服务及兼容的 MCP/API 契约 | 能力探针、回执与安装流程已经完全相同 |
 
-## 来源、个人仓库与作者
+Claude Code、Hermes 的专用接入和适配增强仍是后续版本方向，不宣称三种宿主具有同等验证程度。
 
-个人发行仓库：[ccygod/evolving-profile-2.2](https://github.com/ccygod/evolving-profile-2.2)，当前默认分支为 `release/5.1.0`，最新预发布版为 [`v5.1.0-rc.2`](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.0-rc.2)。
+## 可靠性、隐私与边界
 
-上游协作渠道：[PR #4](https://github.com/94Hao94/evolving-profile/pull/4)。两者是同一条 EP 5.1 来源线：个人 fork 用于自有发布，上游 PR 用于贡献协作。`NOTICE.md` 记录公开发行作者/维护者为 CCY；GitHub 账号、仓库拥有者、上游项目拥有者和本机 Git 提交身份分开记录。
+- 候选、情景摘要和过程模式不是已核实的外部事实；助手声称完成仍保留对应证据等级。
+- 工具调用或正文返回不能单独证明最终回答采用。
+- 网页提供英文、中文等语言切换；后台诊断和用户原文并不保证全部自动翻译。
+- 来源文本扫描不等于二进制图片审计或依赖风险认证。
+- 全部历史的语义准确率和最终回答收益未取得全局认证。
 
-## 安全与边界
+产品版本读取 [`VERSION`](VERSION)。实际发布状态、测试、依赖风险和已知限制
+见[发布说明](docs/RELEASE-NOTES-5.1.0.md)与[发布记录](docs/RELEASE-LEDGER.md)，
+不在多个固定徽章中重复维护“最新版”。
+依赖的生产分类审计、完整工作区审计和保留的 RC 风险分别见[依赖风险说明](docs/DEPENDENCY-RISKS.md)。
 
-- 不要提交 `.env`、生产 Bank、私有 Prompt、Session transcript、回执、缓存或本机路径；
-- 工具回执能证明调用、返回、送达和原文回读，不能在没有宿主答案采用回执时声称模型用了哪条候选；
-- 情景摘要、过程模式和外部 RAG 结果都不能替代原始来源；
-- JEV、外部 RAG、云备份和高风险门控都是独立配置，不打开不等于删除数据。
+## 作者、来源与文档
 
-## 文档入口
+EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/ccygod/evolving-profile-2.2)
+与[上游贡献渠道](https://github.com/94Hao94/evolving-profile/pull/4)是同一条发行来源线，
+不是两套不相干的实现。保留 [NOTICE](NOTICE.md) 与相应上游许可；
+仓库拥有者、Git 提交身份和上游致谢分别记录。
 
 - [English README](README.md)
-- [5.1 发布说明](docs/RELEASE-NOTES-5.1.0.md)
-- [唯一真相源](config/source-of-truth.json)
-- [发布记录](docs/RELEASE-LEDGER.md)
-- [安全策略](SECURITY.md)
+- [本地安装与回退](docs/LOCAL-SETUP.md) · [API 配置](api/README.md)
+- [更新日志](CHANGELOG-5.1.md) · [发布说明](docs/RELEASE-NOTES-5.1.0.md)
+- [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)

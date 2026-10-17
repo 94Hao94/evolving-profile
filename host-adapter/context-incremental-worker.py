@@ -10,22 +10,8 @@ from lib.context_incremental import ContextIncremental, reassess_source_jobs, su
 
 
 def load_provider(path, settings_path=None):
-    """Match EP recovery precedence: saved primary, then existing API profile."""
-    config = {}
-    profile = Path(path).expanduser()
-    for line in profile.read_text().splitlines() if profile.is_file() else []:
-        if line and not line.startswith('#') and '=' in line:
-            key, value = line.split('=', 1)
-            config[key] = value
-    settings = json.loads(Path(settings_path).read_text()) if settings_path and Path(settings_path).is_file() else {}
-    if not isinstance(settings,dict): raise ValueError('ep_provider_configuration_unavailable')
-    primary = (settings.get('providers') or {}).get('primary') or {}
-    if not isinstance(primary,dict): raise ValueError('ep_provider_configuration_unavailable')
-    for field,key in (('model','MODEL'),('base_url','BASE_URL'),('api_key','API_KEY')):
-        name = 'EVOLVING_PROFILE_API_LLM_' + key
-        config[name] = primary.get(field) or config.get(name) or config.get('HINDSIGHT_API_LLM_' + key)
-        if not config[name]: raise ValueError('ep_provider_configuration_unavailable')
-    return config
+    from lib.scenario_coverage_provider import load_provider_config
+    return load_provider_config(path,settings_path)
 
 
 def recording_enabled(state_root):
@@ -45,28 +31,48 @@ def main():
     parser.add_argument('--reassess-source', action='store_true', help='Read-only source qualification plan; no discovery or model calls')
     parser.add_argument('--apply-reassessment', action='store_true', help='Apply only a reviewed exact-session reassessment plan')
     parser.add_argument('--expected-plan-sha256', help='Required dry-run digest for reassessment apply')
+    parser.add_argument('--resume-remaining-budget', action='store_true', help='Explicit scoped recovery of eligible waiting jobs using only their remaining attempts')
     parser.add_argument('--process', action='store_true', help='Explicitly allow configured-provider background summaries')
+    parser.add_argument('--coverage-source', action='store_true', help='Exact selected source coverage; shadow by default, no historical batch migration')
+    parser.add_argument('--coverage-max-leases',type=int,default=64,help='At most 64 bounded decoder leases in one worker')
     parser.add_argument('--watch', action='store_true')
     parser.add_argument('--scan-limit', type=int, default=128)
     parser.add_argument('--max-jobs', type=int, default=4)
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--debounce', type=int, default=30)
     args = parser.parse_args()
+    if args.coverage_source and (not args.session_id or len(args.session_id)>32 or args.process or args.watch or args.reassess_source or args.status or args.discover_only):
+        parser.error('coverage-source requires 1-32 exact sessions and cannot combine with other actions')
     if not 1 <= args.max_jobs <= 32 or not 1 <= args.interval <= 3600 or not 0 <= args.debounce <= 3600:
         parser.error('invalid worker bounds')
     if args.process and args.discover_only: parser.error('choose process or discover-only')
     if args.apply_reassessment and not args.reassess_source: parser.error('apply requires reassess-source')
+    if args.resume_remaining_budget and not args.reassess_source: parser.error('remaining budget recovery requires reassess-source')
     if args.reassess_source:
         if args.process or args.watch or args.status or args.discover_only:
             parser.error('reassessment cannot be combined with worker execution')
         try:
             receipt = reassess_source_jobs(args.state_root, args.session_root, session_ids=args.session_id,
-                apply=args.apply_reassessment, expected_plan_sha256=args.expected_plan_sha256)
+                apply=args.apply_reassessment, expected_plan_sha256=args.expected_plan_sha256,
+                resume_remaining_budget=args.resume_remaining_budget)
         except ValueError as error:
             parser.error(str(error))
         print(json.dumps(receipt, ensure_ascii=False), flush=True)
         return 0
     worker = ContextIncremental(args.state_root, args.session_root, debounce=args.debounce, bank_id=args.bank_id, session_ids=args.session_id, new_after=args.new_after)
+    if args.coverage_source:
+        settings_path=Path(args.state_root)/'config/runtime-settings.json'
+        settings=json.loads(settings_path.read_text()) if settings_path.is_file() else {}
+        coverage=settings.get('scenario_coverage',{})
+        from lib.scenario_coverage_contract import validate_settings
+        effective=validate_settings(coverage)
+        provider=None
+        if effective['limits']['model_requests']:
+            from lib.scenario_coverage_provider import ConfiguredCoverageProvider
+            provider=ConfiguredCoverageProvider(load_provider(args.provider_env or str(Path(args.state_root)/'profiles/evolving-profile-api.env'),settings_path))
+        results=[worker.process_coverage(sid,coverage,provider=provider,max_leases=args.coverage_max_leases) for sid in args.session_id]
+        print(json.dumps({'coverage_jobs':results,'model_calls':sum(r['model_calls'] for r in results)},ensure_ascii=False),flush=True)
+        return 0
     provider_path = args.provider_env or str(Path(args.state_root)/'profiles/evolving-profile-api.env')
     while True:
         if not args.status and not recording_enabled(args.state_root):

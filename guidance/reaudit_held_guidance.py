@@ -71,7 +71,7 @@ def build_reaudit_proposal(
         "effect_on_action": classification.get("effect_on_action")
         or "在匹配范围内调整行动",
         "scope": {
-            "user_id": "liuzhongyang",
+            "user_id": "ep-user",
             "agent_roles": [],
             "project_ids": [],
             "task_ids": [],

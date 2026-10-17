@@ -67,7 +67,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         original=source([('user',f'第{i}项项目条件') for i in range(1,6)]+[('assistant','已答复，结果未独立核验')])
         def reply(request,**_kwargs):
             body=json.loads(request.data)
-            payload=json.loads(body['messages'][0]['content'].split('输入：',1)[1].split('\n上次输出',1)[0])
+            payload=json.loads(body['messages'][-1]['content'].split('输入：',1)[1].split('\n上次输出',1)[0])
             ids=payload['allowed_message_ids_by_role']['user']
             limit=(payload.get('state_limits') or {}).get('message_ids_max_per_claim',len(ids))
             state={'subject':{'text':'项目条件','message_ids':ids[:limit]},'goal':claim('讨论项目条件','id1'),
@@ -84,7 +84,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
     def test_generation_and_validator_share_claim_limits(self):
         original=source([('user',f'第{i}项项目条件') for i in range(1,4)]+[('assistant','已答复')])
         def reply(request,**_kwargs):
-            payload=json.loads(json.loads(request.data)['messages'][0]['content'].split('输入：',1)[1].split('\n上次输出',1)[0])
+            payload=json.loads(json.loads(request.data)['messages'][-1]['content'].split('输入：',1)[1].split('\n上次输出',1)[0])
             count=payload['state_limits']['message_ids_max_per_claim']
             state={'subject':{'text':'项目条件','message_ids':['id1','id2','id3'][:count]},'goal':claim('讨论条件','id1'),
                    'phase':'assistant_reported','constraints':[],'corrections':[],
@@ -103,7 +103,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
                'constraints':[],'corrections':[],'assistant_reports':[claim('已提供答复但尚未核验','id2')],'unresolved':[]}
         draft=validate_state_draft(original,state,model='test')
         def reply(request,**_kwargs):
-            payload=json.loads(json.loads(request.data)['messages'][0]['content'].split('输入：',1)[1])
+            payload=json.loads(json.loads(request.data)['messages'][-1]['content'].split('输入：',1)[1])
             roles=payload.get('allowed_roles_by_field') or {};limits=payload.get('state_limits') or {}
             accepted=roles.get('subject')==roles.get('corrections')=='user' and roles.get('assistant_reports')=='assistant' and limits.get('message_ids_max_per_claim')==4
             issues=[] if accepted else [{'tier':'evidence','code':'role_contract_missing','detail':'Explicit role or limit contract absent'}]
@@ -137,18 +137,18 @@ class ScenarioStateV3Tests(unittest.TestCase):
         self.assertIn('师燕超',hints[0]['excerpt'])
         self.assertEqual(hints[0]['evidence_role'],'review_hint_not_verified_claim')
 
-    def test_explicit_user_correction_misclassified_as_constraint_is_recategorized(self):
+    def test_initial_prohibition_is_not_forced_into_correction_by_negation_hint(self):
         original=source([('user','不要把采购月份写死，保留后续安排空间。'),('assistant','已记录，尚未核验。')])
         state={'subject':claim('采购前方案','id1'),'goal':claim('整理方案','id1'),'phase':'assistant_reported',
                'constraints':[claim('不要把采购月份写死，保留后续安排空间。','id1')],
                'corrections':[],'assistant_reports':[claim('已记录，尚未核验。','id2')],'unresolved':[]}
         draft=validate_state_draft(original,state,model='test',
                                    user_claim_protocol='user_constraints_corrections_whole_source_clause.v1')
-        self.assertEqual(draft['state']['constraints'],[])
-        self.assertEqual(draft['state']['corrections'],[claim('不要把采购月份写死，保留后续安排空间。','id1')])
+        self.assertEqual(draft['state']['constraints'],[claim('不要把采购月份写死，保留后续安排空间。','id1')])
+        self.assertEqual(draft['state']['corrections'],[])
 
     def test_missing_later_user_correction_is_added_from_exact_source_clause(self):
-        original=source([('user','先做方案。'),('assistant','已回复。'),
+        original=source([('user','将标题写成采购清单。'),('assistant','已回复。'),
                          ('user','不要把标题写成采购清单，要保留合作方案语气。'),('assistant','已修改。')])
         state={'subject':claim('方案','id1'),'goal':claim('修改方案','id3'),'phase':'assistant_reported',
                'constraints':[],'corrections':[],'assistant_reports':[claim('已回复。','id2'),claim('已修改。','id4')],
@@ -200,8 +200,8 @@ class ScenarioStateV3Tests(unittest.TestCase):
         draft=scenario_model.request_session_state_draft(original,base_url='https://example.invalid',
             api_key='test',model='test-model',opener=opener)
         self.assertEqual(draft['schema'],'evolving-profile.scenario-draft.v3')
-        prompt=sent[0]['messages'][0]['content']
-        self.assertIn('结构化表单',prompt)
+        prompt=sent[0]['messages'][-1]['content']
+        self.assertIn('结构化表单',sent[0]['messages'][0]['content'])
         self.assertIn('是否申报其他专项？',prompt)
         self.assertNotIn('<send_user_message_question_reply>',prompt)
         self.assertEqual(draft['state']['constraints'][0]['message_ids'],['id2'])
@@ -226,8 +226,8 @@ class ScenarioStateV3Tests(unittest.TestCase):
             api_key='test',model='test-model',opener=opener)
         self.assertEqual(len(sent),2)
         self.assertEqual(draft['state']['assistant_reports'][0]['message_ids'],['id2'])
-        self.assertIn('scenario_state_role_invalid',sent[1]['messages'][0]['content'])
-        self.assertIn('"correction_review_hints"',sent[0]['messages'][0]['content'])
+        self.assertIn('scenario_state_role_invalid',' '.join(m['content'] for m in sent[1]['messages']))
+        self.assertIn('"correction_review_hints"',sent[0]['messages'][-1]['content'])
 
     def test_model_request_stops_after_three_invalid_role_attempts(self):
         original=source([('user','天津大学墙体巡检方案'),('assistant','旧稿已完成'),
@@ -247,7 +247,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
             scenario_model.request_session_state_draft(original,base_url='https://example.invalid',
                 api_key='test',model='test-model',opener=opener)
         self.assertEqual(len(sent),3)
-        self.assertIn('assistant_reports 只能引用 assistant',sent[1]['messages'][0]['content'])
+        self.assertIn('assistant_reports 只能引用 assistant',' '.join(m['content'] for m in sent[1]['messages']))
 
     def test_long_session_chunks_then_merges_source_linked_state(self):
         original=source([('user','天津大学墙体方案'),('assistant','旧稿已完成'),
@@ -274,7 +274,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         draft=scenario_model.request_session_state_draft(original,base_url='https://example.invalid',
             api_key='test',model='test-model',opener=opener,max_input_chars=13)
         self.assertEqual(len(sent),3)
-        self.assertIn('source_linked_state_candidate',sent[2]['messages'][0]['content'])
+        self.assertIn('source_linked_state_candidate',sent[2]['messages'][-1]['content'])
         self.assertEqual(draft['state']['corrections'][0]['message_ids'],['id3'])
         self.assertEqual(draft['selection_coverage']['source_chunk_count'],2)
         self.assertEqual(draft['selection_coverage']['chunk_char_limit'],13)
@@ -353,7 +353,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
             return io.BytesIO(json.dumps(response,ensure_ascii=False).encode())
         reviewed=scenario_model.request_session_review(original,draft,base_url='https://example.invalid',
             api_key='test',model='test-model',opener=opener)
-        prompt=sent[0]['messages'][0]['content']
+        prompt=sent[0]['messages'][-1]['content']
         self.assertIn('"state"',prompt)
         self.assertIn('"last_message_role": "user"',prompt)
         self.assertIn('"correction_review_hints"',prompt)
@@ -378,7 +378,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
             api_key='test',model='test-model',opener=opener,max_input_chars=12)
         self.assertGreater(len(sent),1)
         self.assertEqual(review['status'],'model_review_passed')
-        first=sent[0]['messages'][0]['content']
+        first=sent[0]['messages'][-1]['content']
         self.assertIn('"full_session_last_role": "assistant"',first)
         self.assertIn('不能仅因草稿引用其他分段',first)
         self.assertIn('"claims_in_chunk"',first)
@@ -395,7 +395,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         sent=[]
         def opener(request,timeout):
             payload=json.loads(request.data)
-            prompt=payload['messages'][0]['content']
+            prompt=payload['messages'][-1]['content']
             body=json.loads(prompt.rsplit('输入：',1)[1])
             sent.append(body)
             if body.get('request_type')=='cross_chunk_claim_review':
@@ -427,7 +427,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         draft=validate_state_draft(original,state,model='test-model')
 
         def opener(request,timeout):
-            prompt=json.loads(request.data)['messages'][0]['content']
+            prompt=json.loads(request.data)['messages'][-1]['content']
             body=json.loads(prompt.rsplit('输入：',1)[1])
             if body.get('request_type')=='cross_chunk_claim_review':
                 results=[{'claim_id':item['claim_id'],'accept':False,
@@ -474,7 +474,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         draft=validate_state_draft(original,state,model='test-model')
         def opener(request,timeout):
             payload=json.loads(request.data)
-            body=json.loads(payload['messages'][0]['content'].rsplit('输入：',1)[1])
+            body=json.loads(payload['messages'][-1]['content'].rsplit('输入：',1)[1])
             response={'choices':[{'finish_reason':'stop','message':{'content':json.dumps({
                 'source_revision':body['source_revision'],'accept':True,'issues':[]},ensure_ascii=False)}}]}
             return io.BytesIO(json.dumps(response,ensure_ascii=False).encode())
@@ -507,7 +507,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         ]}
         seen=[]
         def opener(request,timeout):
-            prompt=json.loads(request.data)['messages'][0]['content']
+            prompt=json.loads(request.data)['messages'][-1]['content']
             body=json.loads(prompt.rsplit('输入：',1)[1]);seen.append(body)
             result={'source_revision':'r1','claim_reviews':[
                 {'claim_id':row['claim_id'],'accept':True,'issues':[]} for row in body['claims']]}
@@ -527,7 +527,7 @@ class ScenarioStateV3Tests(unittest.TestCase):
         source_value={'source_revision':'r1','messages':rows}
         seen=[]
         def opener(request,timeout):
-            prompt=json.loads(request.data)['messages'][0]['content']
+            prompt=json.loads(request.data)['messages'][-1]['content']
             body=json.loads(prompt.rsplit('输入：',1)[1]);seen.append(body)
             result={'source_revision':'r1','claim_reviews':[
                 {'claim_id':row['claim_id'],'accept':True,'issues':[]} for row in body['claims']]}

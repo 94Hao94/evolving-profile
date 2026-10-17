@@ -167,8 +167,8 @@ def validate_episode_bundle(source: dict, bundle: dict) -> dict:
             if row.get(key) != partition[key]:
                 raise ValueError("scenario_episode_bundle_coverage_invalid")
         draft = row.get("draft")
-        episode_source = {**source, "messages": partition["_messages"],
-                          "source_revision": partition["source_revision"]}
+        from .scenario_state_v3 import state_partition_source
+        episode_source = state_partition_source(source,partition['_messages'],partition['source_revision'])
         if (not isinstance(draft, dict)
                 or draft.get("context_id") != "session:" + source["thread_id"]
                 or draft.get("status") != "source_linked_draft"
@@ -207,7 +207,10 @@ def revalidate_persisted_episode_source(source: dict, session_row: dict,
     if source.get("thread_id") != session_row.get("session_id"):
         return {"status": "stale_source_changed"}
     if session_row.get("raw_source_files") and source.get("source_files") != session_row.get("raw_source_files"):
-        return {"status": "stale_source_changed"}
+        from .memory_recovery_scenario import _reviewed_location_source,accepted_session_source
+        if not accepted_session_source(session_row,source):return {"status":"stale_source_changed"}
+        source=_reviewed_location_source(session_row,source)
+        if source is None:return {"status":"stale_source_changed"}
 
     ids = [row.get("evidence_id") for row in source["messages"]]
     if (any(not isinstance(message_id, str) or not message_id for message_id in ids)

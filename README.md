@@ -2,267 +2,287 @@
 
 <div align="center">
 
-**Most memory systems remember text. EP remembers evidence, context, route, and the next safe action.**
+**Personal context. Reusable agent experience. Observable memory workflows.**
 
-Evidence-aware memory and execution observability for AI agents.
+Make long-running AI collaboration easier to continue, inspect, and control.
 
-![Version](https://img.shields.io/badge/current-5.1.0-2563eb?style=for-the-badge)
-![Verification](https://img.shields.io/badge/verified-release%20candidate-f59e0b?style=for-the-badge)
-![Interfaces](https://img.shields.io/badge/interfaces-MCP%20%7C%20Hook%20%7C%20HTTP-7c3aed?style=for-the-badge)
-![Languages](https://img.shields.io/badge/UI-English%20%2B%20i18n-16a34a?style=for-the-badge)
-
-<a href="#quick-start">Quick start</a> ·
-<a href="#how-it-works">How it works</a> ·
-<a href="#agent-install-prompts">Agent install prompts</a> ·
-<a href="#compatibility">Compatibility</a>
+[简体中文](README-中文.md) · [Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
 
 </div>
 
-> **EP is not a bigger vector database.** It is a control plane that keeps user knowledge, agent experience, external documents, source evidence, delivery receipts, and current-task decisions separate until the exact moment they can be safely combined.
+You have explained the project before. Your agent has solved a similar problem before.
+Why do you still have to repeat the context—and watch it take the same detour?
 
-**中文说明：** [README-中文.md](README-中文.md)
+**Evolving Profile (EP)** organizes user knowledge, agent process experience, and
+external documents as separate memory planes, then coordinates the useful routes
+for the current task. Its console helps you inspect not only what was found, but
+what was returned, what delivery evidence exists, and what still needs checking.
 
-![EP 5.1 memory and execution control plane](docs/assets/ep51-release-hero.png)
+It is more than a place to store conversation text: it is a memory and evidence
+workflow for continuing real work across conversations.
 
-## The problem EP solves
+![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
-An AI agent can give a confident answer and still fail in several different ways:
+## See the workflow
 
-- a similar memory is not the same thing as a verified fact;
-- a project-local decision is mistaken for a global user preference;
-- an agent's temporary workaround is mixed into the user's long-term memory;
-- a useful candidate is found but never delivered to the agent;
-- a tool returned zero rows, but the UI makes it look as if the tool was never called;
-- a compressed Session summary hides the exact correction that mattered;
-- an external PDF is mixed into internal memory and creates a duplicate or conflict;
-- a pattern that helped a weaker model is forced onto a stronger, newer model;
-- adding more extractors increases latency and token cost without increasing reliability.
+![Actual English EP console: parallel user-memory, agent-memory and external-document routes, with prompt-bound receipt counters](docs/assets/ep51-flow-data-20261017-en.png)
 
-EP makes these failure modes different, visible, and testable.
+A real console capture of an existing historical audit record, cropped to exclude
+the private Prompt list. Historical source attribution is not a natural-user benchmark. Branches are
+available routes, **not a claim that every route runs on every request**. Counts
+describe the selected recorded invocation; they are not an accuracy benchmark or
+proof that a final answer adopted the returned content.
 
-## The core idea
+<details>
+<summary>Inspect a receipt, not just a diagram</summary>
 
-EP follows one evidence chain:
+![Actual English receipt detail with observable invocation evidence](docs/assets/ep51-receipt-detail-20261017-en.png)
 
-```text
-current Prompt
-  → task contract and host binding
-  → choose the smallest useful memory route
-  → retrieve candidates
-  → verify scope and source
-  → assemble a bounded context packet
-  → execute
-  → write back user/agent process evidence
-  → expose an auditable receipt
-```
+Node details expose the evidence available for that step. No receipt, an observed
+empty result, an excluded candidate and unknown host visibility are different states.
 
-The critical rule is:
+</details>
 
-```text
-candidate ≠ returned ≠ delivered ≠ source-read ≠ answer-use confirmed
-```
+## What EP brings to your workflow
 
-That separation lets an operator tell the difference between a bad retriever, an
-admission filter, missing host delivery, an unavailable source, and a legitimate
-empty result.
+| Capability | Practical value |
+| --- | --- |
+| **User memory** | Keep facts, experiences, entities, multi-dimensional preferences and mental-model references organized instead of repeatedly explaining everything. |
+| **Agent process memory** | Retain traces, failures, repairs, capability observations and reusable strategy candidates—not just the final answer. |
+| **Layered scenario navigation** | Locate the relevant Session and stage before expanding context or reading original evidence. |
+| **Separate external knowledge** | Search your selected document collection without treating a PDF as your personal history or preference. |
+| **Observable memory routes** | Diagnose whether a problem occurred during retrieval, admission, return, delivery or source readback. |
+| **Modular controls** | Configure memory modules, providers, retrieval models, optional judges and budgets for the workflow you actually need. |
 
-## Three memory planes, one controlled decision point
+These capabilities provide structured evidence and reusable context; they do not
+guarantee that every old memory is correct or every future task will improve.
+
+## Three memory planes, different responsibilities
+
+![User memory, agent experience and external RAG remain separate before task-scoped context assembly](docs/assets/ep-memory-planes.svg)
+
+**User memory** holds facts, experiences, entities/relations, observations,
+conditional preferences, mental-model references and scenario navigation.
+A preference retains its conditions and exceptions; a project-local instruction
+should not silently become a permanent global rule.
+
+**Agent process memory** follows what the agent tried, where it failed, how it
+repaired the problem and what verification was observed. It organizes failures,
+repair patterns, strategies, capability observations and transfer/revalidation.
+Experience remains scoped to tasks, tools, time and available evidence; it is
+not automatically installed as a Skill or a permanent command for newer models.
+
+**External RAG** is for an operator-selected collection of PDF, Word, Markdown
+and other supported files. It offers lexical/vector retrieval, reciprocal-rank
+fusion (RRF), optional model reranking and index compatibility/rebuild controls.
+It is optional—not a second index that EP's internal memory must use.
+
+<a id="ep-how-it-works"></a>
+
+## How it works
 
 ```mermaid
 flowchart TB
-    S[Prompt · tools · files · receipts] --> U
-    S --> A
-    S --> R
-    subgraph U[User Memory]
-      U1[Facts · Experiences · Entities]
-      U2[Preferences · Observations · Mental models]
-    end
-    subgraph A[Agent Process Memory]
-      A1[Trajectory · Failures · Repairs]
-      A2[Capabilities · Strategies · Revalidation]
-    end
-    subgraph R[External RAG]
-      R1[Lexical · Vector · RRF · Rerank]
-      R2[Optional JEV review]
-    end
-    U --> P[Governed context packet]
-    A --> P
-    R --> P
-    P --> X[Agent execution]
-    X --> W[Audited writeback]
+    Q[Current request and available context] --> D{Is there a useful context gap?}
+    D -->|No| X[Agent proceeds with current context]
+    D -->|Yes| R[Select the relevant routes]
+    R --> U[User preferences / recall / research]
+    R --> A[Agent recall / research / process evidence]
+    R --> E[External RAG, when enabled and relevant]
+    U --> C[Scope and source checks]
+    A --> C
+    E --> C
+    C --> P[Task-scoped context assembly]
+    P --> X
+    X --> W[Eligible incremental writeback and audit]
 ```
 
-### User Memory
+The agent can combine routes when a task needs both personal context and
+execution experience. Explicit source restrictions still take priority.
 
-Facts, Experiences, Entities and Relations, Observations, multi-dimensional
-Preferences, Mental Models, and Scenario Summary remain separate objects with
-scope, source, time, conditions, and uncertainty.
+### Navigate first, expand when needed
 
-### Agent Process Memory
+Scenario Summary has **three tiers: compact → standard → full**. It locates the
+conversation, stage, constraints and later corrections; it is not a substitute
+for exact original wording.
 
-Agent memory records what the agent tried, where it failed, how it repaired the
-problem, what evidence verified the repair, and whether the result transfers to
-another model, toolchain, project, or task family:
+When the summaries are insufficient, use the bounded original Session/Project
+reading route. Use source readback for consequential names, amounts, versions,
+negations and conflicts. The right reader depends on the available source
+locator; a local transcript path is not automatically a Bank `read_source` ID.
+
+### Keep evidence states distinct
 
 ```text
-P0 Trace → P1 Event → P2 Failure Episode → P3 Repair Pattern → P4 Candidate
+discovered ≠ returned ≠ delivery observed ≠ source read ≠ answer adoption confirmed
 ```
 
-The intervention ladder is adaptive: `observe → hint → recommend → scaffold → guard`.
-No permanent strong/weak model list is required.
+This separation makes weak or uncertain evidence usable as navigation without
+turning it into a verified fact. Relevance controls can retain weak background
+while excluding unrelated content; relevance is not a truth score.
 
-### External RAG
+## Typical uses
 
-External RAG is an isolated operator-selected directory. EP memory is not its
-document store, and external documents are not silently promoted into EP memory.
-The route supports lexical search, local/online Embedding, vector search, RRF,
-optional Rerank, index signatures, rebuild warnings, and optional JEV review.
+- **Resume a project:** locate earlier decisions, constraints and corrections
+  without merging unrelated projects from the same organization.
+- **Adapt collaboration:** consult conditional preferences for the current task,
+  rather than inject every preference into every answer.
+- **Reuse execution experience:** retrieve earlier debugging or production
+  lessons, then check whether their prerequisites still apply.
+- **Work with outside documents:** compare your own history with a supplied
+  document while preserving the two source categories.
+- **Explain an apparent memory failure:** inspect the actual route and receipt
+  instead of guessing that “the model forgot.”
 
-## The execution topology
+## Configure behavior and cost
 
-```text
-Prompt → Hook binding → Task Contract → FORK
-  ├─ User Memory: Preference / Recall / Research / Scenario / Source Readback
-  ├─ Agent Memory: Observe / Recall / Research / Compatibility / Guidance
-  └─ External RAG: Route / Lexical + Vector / RRF / Rerank / JEV
-MERGE → Context Assembly → Agent Execution → Writeback → Audit → Answer
-```
+The web console exposes user/agent memory modules, Provider/Fallback,
+Embedding/Rerank models, external RAG, Scenario Summary, JEV, backup and audit
+settings. Recording, retrieval and context use have distinct responsibilities;
+module switches do not mean deleting the stored records.
 
-![EP 5.1 data-rich flow evidence](docs/assets/ep51-flow-data-en.png)
+- Use local or online retrieval models where supported; verify the actual model
+  path/service and index signature before treating it as ready.
+- Enable external RAG only for the collections you want searched.
+- **JEV is optional:** it can assist selected routing/evidence-review stages;
+  it does not replace the retriever or write facts. Its configured rule-based
+  fallback and unknown/error states remain visible.
+- High-risk judgment is a separate opt-in setting, not permission to override
+  the host's existing authority and source-verification boundaries.
+- Background extraction and optional online judgment can consume provider
+  tokens. Local models have their own memory/startup cost. Use module controls,
+  bounded expansion, pagination and budgets rather than assume memory is free.
 
-This is a real localized console capture, not a synthetic benchmark. It shows
-large indexed-memory counts, route branches, context decisions, and the visible
-distinction between waiting, observed, delivered, and unknown answer-use states.
+Experimental whole-history model trials are not enabled by the installer.
+Existing historical records may remain pending, protected or unknown; those
+statuses are not erased merely to make a dashboard green.
 
-![EP 5.1 receipt detail evidence](docs/assets/ep51-receipt-detail-en.png)
-
-Clicking a node exposes relevance floor, memory plane, returned/excluded counts,
-relevance bands, filtering reasons, policy version, and source-readback state.
-
-## Scenario Summary and source readback
-
-Scenario Summary is a navigation layer, not a replacement for original history:
-
-```text
-compact → standard → full → bounded Session/Project history → read_source
-```
-
-Use `read_source` for exact wording, people, versions, amounts, status, conflict,
-or any consequential claim. The system does not inject an entire project just
-because a summary is incomplete.
-
-## Configuration that respects cost and control
-
-The web console separates User Memory modules, Agent Process Memory modules,
-Provider/Fallback, Embedding/Rerank/RRF, external RAG, Scenario Summary, JEV,
-backup policy, audit logs, and quality events. Every module can be disabled
-without deleting its stored records. Retrieval and injection are separate
-switches, so recording can continue while context cost is reduced.
+<a id="ep-quick-start"></a>
 
 ## Quick start
 
 ### Requirements
 
-- macOS or Linux;
-- Python 3.11+ and `uv`;
-- Node.js 20+ and npm;
-- PostgreSQL for the full API data plane;
-- an OpenAI-compatible or other configured provider;
-- optional local Embedding/Rerank runtime and external RAG directory.
+- Python **3.11+**, `uv`, Node.js **20.9+**, npm and Git.
+- PostgreSQL with pgvector for the full API, or the explicitly installed
+  `embedded-db` extra for a supported embedded route.
+- A configured chat provider and a working embedding route; a chat-only plan
+  does not necessarily include embeddings.
+- macOS was exercised locally. Linux is a target with platform prerequisites;
+  Windows-native installation is not certified here.
 
-### One-command local package setup
+### 1. Install and build
 
 ```bash
+git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 
-The installer runs release preflight, package/dependency checks, the secret and
-personal-data scan, a production Console build, and writes a local launch
-manifest. Use `--dry-run` to inspect commands, `--skip-deps` when dependencies
-already exist, and `--no-launch` to build without starting services.
+This runs preflight and a release text-source scan, installs base dependencies,
+builds the SDK **before** the Console and writes a local launch manifest.
+It creates `.env` only when absent. **It does not start services or register MCP/Hook.**
 
-It never imports a production Bank, API key, session transcript, receipt, or
-external RAG directory. JEV, cloud backup, and external RAG remain opt-in.
+Use `--dry-run` for zero-write inspection. Use `--skip-deps` only when this
+checkout's dependencies already exist—not for the first install.
 
-### Manual setup
+### 2. Configure your own services
+
+Fill the generated local `.env` using [API configuration](api/README.md).
+Prepare your database and embedding service. Base dependencies do not include
+embedded PostgreSQL or local ML; select the required extras explicitly.
+Use the same Bank ID in the API, Controller and host configuration. Changing a
+Console selector alone does not configure a host's memory namespace.
+
+No production Bank, private transcript, credentials or local model weights are
+provided. JEV, cloud backup and external RAG are not enabled by installation.
+
+### 3. Start API and Console
+
+From the repository root, in separate terminals:
 
 ```bash
-cp .env.example .env
-cd api && uv sync
-cd ../console && npm ci
-cd ..
-npm run dev
+uv run --project api evolving-profile-api --host 127.0.0.1 --port 8888 --workers 1
 ```
 
-Open the Console at `http://127.0.0.1:9999`. Configure a new Bank and provider
-through the web UI. API details are documented in [api/README.md](api/README.md).
+```bash
+node --env-file=.env console/bin/cli.js --hostname 127.0.0.1 --port 9999 --api-url http://127.0.0.1:8888
+```
 
-## Agent install prompts
+Open [the local Console](http://127.0.0.1:9999). Create your own Bank and verify
+health, real page interactions and the chosen model route.
+See [complete setup, upgrade and rollback](docs/LOCAL-SETUP.md).
 
-Give one of these prompts to an agent with terminal and browser permission. Each
-prompt asks it to install, verify, start the local web console, and open the URL;
-none grants permission to copy private memory or enter credentials.
+**API/Console startup is not full host integration.** Controller, Hook, Guidance
+and background workers have separate setup and readiness requirements. An API
+HTTP MCP handshake does not certify host `user_recall`, `agent_research` or
+context delivery. Do not expose local ports publicly without access control.
 
-### Codex
+<a id="ep-agent-setup"></a>
+
+## Let your agent set it up
+
+Give this to an agent with terminal and browser permission:
 
 ```text
-Install Evolving Profile from https://github.com/ccygod/evolving-profile-2.2
-using release/5.1.0 in a new checkout. Run
-./scripts/install-ep51.sh --mode local --skip-deps --no-launch, inspect the
-preflight and secret-scan output, then start the Console with npm run dev.
-Open http://127.0.0.1:9999 in the local browser. Do not import production Banks,
-session transcripts, receipts, API keys, or external RAG directories. If any
-check fails, report the exact failure instead of claiming success.
+Install Evolving Profile release/5.1.0 from
+https://github.com/ccygod/evolving-profile-2.2 in a new directory.
+Read README, docs/LOCAL-SETUP.md and api/README.md first.
+Run ./scripts/install-ep51.sh --mode local --no-launch; do not skip fresh dependencies.
+Configure my own database, chat and embedding routes through a safe local
+credential flow. Never invent credentials, overwrite an existing installation
+or copy private Banks, transcripts, receipts or .env files.
+Start API and production Console, verify health and real browser interactions,
+and open http://127.0.0.1:9999. If a port is occupied, use a free port and update
+the related URLs; do not kill an unrelated process.
+Separately inspect the host integration and tell me which MCP/Hook/worker
+steps are verified, unavailable or still require configuration.
+Do not call a build “running,” an HTTP handshake “full host integration,”
+or a failed check “complete.” Do not enable optional external services without my choice.
 ```
 
-### Claude Code
+For **Codex**, prioritize the existing EP MCP/Hook route. For **Claude Code** and
+**Hermes**, use the shared adapter contracts but verify each host's transcript
+lifecycle and capabilities separately. This prompt delegates setup work; it
+does not make missing services or credentials appear automatically.
 
-```text
-Clone https://github.com/ccygod/evolving-profile-2.2 at release/5.1.0 into a
-new directory. Run scripts/install-ep51.sh preflight and package scanning, build
-the Console, start it, and open http://127.0.0.1:9999. Use the shared MCP/Hook
-adapter only after local checks pass. Never copy private transcripts, Banks,
-receipts, or keys into the checkout. Report source, tests, and runtime URL.
-```
+## Host compatibility
 
-### Hermes
-
-```text
-Use ccygod/evolving-profile-2.2 release/5.1.0 as the sanitized package. Run
-./scripts/install-ep51.sh --mode local --skip-deps --no-launch, start API/Console
-according to api/README.md, and open http://127.0.0.1:9999. Configure Hermes
-through the documented OpenAI-compatible/MCP route only after the local check
-passes. Do not enable JEV, cloud backup, external RAG, or production memory
-unless I explicitly configure them.
-```
-
-## Compatibility
-
-| Host | Current support | Boundary |
+| Host | Current position | Do not assume |
 | --- | --- | --- |
-| Codex | Highest-coverage path: native MCP/Hook, flow receipts, scenario/source review | Host-side answer-use may be unknown without a native receipt |
-| Claude Code | Shared transcript/Hook bridge, Controller, Recall/Research, and writeback | Native transcript lifecycle and onboarding are next-version work |
-| Hermes | Shared Bank, fallback, RAG/JEV, and audit contracts through OpenAI-compatible/MCP routes | Hermes capability probes and onboarding are next-version work |
+| **Codex** | Most deeply exercised MCP/Hook, memory-route, scenario and receipt path | Every black-box answer has an adoption receipt |
+| **Claude Code** | Shared Controller/MCP and transcript/Hook bridge can be reused | Identical native lifecycle or one-command onboarding |
+| **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
 
-“Compatible” means contracts and adapters can be reused; it does not claim
-identical host receipts or identical answer-use visibility.
+Dedicated Claude Code/Hermes onboarding and adaptation remain improvement work
+for a subsequent version. No equal-validation claim is made.
 
-## Privacy, authorship, and source boundaries
+## Reliability, privacy and limits
 
-This is a sanitized distribution. Do not commit `.env`, production Banks,
-private prompts, session transcripts, receipts, caches, or local paths.
+- Memory candidates, scenario summaries and process patterns are not verified
+  external facts. Assistant completion statements retain their evidence level.
+- Tool invocation and returned content do not prove final-answer adoption.
+- UI language selection includes English and Chinese; backend-generated
+  diagnostics and user-authored source text are not guaranteed fully translated.
+- Source-text scanning is not a binary-asset audit or dependency-risk guarantee.
+- All-history semantic accuracy and answer benefit are not globally certified.
 
-The personal distribution is maintained in
-[`ccygod/evolving-profile-2.2`](https://github.com/ccygod/evolving-profile-2.2),
-currently on `release/5.1.0` with prerelease `v5.1.0-rc.2`. The upstream contribution is
-[PR #4](https://github.com/94Hao94/evolving-profile/pull/4). `NOTICE.md` records
-CCY as the public distribution author/maintainer; GitHub account, repository
-owner, upstream project owner, and local Git identity remain separate categories.
+Product version: [`VERSION`](VERSION). Current release status, actual checks,
+dependency risks and known limits belong in the [release notes](docs/RELEASE-NOTES-5.1.0.md)
+and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
+See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
+production-classified and full-workspace audit results and retained RC risks.
 
-## Documentation map
+## Authorship, source and documentation
 
-- [Chinese README](README-中文.md) — localized diagrams, screenshots, and setup;
-- [Release notes](docs/RELEASE-NOTES-5.1.0.md) — verification and limits;
-- [Source of truth](config/source-of-truth.json) — authoritative stores;
-- [Release ledger](docs/RELEASE-LEDGER.md) — personal prerelease and upstream PR;
-- [Security policy](SECURITY.md) — keys, Banks, and distribution boundaries.
+EP distribution author/maintainer: **CCY**. The
+[personal distribution](https://github.com/ccygod/evolving-profile-2.2) and
+[upstream contribution](https://github.com/94Hao94/evolving-profile/pull/4) are
+two channels for the same release line, not unrelated implementations.
+Preserve [NOTICE](NOTICE.md) and the applicable upstream licenses. Repository
+ownership, Git commit identity and upstream acknowledgment remain distinct.
+
+- [中文介绍](README-中文.md)
+- [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
+- [Changelog](CHANGELOG-5.1.md) · [Release notes](docs/RELEASE-NOTES-5.1.0.md)
+- [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)

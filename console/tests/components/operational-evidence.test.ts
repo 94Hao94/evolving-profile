@@ -10,6 +10,16 @@ import * as components from "@/components/operational-overview";
 const scan = { llmFailures: { returned: 100, total: 190, coverage: "partial" as const }, llmFailureGroups: { total: 41 }, failedOperations: { returned: 4, total: 4, coverage: "complete" as const }, relatedSuccess: { coverage: "partial" } };
 const render = (locale: "en" | "zh-CN", pipeline = { state: "critical" as const, failedMemories: 8, pendingMemories: 17130 }) => renderToStaticMarkup(createElement(NextIntlClientProvider, { locale, messages: locale === "en" ? en : zh, children: createElement(OperationalEvidenceSummary, { scan, pipeline }) }));
 describe("operational evidence summary", () => {
+  it.each(["en", "zh-CN"] as const)("shows scenario failures independently with readable recovery details in %s", locale => {
+    const Component = (components as any).OperationalScenarioSummary;
+    const html = renderToStaticMarkup(createElement(NextIntlClientProvider, { locale, timeZone: "UTC", messages: locale === "en" ? en : zh,
+      children: Component ? createElement(Component, { evidence: { status: "observed", total: 5, reviewed: 1, failed: 3, pending: 1, notApplicable: 0, protected: 0, waitingSource: 0, unknown: 0,
+        failures: [{ id: "session:two", code: "automated_source_coverage_incomplete" }] } }) : null }));
+    expect(html).toContain(locale === "en" ? "Scenario summary" : "情景摘要");
+    expect(html).toContain(locale === "en" ? "3 failed" : "失败 3");
+    expect(html).toContain("session:two");
+    expect(html).toContain(locale === "en" ? "Source coverage review failed" : "来源覆盖审查未通过");
+  });
   it.each(["en", "zh-CN"] as const)("renders failed batches and isolated records separately from fresh dispatcher health in %s", locale => {
     const pipeline = { state: "warning", failedMemories: 0, pendingMemories: 0, failedBatches: 2, failedTaskRows: 4,
       localRetention: { status: "observed", observedAt: "2026-10-13T11:00:00Z", quarantinedRecords: 18, inflightRecords: 0, pendingRecords: 0, heldRecords: 18,

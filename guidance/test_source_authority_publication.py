@@ -153,7 +153,7 @@ def test_independent_original_messages_can_share_one_transport_document():
     a["source_text"] = b["source_text"] = body
     b["memory_metadata"]["source_message_index"] = "1"
     assert (
-        build_observation_proposal(_candidate(), [a, b], "bank")["support_count"] == 2
+        build_observation_proposal(_candidate(), [a, b], "bank")["support_count"] == 1
     )
 
 
@@ -258,7 +258,8 @@ def test_absolute_original_spans_survive_fragment_proposal_and_real_publication(
         repo.owner_token(),
     )
     assert committed["state"] == "active"
-    assert repo.active_units()[0]["support_count"] == 2
+    assert repo.active_units()[0]["support_count"] == 1
+    assert repo.active_units()[0]["nature"] == "task_local"
 
 
 def test_two_fragment_or_retry_copies_of_one_original_are_one_vote():

@@ -136,6 +136,13 @@ _CONCEPTS = {
     "coordinates": ("coordinate", "coordinates", "坐标"),
 }
 _PROBLEM_CONCEPTS = set(_CONCEPTS) - {"presentation"}
+# These describe generic task handling, not independent affected objects.
+# Keep them in normal phrases; only prevent a pair of isolated two-Han atoms
+# from manufacturing a relation between otherwise unrelated tasks.
+_GENERIC_SHORT_SUPPORT = {
+    '保留', '完整', '优化', '说明', '影响', '数据', '保存', '核对', '标题', '资料',
+    '制作', '修改', '条件', '采用', '方式', '同时', '默认', '包括',
+}
 _GENERAL_RELATIONS = {
     "failure": ("failure", "failed", "fail", "error", "失败", "错误", "故障"),
     "repair": ("repair", "repaired", "fix", "recover", "recovery", "修复", "恢复"),
@@ -288,6 +295,81 @@ def _identifier_roots(query):
     return list(dict.fromkeys(re.sub(r'\d+(?:\.\d+)*$', '', word).rstrip('-_.') or word for word in identifiers))
 
 
+def task_scope_alignment(query: str, content: str) -> dict[str, Any]:
+    """Explain source-task content relation and explicit workflow boundaries.
+
+    Owner-like query phrases are audit hints, never identity/mismatch proof.
+    Literal task content and actual source procedures can relate a source;
+    a named mode's mandatory counts/commands cannot become that method.
+    """
+    query = ' '.join(clause for clause in re.split(r'[，,。；;!?！？\n]+', _semantic_text(query))
+        if not re.search(r'(?:不要|不用|无需|禁止)(?:再)?(?:使用|进入|执行|采用|调用)|(?:不要|不用|无需|禁止|不)(?:再)?(?:搜索|查找|读取|调取|查|找)|\b(?:do not|don\x27t)\s+(?:use|run|invoke|enter)|\bwithout\s+using', clause, re.I))
+    content = _semantic_text(content)
+    positive = ' '.join(clause for clause in re.split(r'[，,。；;!?！？\n]+', content)
+        if not re.search(r'未涉及|不涉及|不包含|未包含|无关|不相关|\b(?:unrelated|not about|does not concern)\b', clause, re.I))
+    workflows = []
+    if re.search(r'必须|强制|不得|只允许|至少|\b(?:must|required|mandatory)\b', content, re.I):
+        workflows.extend(re.findall(r'(?:在|用于|针对)\s*[`"“]?([A-Za-z][\w-]*|[\u3400-\u9fff]{2,20})[`"”]?\s*(?:模式|项目|任务|流程)(?:下|中|时)?', content))
+        workflows.extend(re.findall(r'\b(?:in|for|under)\s+(?:the\s+)?([A-Za-z][\w-]*)\s+(?:mode|project|workflow|task)\b', content, re.I))
+    workflow_hits = [name for name in workflows if name.casefold() in query.casefold()]
+    subjects = []
+    uncertain_subjects = []
+    artifacts = []
+    source_relation_terms = []
+    source_request = bool(re.search(r'原文|全文|逐字|\b(?:transcript|verbatim|source text|full text)\b', query, re.I))
+    if source_request:
+        artifact_pattern = r'演讲|讲座|发布会|报告|论文|文章|访谈|材料|文档'
+        descriptor = r'(?:的|完整|整场|全场|包括(?:发布会|讲座)的)*(?:原文|全文|实录)'
+        for match in re.finditer(r'([\u3400-\u9fff、]{2,60}?)(?:的(?:那个|几个|这些|那|个)*)?(' + artifact_pattern + r')(?=' + descriptor + ')', query):
+            # A request's unsegmented prefix is an expression, not a name.
+            # Even a short expression can contain a predicate (请看李白).
+            if match.group(1) in _GENERIC_SHORT_SUPPORT or match.group(1) in _CJK_STOP:
+                continue
+            uncertain_subjects.append(match.group(1))
+            artifacts.append(match.group(2))
+        english_artifact = r'(?:lecture|keynote|speech|paper|article|report|interview|document)'
+        artifacts.extend(re.findall(r'\b' + english_artifact + r'\b', query, re.I))
+    subjects = list(dict.fromkeys(subjects))
+    hits = [name for name in subjects if name.casefold() in positive.casefold()]
+    method = bool(artifacts and any(term.casefold() in positive.casefold() for term in artifacts)
+        and re.search(r'先.{2,100}再|逐段(?:转写|核对)|\bfirst\b.{2,100}\bthen\b', positive, re.I)
+        and re.search(r'核对|转写|比对|提取|出处|\b(?:verify|transcribe|compare|extract|source)\b', positive, re.I))
+    source_task_requested = bool(artifacts)
+    source_task_support = bool(artifacts and any(term.casefold() in positive.casefold() for term in artifacts))
+    if source_task_requested:
+        # A source request still needs substantive content relation. These
+        # handling/aspect words alone cannot relate two different sources.
+        # Keep names as literal content evidence, not an inferred identity:
+        # speech/body clauses may put places or predicates after the name.
+        neutral = (_CJK_STOP | _GENERIC_SHORT_SUPPORT | {
+            '原文', '全文', '实录', '演讲', '讲座', '发布会', '报告', '论文', '文章', '访谈',
+            '材料', '文档', '出处', '来源', '状态', '位置', '文本', '摘录', '归档',
+        })
+        def source_terms(value):
+            for word in sorted(neutral, key=len, reverse=True):
+                value = value.replace(word, ' ')
+            words = _terms(value)
+            return {word for word in words if word not in {
+                'read', 'could', 'would', 's', 'transcript', 'verbatim', 'full', 'text', 'source',
+                'lecture', 'keynote', 'speech', 'paper', 'article', 'report', 'interview', 'document',
+            } and not word.isdigit() and not word.startswith('concept:')}
+        shared = source_terms(query) & source_terms(positive)
+        cjk = {word for word in shared if re.fullmatch(r'[\u3400-\u9fff]{2,}', word)}
+        latin = {word for word in shared if re.fullmatch(r'[a-z][a-z-]+', word)}
+        # Complete meaningful tokens can support weak content relation even
+        # when the subject has one word. They never certify a formal alias.
+        source_relation_terms = sorted(cjk | latin)
+    content_relation = bool(source_task_support and (source_relation_terms or method))
+    return {'requested_subjects': subjects, 'subject_hits': hits, 'transferable_source_method': method,
+            'uncertain_subject_phrases': uncertain_subjects,
+            'source_task_requested': source_task_requested,
+            'source_content_relation': content_relation,
+            'source_relation_terms': source_relation_terms,
+            'owner_hints_authority': 'audit_only_not_identity_or_mismatch_proof',
+            'local_workflows': workflows, 'workflow_hits': workflow_hits,
+            'blocked': bool(workflows and not workflow_hits)}
+
+
 def subject_contract(query):
     """Concrete named scope shared by native matching and source clauses.
 
@@ -295,7 +377,7 @@ def subject_contract(query):
     terms remain retrieval aspects; they do not rename a product/institution.
     This is textual scope evidence, never a verified formal project identity.
     """
-    text=_semantic_text(str(query))
+    text=re.sub(r"['’]s\b", '', _semantic_text(str(query)))
     subject_text=re.sub(r'版本演进|版本|演进|历史|先前发布对比|\b(?:versions?|evolution|history|releases?|prior|previous|earlier|past|compare|comparing|of|about)\b',' ',text,flags=re.I)
     subject_text=re.sub(r'\b([A-Z][A-Za-z_-]*)(\d+(?:\.\d+)*)\b',r'\1',subject_text)
     subject_text=re.sub(r'至|到|\b(?:between|to)\b',' ',subject_text,flags=re.I)
@@ -342,6 +424,9 @@ def subject_witness(query,content,record=None):
 
 
 def classify_candidate(query: str, record: Any, main_query: str | None = None) -> dict[str, Any]:
+    from .content import normalize_question_reply
+    query = normalize_question_reply(str(query or ''))
+    main_query = normalize_question_reply(str(main_query)) if main_query is not None else None
     facet_query = _semantic_text(str(query or ""))
     main_text = _semantic_text(str(main_query or ""))
     # Explicit literal intent in the main request always constrains facets.
@@ -369,6 +454,10 @@ def classify_candidate(query: str, record: Any, main_query: str | None = None) -
     if _unfiltered_browse_intent(browse_query):
         signals.update({"unfiltered_browse_intent": True, "scope_boundary": "caller_authorized_collection_only_not_source_claim_verification"})
         return result("strong", "explicit_unfiltered_collection_browse", 0.95)
+    task_scope = task_scope_alignment(query, content)
+    signals['task_scope_alignment'] = task_scope
+    if task_scope['local_workflows'] and not task_scope['workflow_hits']:
+        return result('none', 'requested_subject_or_local_workflow_not_established', 0.0)
     native_subject=subject_witness(query,content,record)
     signals['specific_subject_witness']=native_subject
     witness = record.get('source_context') if isinstance(record, dict) else None
@@ -379,7 +468,9 @@ def classify_candidate(query: str, record: Any, main_query: str | None = None) -
         query_context = _scope_terms(query) & context_terms
         identifiers = subject_contract(query)['identifiers']
         context_text = str(witness.get('text') or '').casefold()
-        subject_consistent = subject_witness(query,context_text,record)['matched']
+        context_scope = task_scope_alignment(query, context_text)
+        subject_consistent = (context_scope['source_content_relation'] if task_scope['source_task_requested']
+                              else subject_witness(query,context_text,record)['matched'])
         if identifiers and subject_consistent:
             query_context.update('identifier_family:'+word for word in identifiers)
         body_context = _terms(content) & context_terms
@@ -390,12 +481,20 @@ def classify_candidate(query: str, record: Any, main_query: str | None = None) -
         short_body = {term for term in body_context if re.fullmatch(r'[\u3400-\u9fff]{2}', term)}
         independent_short = any(a != b and a[1] != b[0] and b[1] != a[0] for a in short_body for b in short_body)
         meaningful_native = {term for term in _terms(query) & _terms(content) if not re.fullmatch(r'[\u3400-\u9fff]{2}', term)}
-        missing_specific=native_subject['specific'] and not native_subject['matched']
+        missing_specific = ((native_subject['specific'] and not native_subject['matched'])
+                            or (task_scope['source_task_requested'] and not task_scope['source_content_relation']))
         if subject_consistent and query_context and (meaningful_body or independent_short) and (not meaningful_native or missing_specific):
             signals.update(source_context_subject_support=sorted(query_context), source_context_body_support=sorted(body_context),
                            context_source_revision=witness['source_revision'], content_fields_only=False)
             return result('weak', 'source_context_supports_omitted_subject_and_body_relation', 0.4)
-    if native_subject['specific'] and not native_subject['matched']:
+    if task_scope['blocked']:
+        return result('none', 'requested_subject_or_local_workflow_not_established', 0.0)
+    if task_scope['source_task_requested']:
+        return (result('weak', 'substantive_source_task_content_relation', 0.4)
+                if task_scope['source_content_relation']
+                else result('none', 'only_generic_source_handling_or_unestablished_content_relation', 0.0))
+    if (native_subject['specific'] and not native_subject['matched']
+            and not task_scope['subject_hits'] and not task_scope['transferable_source_method']):
         requested={term[8:] for term in _terms(query) if term.startswith('concept:') and term[8:] in _PROBLEM_CONCEPTS}
         answered=requested&{term[8:] for term in _terms(content) if term.startswith('concept:')}
         named_parent_overlap=set(_identifier_roots(query))&_scope_terms(content)
@@ -427,7 +526,7 @@ def classify_candidate(query: str, record: Any, main_query: str | None = None) -
     # phrase, an explained concept, or a complete Latin subject instead.
     substantial = [term for term in overlap if term.startswith("concept:") or not re.fullmatch(r"[\u3400-\u9fff]{2}", term)]
     if not substantial and len(query_terms) > 1:
-        short_terms = [term for term in overlap if re.fullmatch(r"[\u3400-\u9fff]{2}", term)]
+        short_terms = [term for term in overlap if re.fullmatch(r"[\u3400-\u9fff]{2}", term) and term not in _GENERIC_SHORT_SUPPORT]
         independent = any(left != right and not (left[1] == right[0] or right[1] == left[0]) for left in short_terms for right in short_terms)
         if independent or any(subject in short_terms for subject in subjects):
             signals["independent_short_cjk_anchors"] = short_terms

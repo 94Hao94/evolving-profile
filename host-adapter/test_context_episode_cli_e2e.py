@@ -24,7 +24,7 @@ def provider_response(value):
 
 def fixture_provider(request, timeout):
     payload = json.loads(request.data)
-    prompt = payload["messages"][0]["content"]
+    prompt = payload["messages"][-1]["content"]
     envelope = json.loads(prompt.rsplit("输入：", 1)[1])
     request_type = envelope.get("request_type")
     if request_type in {"episode_boundary_classification", "episode_chunk_boundary_reconciliation"}:

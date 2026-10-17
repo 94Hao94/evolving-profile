@@ -123,6 +123,30 @@ def test_workers_claim_each_session_once_and_preserve_existing_index(tmp_path):
     assert any(r['session_id'] == 'legacy' for r in read_context_index(p.index)['sessions'])
 
 
+def test_new_failure_cannot_inherit_prior_attempts_semantic_rejection_detail(tmp_path):
+    from lib.context_incremental import ContextIncremental
+    from lib.context_summary import update_context_index
+    sid = str(uuid.uuid4()); rollout(tmp_path / 'sessions', sid)
+    p = ContextIncremental(tmp_path / 'state', tmp_path / 'sessions')
+    p.discover(now=100)
+    def old_diagnostic(index):
+        row = index['sessions'][0]
+        row.update(error_code='automated_source_coverage_incomplete',
+                   summary_failure_detail={'reason':'semantic_coverage_rejected','fields':['accept','issues']},
+                   updated_at='2000-01-01T00:00:00+00:00')
+        return index
+    update_context_index(p.index, old_diagnostic)
+    job = p.claim(now=200)
+    assert p.fail(job, 'scenario_source_revision_mismatch', now=201, terminal=True) == 'failed'
+    row = read_context_index(p.index)['sessions'][0]
+    assert row['error_code'] == 'scenario_source_revision_mismatch'
+    assert 'summary_failure_detail' not in row
+    assert row['updated_at'] == '1970-01-01T00:03:21+00:00'
+    with p.db() as db:
+        saved = dict(db.execute('SELECT attempts,status,error_code FROM jobs WHERE session_id=?', (sid,)).fetchone())
+    assert saved == {'attempts':1,'status':'failed','error_code':'scenario_source_revision_mismatch'}
+
+
 def test_worker_uses_ep_provider_and_failure_never_publishes_seed(tmp_path):
     from lib.context_incremental import ContextIncremental
     sid = str(uuid.uuid4()); rollout(tmp_path / 'sessions', sid)

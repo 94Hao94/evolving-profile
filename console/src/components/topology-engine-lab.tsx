@@ -4,62 +4,18 @@ import { ActionButton } from "@/components/ui/action-button";
 import { RelevanceAuditDetails } from "./recall-policy-settings";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TopologyNode } from "@/lib/topology-spec";
-import anchors from "@/lib/topology-anchors.json";
-import { nodeMetric, nodePurpose, upgradeLocalLayout, summarizeReceiptScopes } from "@/lib/topology-presentation";
+import { resolveTopologyLayout, type Anchor } from "@/lib/topology-layout";
+import { nodeMetric, nodePurpose, summarizeReceiptScopes } from "@/lib/topology-presentation";
 import { inlineUiText } from "@/lib/inline-i18n";
 import { SourceNavigationDetails } from "./source-navigation-details";
 import { ReturnedContentDetails } from "./returned-content-details";
 
 type Props = { nodes: TopologyNode[]; edges?: unknown[]; english?: boolean };
-type Anchor = { x: number; y: number; width: number; height: number };
 const W = 1672,
   H = 941,
-  STORAGE = "ep-topology-anchors-v9",
-  TEXT_STORAGE = "ep-topology-frame-text-v9",
-  DELETED_STORAGE = "ep-topology-frame-deleted-v9",
-  LAYOUT_MARKER = "ep-topology-layout-v9";
-const POS: Record<string, [number, number, number, number]> = {
-  prompt: [2.3, 8.7, 13.8, 8],
-  binding: [18.9, 8.7, 12.7, 8],
-  contract: [34.4, 8.7, 12.5, 8],
-  fork: [49.5, 7.5, 8, 10],
-  context: [69.4, 8.7, 13.3, 8],
-  execution: [85.4, 8.7, 12.2, 8],
-  "user-root": [21.4, 32.6, 9.6, 7.4],
-  "user-memory-preference": [35.5, 27.3, 13.6, 5.8],
-  "user-memory-recall": [35.5, 33.8, 13.6, 5.8],
-  "user-memory-research": [35.5, 40, 13.6, 5.8],
-  "user-memory-scenario-summary": [54.1, 29, 12.8, 6.5],
-  "user-memory-read-source": [54.1, 37.3, 12.8, 6.5],
-  "user-packet": [73.4, 32.6, 15.4, 7.4],
-  "agent-process-memory-observe-trajectory": [20.7, 57.7, 7.4, 7.7],
-  "agent-process-memory-capability-observation": [31.4, 48.8, 11.4, 4],
-  "agent-process-memory-failure-events": [31.4, 53.4, 11.4, 4],
-  "agent-process-memory-repair-mode": [31.4, 58, 11.4, 4],
-  "agent-process-memory-reusable-process-strategy": [31.4, 62.6, 11.4, 4],
-  "agent-process-memory-process-retrieval": [31.4, 67.2, 11.4, 4],
-  "agent-process-memory-agent-research": [31.4, 71.8, 11.4, 4],
-  "agent-process-memory-agent-scenario-summary": [46.4, 57.7, 6.5, 7.7],
-  "agent-process-memory-migration-revalidation": [62.6, 48.5, 12.5, 4.2],
-  "agent-process-memory-compatibility-gate": [54.6, 57.7, 6.6, 7.7],
-  "agent-process-memory-guidance-hint": [62.6, 53.5, 12.5, 4.2],
-  "agent-process-memory-guidance-recommend": [62.6, 58.5, 12.5, 4.2],
-  "agent-process-memory-guidance-scaffold": [62.6, 63.5, 12.5, 4.2],
-  "agent-process-memory-guidance-guard": [62.6, 68.5, 12.5, 4.2],
-  "agent-packet": [79, 57.7, 10, 7.7],
-  "rag-root": [21.4, 82.6, 7.5, 7.7],
-  "external-rag-lexical": [32.4, 82.7, 9.7, 3.5],
-  "external-rag-vector": [32.4, 87.1, 9.7, 6.2],
-  "external-rag-fusion-rrf": [45.6, 82.7, 8.3, 7.4],
-  "external-rag-rerank": [55.9, 82.7, 8.6, 7.4],
-  "external-rag-jev-review": [66.7, 82.7, 8.9, 7.4],
-  "rag-packet": [78, 82.7, 11, 7.4],
-  "label-serial": [4.8, 3.2, 32, 3.2],
-  "label-user-lane": [6.5, 35, 13, 4.2],
-  "label-agent-lane": [6.5, 54, 16, 4.2],
-  "label-rag-lane": [6.5, 82, 13, 4.2],
-  "label-fork": [49.5, 16.5, 6, 3.5],
-};
+  STORAGE = "ep-topology-anchors-v7",
+  TEXT_STORAGE = "ep-topology-frame-text-v7",
+  DELETED_STORAGE = "ep-topology-frame-deleted-v7";
 const status = (s: string, e: boolean) =>
   (
     ({
@@ -141,29 +97,9 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     [editMode, setEditMode] = useState(false),
     [editing, setEditing] = useState<string | null>(null),
     [message, setMessage] = useState("");
-  const [draft, setDraft] = useState<Record<string, Anchor>>(() => {
-    if (typeof window === "undefined") return upgradeLocalLayout(anchors);
-    try {
-      const saved=JSON.parse(localStorage.getItem(STORAGE) || "null") || anchors;
-      return localStorage.getItem("ep-topology-layout-v8") ? saved : upgradeLocalLayout(saved);
-    } catch {
-      return upgradeLocalLayout(anchors);
-    }
-  });
-  const [texts, setTexts] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(TEXT_STORAGE) || "{}") || {};
-    } catch {
-      return {};
-    }
-  });
-  const [deleted, setDeleted] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(DELETED_STORAGE) || "[]") || [];
-    } catch {
-      return [];
-    }
-  });
+  const [draft, setDraft] = useState<Record<string, Anchor>>(() => resolveTopologyLayout(null));
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const [deleted, setDeleted] = useState<string[]>([]);
   const drag = useRef<{
     id: string;
     mode: "move" | "resize";
@@ -176,14 +112,17 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     []
   );
   useEffect(()=>{
-    if(localStorage.getItem(LAYOUT_MARKER)) return;
-    const old=localStorage.getItem("ep-topology-anchors-v7") || localStorage.getItem("ep-topology-anchors-v8");
-    if(old) localStorage.setItem("ep-topology-anchors-before-layout-v9",old);
-    // v9 deliberately starts from the shipped canonical anchors. Older local
-    // layouts were calibrated against a previous bitmap and can shift labels
-    // away from the current background image.
-    localStorage.setItem(STORAGE,JSON.stringify(anchors));
-    localStorage.setItem(LAYOUT_MARKER,"topology-reference-design-v17:1672x941");
+    // First render and SSR share the same defaults. Read custom data after
+    // hydration; never rewrite an existing edit merely by opening the page.
+    try { setDraft(resolveTopologyLayout(JSON.parse(localStorage.getItem(STORAGE) || "null"))); } catch { /* use calibrated defaults */ }
+    try {
+      const saved=JSON.parse(localStorage.getItem(TEXT_STORAGE) || "{}");
+      if(saved && typeof saved==="object" && !Array.isArray(saved))setTexts(Object.fromEntries(Object.entries(saved).filter(([,value])=>typeof value==="string")) as Record<string,string>);
+    } catch { /* retain locale labels */ }
+    try {
+      const saved=JSON.parse(localStorage.getItem(DELETED_STORAGE) || "[]");
+      if(Array.isArray(saved))setDeleted(saved.filter((id):id is string=>typeof id==="string"));
+    } catch { /* retain all nodes */ }
   },[]);
   const labels = useMemo(() => {
     const d = {
@@ -208,12 +147,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
   );
   const begin = (e: React.PointerEvent, id: string, mode: "move" | "resize") => {
     if (!editMode) return;
-    const a = draft[id] || {
-      x: POS[id]?.[0] ?? 0,
-      y: POS[id]?.[1] ?? 0,
-      width: POS[id]?.[2] ?? 10,
-      height: POS[id]?.[3] ?? 6,
-    };
+    const a = draft[id] || {x:0,y:0,width:10,height:6};
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     drag.current = { id, mode, sx: e.clientX, sy: e.clientY, origin: a };
   };
@@ -253,7 +187,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     setTimeout(() => setMessage(""), 2200);
   };
   const reset = async () => {
-    setDraft(upgradeLocalLayout(anchors));
+    setDraft(resolveTopologyLayout(null));
     setTexts({});
     setDeleted([]);
     setEditing(null);
@@ -263,12 +197,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
     setMessage(english ? "Reset" : "已重置");
   };
   const frame = (id: string, label: string, node?: TopologyNode) => {
-    const a = draft[id] || {
-        x: POS[id]?.[0] ?? 0,
-        y: POS[id]?.[1] ?? 0,
-        width: POS[id]?.[2] ?? 10,
-        height: POS[id]?.[3] ?? 6,
-      },
+    const a = draft[id] || {x:0,y:0,width:10,height:6},
       x = (a.x * W) / 100,
       y = (a.y * H) / 100,
       w = (a.width * W) / 100,
@@ -383,6 +312,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
           </span>
           <a
             className="reference-anchor-link"
+            aria-label={editMode ? (english ? "Exit layout editor" : "退出布局编辑") : (english ? "Edit layout" : "编辑布局")}
             href={editMode ? "?view=flow" : "?view=flow&anchorEdit=1"}
           >
             {editMode ? "↩" : "⚙"}
@@ -395,7 +325,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                 resetKey={JSON.stringify({ draft, texts, deleted })}
                 onAction={save}
               >
-                保存锚点
+                {english ? "Save layout" : "保存布局"}
               </ActionButton>
               {message && <span className="reference-save-feedback">{message}</span>}
               <ActionButton
@@ -404,7 +334,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                 resetKey={JSON.stringify({ draft, texts, deleted })}
                 onAction={reset}
               >
-                重置
+                {english ? "Restore default layout" : "恢复默认布局"}
               </ActionButton>
             </>
           )}

@@ -5,7 +5,7 @@ export const scanByteBudget = 12 * 1024 * 1024;
 const scanChunk = 512 * 1024;
 const sourceIndexLimit = 256;
 type Witness = {native_turn_id:string;native_message_id:any;message_sha256:string;normalized_prompt_sha256:string;preview:string;normalized_length:number;source_byte_offset:number;record_kind:string;message_record_bytes:number};
-type SourceIndex = {inode:number;revision:string;size:number;mtime:number;cursor:number;tailAt:number|null;turns:Map<string,Witness[]>;anchors:Map<number,number>;skipRecord:boolean;oversizedUserGap:boolean};
+type SourceIndex = {inode:number;revision:string;size:number;mtime:number;cursor:number;tailAt:number|null;tailStart:number|null;turns:Map<string,Witness[]>;anchors:Map<number,number>;skipRecord:boolean;oversizedUserGap:boolean};
 const sources = new Map<string,SourceIndex>();
 export type ScanBudget = {bytesLeft:number;deadline:number};
 
@@ -91,18 +91,28 @@ export async function nativeTurnWitnesses(filename:string,revision:string,row:an
   const sourceStat=await stat(filename);let index=sources.get(filename);
   if(!index || index.inode!==sourceStat.ino || index.revision!==revision || sourceStat.size<index.size || (sourceStat.size===index.size && sourceStat.mtimeMs!==index.mtime)) {
     if(budget.bytesLeft<=0 || Date.now()>budget.deadline)return {matches:[],scan:{state:'partial',indexed_prefix_bytes:0,source_bytes:sourceStat.size,witness_revalidation:'budget_exhausted'}};
-    index={inode:sourceStat.ino,revision,size:sourceStat.size,mtime:sourceStat.mtimeMs,cursor:0,tailAt:null,turns:new Map(),anchors:new Map(),skipRecord:false,oversizedUserGap:false};
+    index={inode:sourceStat.ino,revision,size:sourceStat.size,mtime:sourceStat.mtimeMs,cursor:0,tailAt:null,tailStart:null,turns:new Map(),anchors:new Map(),skipRecord:false,oversizedUserGap:false};
     if(!sources.has(filename) && sources.size>=sourceIndexLimit)sources.delete(sources.keys().next().value!);sources.set(filename,index);
   }else{sources.delete(filename);sources.set(filename,index);}
   index.size=sourceStat.size;index.mtime=sourceStat.mtimeMs;
   const turn=String(row.turn_id || '');
   if(!(index.turns.get(turn) || []).some(item=>matches(row,item))){
     if(index.cursor<index.size){const end=await scanSegment(filename,index,index.cursor,shallow?262144:scanChunk,budget,true);if(end!==null)index.cursor=end;}
-    if(!shallow && index.size>scanChunk && index.tailAt!==index.size){await scanSegment(filename,index,Math.max(0,index.size-scanChunk),scanChunk,budget);index.tailAt=index.size;}
+    if(!shallow && index.size>scanChunk){
+      // Keep half the shared budget available for exact proof and other sources.
+      const tailLength=Math.min(8*scanChunk,Math.max(0,Math.floor(budget.bytesLeft/2)));
+      const tailStart=Math.max(0,index.size-tailLength);
+      if(tailLength && (index.tailAt!==index.size || index.tailStart===null || tailStart<index.tailStart)){
+        const end=await scanSegment(filename,index,tailStart,tailLength,budget);
+        if(end!==null){index.tailAt=index.size;index.tailStart=tailStart;}
+      }
+    }
     if(!shallow && !index.turns.has(turn) && index.cursor<index.size)await timeProbe(filename,index,row,budget);
   }
   const checked:Witness[]=[];let freshState:string|null=null;
   for(const item of index.turns.get(turn) || []){
+    // A cached match is a scheduling hint, never proof without the fresh hash.
+    if(!matches(row,item))continue;
     const length=item.message_record_bytes;
     if(length<1 || budget.bytesLeft<length || Date.now()>budget.deadline){freshState='budget_exhausted';continue;}
     // Stat growth can accompany an in-place rewrite. Fresh-read the exact
@@ -110,7 +120,7 @@ export async function nativeTurnWitnesses(filename:string,revision:string,row:an
     const stream=await open(filename,'r');let raw:Buffer;
     try{const buffer=Buffer.alloc(length),read=await stream.read(buffer,0,length,item.source_byte_offset);raw=buffer.subarray(0,read.bytesRead);}finally{await stream.close();}
     budget.bytesLeft-=raw.length;
-    if(raw.length!==length || createHash('sha256').update(raw).digest('hex')!==item.message_sha256){index.turns.clear();index.anchors.clear();index.cursor=0;index.tailAt=null;index.skipRecord=false;index.oversizedUserGap=false;freshState='source_changed';checked.length=0;break;}
+    if(raw.length!==length || createHash('sha256').update(raw).digest('hex')!==item.message_sha256){index.turns.clear();index.anchors.clear();index.cursor=0;index.tailAt=null;index.tailStart=null;index.skipRecord=false;index.oversizedUserGap=false;freshState='source_changed';checked.length=0;break;}
     if(matches(row,item))checked.push(item);
   }
   return {matches:checked,scan:{state:index.cursor>=index.size && !index.skipRecord && !index.oversizedUserGap?'complete':'partial',indexed_prefix_bytes:index.cursor,source_bytes:index.size,witness_revalidation:freshState}};

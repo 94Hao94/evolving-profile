@@ -117,6 +117,13 @@ class McpToolActivityTests(unittest.TestCase):
         digest = hashlib.sha256(Path(self.module.__file__).read_bytes()).hexdigest()
         self.assertEqual(value.get('adapter_build_sha256'), digest)
 
+    def test_activity_keeps_loaded_build_separate_from_installed_disk(self):
+        with tempfile.TemporaryDirectory() as home:
+            self._invoke_reply(home,'memory_check',{}, {'content':[{'type':'text','text':'{}'}]})
+            event=json.loads((Path(home)/'.evolving-profile/audit/mcp-tool-activity.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(event.get('adapter_build_sha256'), self.module.ADAPTER_BUILD_SHA256)
+        self.assertEqual(event.get('adapter_process_id'), os.getpid())
+
     def test_internal_judge_receipt_is_delivered_and_recorded_without_deleting_candidates(self):
         with tempfile.TemporaryDirectory() as home, patch.object(self.module, 'project_tool_review', return_value={'status': 'ok', 'mode': 'assist', 'answers': {'evidence': {'choice': 'needs_source'}}, 'calls': 1}):
             result = {'content': [{'type': 'text', 'text': json.dumps({'memories': [{'id': 'm1', 'text': 'unchanged candidate'}], 'returned_count': 1})}]}

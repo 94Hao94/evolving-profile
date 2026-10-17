@@ -3,8 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TopologyEngineLab } from "@/components/topology-engine-lab";
 import { buildTopologySpec, type TopologyBranchSummary } from "@/lib/topology-spec";
-import {summarizeReceiptScopes} from "@/lib/topology-presentation";
-import anchors from "@/lib/topology-anchors.json";
+import {summarizeReceiptScopes,topologySourceScope} from "@/lib/topology-presentation";
 
 const branch = (stage: string, count: number, extra = {}): TopologyBranchSummary => ({
   status: "delivered", counts: { candidates: 0, returned: count, delivered: count, tokens: 0 },
@@ -14,12 +13,11 @@ const make = (branches = new Map<string, TopologyBranchSummary>()) => buildTopol
 const button = (markup: string, id: string) => markup.split(`data-node-id="${id}"`)[1]?.split("</foreignObject>")[0] || "";
 
 describe("topology node purpose", () => {
-  it("ships anchors in the same coordinate system as the v17 background bitmap", () => {
-    expect(anchors.context).toMatchObject({ x: 69.4, y: 8.7, width: 13.3 });
-    expect(anchors.execution).toMatchObject({ x: 85.4, y: 8.7, width: 12.2 });
-    expect(anchors["user-root"]).toMatchObject({ x: 21.4, y: 32.6 });
-    expect(anchors["rag-root"]).toMatchObject({ x: 21.4, y: 82.6 });
-    expect(anchors.context.x).not.toBe(61.5);
+  it('never labels live invocation receipts as retained host result replay',()=>{
+    expect(topologySourceScope([{tool:'read_scenario_summary',source_type:'ep_live_receipt'}],true,'none')).toBe('Same Prompt / EP invocation receipts (host delivery unverified)');
+    expect(topologySourceScope([{source_type:'codex_host_tool_result'}],true,'none')).toBe('Same Prompt / retained host tool results (does not imply answer adoption)');
+    expect(topologySourceScope([{source_type:'codex_host_tool_result'},{source_type:'ep_live_receipt'}],false,'none')).toBe('同一 Prompt / 混合宿主结果与 EP 调用回执（逐条核对送达）');
+    expect(topologySourceScope([],true,'no_bound_process_receipt')).toBe('no_bound_process_receipt');
   });
   it.each([false,true])("opens the entire topology at fit width by default (english=%s)", (english) => {
     const markup=renderToStaticMarkup(createElement(TopologyEngineLab,{nodes:make().nodes,english}));

@@ -65,13 +65,16 @@ export function projectToolBranches(events: any[], english: boolean): Map<string
       const contents=e.mapping_items || [];
       items.push({kind:e.tool,text:`${english?"Call":"调用"} ${e.tool_call_id || e.at || index} · ${e.source_type || "ep_live_receipt"}\n${e.query || ""}\n${english?"Returned":"返回"} ${e.returned_count ?? "—"} · ${english?"Delivered":"送达"} ${deliveredCount ?? "—"}`});
       for (const i of contents) items.push({kind:e.tool,text:i.text || i.text_preview || i.title || i.id || "—",returned_item:{...i,text:i.text || i.text_preview || i.title || "",source_role:i.source_role || (e.source_type==="codex_host_tool_result"?"host_retained_return":"returned_candidate"),snapshot:i.snapshot===null?undefined:e.returned_content_snapshot || undefined}});
-      if (!contents.length) for (const id of ids) items.push({kind:e.tool,text:`来源定位：${id}（本回执未记录正文）`});
+      if (!contents.length) for (const id of ids) items.push({kind:e.tool,text:english ? `Source locator: ${id} (no body recorded in this receipt)` : `来源定位：${id}（本回执未记录正文）`});
       const navigation=e.failed ? [] : normalizeSourceNavigation(e.source_navigation);
       for (const locator of navigation) items.push({kind:"source_navigation",text:locator.memory_id,source_navigation:locator});
       if (e.scenario_summary_text) items.push({kind:e.tool,text:e.scenario_summary_text});
       if (scenarioTools.has(e.tool)) {
         const display=(value:string)=>enumUiText(value,english ? "en" : "zh-CN");
-        items.push({kind:english ? "Scenario coverage" : "情景覆盖",text:`${english ? "Purpose" : "用途"}: ${display(e.purpose || "unspecified")} · ${display(e.scenario_summary_status || e.result_status || "unknown")} · ${display(e.scenario_summary_kind || "unknown")}\n${display(e.summary_processing?.status || "unknown")}`});
+        const text=e.scenario_coverage_view
+          ? `${english ? "Purpose" : "用途"}: ${display(e.purpose || "unspecified")} · ${display("coverage_"+e.scenario_coverage_view)}\n${display(e.scenario_summary_status || e.result_status || "unknown")} · ${display(e.scenario_semantic_review_status || "unknown")}\n${english ? "Original messages read" : "原始消息回读"} ${e.original_message_readback_count ?? "—"}`
+          : `${english ? "Purpose" : "用途"}: ${display(e.purpose || "unspecified")} · ${display(e.scenario_summary_status || e.result_status || "unknown")} · ${display(e.scenario_summary_kind || "unknown")}\n${display(e.summary_processing?.status || "unknown")}`;
+        items.push({kind:english ? "Scenario coverage" : "情景覆盖",text});
       }
       for(const v of e.verification_evidence || []) items.push({kind:"验证证据",text:JSON.stringify(v)});
       if(e.process_record?.repair_actions?.length) items.push({kind:"修复动作",text:e.process_record.repair_actions.join(" · ")});

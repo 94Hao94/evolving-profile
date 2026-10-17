@@ -2,6 +2,13 @@
   "name": "evolving-profile",
   "private": true,
   "workspaces": ["evolving-client", "console"],
+  "overrides": {
+    "source-map-js": "^1.2.2",
+    "handlebars": "^4.7.10",
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "7.1.6"
+    }
+  },
   "scripts": {
     "dev": "npm run dev -w @evolving-profile/console",
     "preview": "npm run preview -w @evolving-profile/console",

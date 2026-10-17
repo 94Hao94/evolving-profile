@@ -1,8 +1,8 @@
 [
   {
-    "context_id": "session:01a119e7-b036-7ba0-8392-c53b59408047",
-    "session_id": "01a119e7-b036-7ba0-8392-c53b59408047",
-    "source_revision": "448d5d7d4c7a32fecae7756e95519745eabde5c8986676c17ab4fc0687dec829",
+    "context_id": "session:df976554-7fe6-59e1-a73e-0c96cc83c6aa",
+    "session_id": "df976554-7fe6-59e1-a73e-0c96cc83c6aa",
+    "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be",
     "status": "model_reviewed",
     "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
     "source_message_count": 8,
@@ -12,19 +12,19 @@
       "corrections_preserved": true,
       "assistant_claims_labeled": true,
       "partition_exact": true,
-      "source_revision": "448d5d7d4c7a32fecae7756e95519745eabde5c8986676c17ab4fc0687dec829",
+      "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be",
       "reviewed_message_ids": [
-        "4951053b021fca1f",
-        "150ec6a81176c182",
-        "ef0ead0db6e36957",
-        "c64d17f768f3b26f",
-        "5c9f3b39ea5baf07",
-        "4abe76b7434dbefd",
-        "391a955f0e359e02",
-        "dc85bc922d8535fd"
+        "90d0d297ea6e96f3",
+        "cc05756c3ba66815",
+        "336d744306c9d6cf",
+        "871db4cebad239ba",
+        "819edf5c25453223",
+        "4e6bace0b73ba1a1",
+        "605ecf311e114e90",
+        "912492146f56dad8"
       ],
       "reviewed_episode_ids": [
-        "episode:01a119e7-b036-7ba0-8392-c53b59408047:4951053b021fca1f"
+        "episode:df976554-7fe6-59e1-a73e-0c96cc83c6aa:90d0d297ea6e96f3"
       ],
       "coverage_protocol": "per_user_source_to_state_and_summary.v2",
       "no_human_confirmation_claim": true,
@@ -32,18 +32,19 @@
       "model_review_receipt": {
         "host_validation_version": "source-coverage-primary-context.v3",
         "input_clipped": false,
-        "source_revision": "448d5d7d4c7a32fecae7756e95519745eabde5c8986676c17ab4fc0687dec829"
+        "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be"
       }
     },
     "episodes": [],
     "source_ids": [
-      "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T13-06-16-01a119e7-b036-7ba0-8392-c53b59408047.jsonl"
-    ]
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T13-06-16-df976554-7fe6-59e1-a73e-0c96cc83c6aa.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
   },
   {
-    "context_id": "session:01a11a80-378f-7f20-8623-5d89b6baf249",
-    "session_id": "01a11a80-378f-7f20-8623-5d89b6baf249",
-    "source_revision": "92a83ea288288131836b0182272241e25ba89fe5092b810762db33a7efd37b30",
+    "context_id": "session:37d374e2-7066-5122-a932-b5db57911c1a",
+    "session_id": "37d374e2-7066-5122-a932-b5db57911c1a",
+    "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd",
     "status": "model_reviewed",
     "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
     "source_message_count": 2,
@@ -53,13 +54,13 @@
       "corrections_preserved": true,
       "assistant_claims_labeled": true,
       "partition_exact": true,
-      "source_revision": "92a83ea288288131836b0182272241e25ba89fe5092b810762db33a7efd37b30",
+      "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd",
       "reviewed_message_ids": [
-        "668401499efa3658",
-        "9a0f0551533d8356"
+        "976ff15214d5c45a",
+        "933f0f1ba09b2cd8"
       ],
       "reviewed_episode_ids": [
-        "episode:01a11a80-378f-7f20-8623-5d89b6baf249:668401499efa3658"
+        "episode:37d374e2-7066-5122-a932-b5db57911c1a:976ff15214d5c45a"
       ],
       "coverage_protocol": "per_user_source_to_state_and_summary.v2",
       "no_human_confirmation_claim": true,
@@ -67,18 +68,19 @@
       "model_review_receipt": {
         "host_validation_version": "source-coverage-primary-context.v3",
         "input_clipped": false,
-        "source_revision": "92a83ea288288131836b0182272241e25ba89fe5092b810762db33a7efd37b30"
+        "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd"
       }
     },
     "episodes": [],
     "source_ids": [
-      "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T15-52-52-01a11a80-378f-7f20-8623-5d89b6baf249.jsonl"
-    ]
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T15-52-52-37d374e2-7066-5122-a932-b5db57911c1a.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
   },
   {
-    "context_id": "session:01a11944-30ab-7173-9f90-b5639a0238bb",
-    "session_id": "01a11944-30ab-7173-9f90-b5639a0238bb",
-    "source_revision": "6601cf4a89b7021c1401688f4d6c30cf7688e91880e161718e6914e612d40ce9",
+    "context_id": "session:7c439e84-cb9d-5f26-b141-88e3e4ed74b7",
+    "session_id": "7c439e84-cb9d-5f26-b141-88e3e4ed74b7",
+    "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0",
     "status": "episode_directory_ready",
     "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
     "source_message_count": 30,
@@ -88,42 +90,42 @@
       "corrections_preserved": true,
       "assistant_claims_labeled": true,
       "partition_exact": true,
-      "source_revision": "6601cf4a89b7021c1401688f4d6c30cf7688e91880e161718e6914e612d40ce9",
+      "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0",
       "reviewed_message_ids": [
-        "803d3a6815964718",
-        "6e75624818ee2dbd",
-        "46901c53d52f4a41",
-        "9db97a67c1a5d0ec",
-        "1922267db793a7e4",
-        "4102a37bd40cdbc5",
-        "20425a23ce2f4952",
-        "e990dd8b30deab4f",
-        "ee94864a4b4c4141",
-        "49a3f75ea3cdc88d",
-        "6e277ca216dbe275",
-        "0a65df6a65ce25ff",
-        "8c36bb9ad020de59",
-        "2db58e930287a093",
-        "9340232c3590c616",
-        "05e17a38006b31e1",
-        "a0a99ab0b983fcc6",
-        "0955a5a0a2467285",
-        "6f0efb6696cb42be",
-        "881b790f67bc350d",
-        "d603b7be215cc535",
-        "87e3557c26962dc1",
-        "3b0b40e1f41fcaee",
-        "021023e8fe96acb0",
-        "b3df427cc2b43dd7",
-        "1a3e9090ced32b40",
-        "e565d0585b7e949e",
-        "8238ffba99b6840d",
-        "7eaacfa4a6898630",
-        "9f85296c74566765"
+        "a5248eed43343688",
+        "792b3b00bd831a97",
+        "4c6c46378b8c88f1",
+        "ff648cd4501a78f6",
+        "fdf5f167719d1b1e",
+        "65f337ddf8a544c2",
+        "3a4808351fc2903e",
+        "0028e653ae07a6e7",
+        "67301d6a48796342",
+        "6d7c49d2f9dd2491",
+        "7db0375a79e99053",
+        "fc5d46ae107ccf22",
+        "70dce8b2916f786c",
+        "93ecd41b8bc0d820",
+        "891ab2434fb61937",
+        "435d6f4d10905c04",
+        "e000dab78a03a4d4",
+        "73c3565756cfd27f",
+        "fce58943ae443d83",
+        "006c24e90c8d3026",
+        "1bf345165f03c760",
+        "811fceb741367a34",
+        "5b928d280dff66e4",
+        "f72bc9ba4137ed45",
+        "550e19edbbfb098a",
+        "6426c4cca5b6405d",
+        "bce181c39ab050e3",
+        "5f1c8514668aa4ed",
+        "e1c381f447cc0a9f",
+        "52bbe3586dda51d7"
       ],
       "reviewed_episode_ids": [
-        "episode:01a11944-30ab-7173-9f90-b5639a0238bb:803d3a6815964718",
-        "episode:01a11944-30ab-7173-9f90-b5639a0238bb:6f0efb6696cb42be"
+        "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:a5248eed43343688",
+        "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:fce58943ae443d83"
       ],
       "coverage_protocol": "per_user_source_to_state_and_summary.v2",
       "no_human_confirmation_claim": true,
@@ -131,12 +133,12 @@
       "model_review_receipt": {
         "host_validation_version": "source-coverage-primary-context.v3",
         "input_clipped": false,
-        "source_revision": "6601cf4a89b7021c1401688f4d6c30cf7688e91880e161718e6914e612d40ce9"
+        "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0"
       }
     },
     "episodes": [
       {
-        "episode_id": "episode:01a11944-30ab-7173-9f90-b5639a0238bb:803d3a6815964718",
+        "episode_id": "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:a5248eed43343688",
         "title": "Episode 1",
         "title_authority": "navigation_label_not_verified_fact",
         "status": "model_reviewed",
@@ -177,103 +179,103 @@
           "full": "Fixture episode 1 full"
         },
         "source_file_ids": [
-          "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl"
+          "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
         ],
         "source_offsets": [
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 212024,
-            "message_id": "803d3a6815964718"
+            "message_id": "a5248eed43343688"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 230333,
-            "message_id": "6e75624818ee2dbd"
+            "message_id": "792b3b00bd831a97"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 238107,
-            "message_id": "46901c53d52f4a41"
+            "message_id": "4c6c46378b8c88f1"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 432152,
-            "message_id": "9db97a67c1a5d0ec"
+            "message_id": "ff648cd4501a78f6"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 443377,
-            "message_id": "1922267db793a7e4"
+            "message_id": "fdf5f167719d1b1e"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 481744,
-            "message_id": "4102a37bd40cdbc5"
+            "message_id": "65f337ddf8a544c2"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 494275,
-            "message_id": "20425a23ce2f4952"
+            "message_id": "3a4808351fc2903e"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 507567,
-            "message_id": "e990dd8b30deab4f"
+            "message_id": "0028e653ae07a6e7"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 516223,
-            "message_id": "ee94864a4b4c4141"
+            "message_id": "67301d6a48796342"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 529641,
-            "message_id": "49a3f75ea3cdc88d"
+            "message_id": "6d7c49d2f9dd2491"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 667598,
-            "message_id": "6e277ca216dbe275"
+            "message_id": "7db0375a79e99053"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 783517,
-            "message_id": "0a65df6a65ce25ff"
+            "message_id": "fc5d46ae107ccf22"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 794582,
-            "message_id": "8c36bb9ad020de59"
+            "message_id": "70dce8b2916f786c"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 831173,
-            "message_id": "2db58e930287a093"
+            "message_id": "93ecd41b8bc0d820"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 843957,
-            "message_id": "9340232c3590c616"
+            "message_id": "891ab2434fb61937"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 857615,
-            "message_id": "05e17a38006b31e1"
+            "message_id": "435d6f4d10905c04"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 866369,
-            "message_id": "a0a99ab0b983fcc6"
+            "message_id": "e000dab78a03a4d4"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 1978013,
-            "message_id": "0955a5a0a2467285"
+            "message_id": "73c3565756cfd27f"
           }
         ]
       },
       {
-        "episode_id": "episode:01a11944-30ab-7173-9f90-b5639a0238bb:6f0efb6696cb42be",
+        "episode_id": "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:fce58943ae443d83",
         "title": "Episode 2",
         "title_authority": "navigation_label_not_verified_fact",
         "status": "model_reviewed",
@@ -314,74 +316,75 @@
           "full": "Fixture episode 2 full"
         },
         "source_file_ids": [
-          "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl"
+          "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
         ],
         "source_offsets": [
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2134926,
-            "message_id": "6f0efb6696cb42be"
+            "message_id": "fce58943ae443d83"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2349396,
-            "message_id": "881b790f67bc350d"
+            "message_id": "006c24e90c8d3026"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2357904,
-            "message_id": "d603b7be215cc535"
+            "message_id": "1bf345165f03c760"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2376662,
-            "message_id": "87e3557c26962dc1"
+            "message_id": "811fceb741367a34"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2389752,
-            "message_id": "3b0b40e1f41fcaee"
+            "message_id": "5b928d280dff66e4"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2405006,
-            "message_id": "021023e8fe96acb0"
+            "message_id": "f72bc9ba4137ed45"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2417488,
-            "message_id": "b3df427cc2b43dd7"
+            "message_id": "550e19edbbfb098a"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2471629,
-            "message_id": "1a3e9090ced32b40"
+            "message_id": "6426c4cca5b6405d"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2483568,
-            "message_id": "e565d0585b7e949e"
+            "message_id": "bce181c39ab050e3"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2498140,
-            "message_id": "8238ffba99b6840d"
+            "message_id": "5f1c8514668aa4ed"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 2509459,
-            "message_id": "7eaacfa4a6898630"
+            "message_id": "e1c381f447cc0a9f"
           },
           {
-            "source_path": "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl",
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
             "byte_offset": 3332245,
-            "message_id": "9f85296c74566765"
+            "message_id": "52bbe3586dda51d7"
           }
         ]
       }
     ],
     "source_ids": [
-      "/Users/apple/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-01a11944-30ab-7173-9f90-b5639a0238bb.jsonl"
-    ]
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
   }
 ]

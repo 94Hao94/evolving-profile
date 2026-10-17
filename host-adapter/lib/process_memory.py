@@ -92,6 +92,8 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     if kind != "capability_observation" and not source_trace_ids:
         raise ValueError("process_memory_source_trace_required")
     verification = _list(value.get("verification_evidence"))
+    value = project_task_outcome({**value, "outcome": outcome, "verification_evidence": verification})
+    outcome = value["outcome"]
     value.update({
         "schema_version": str(value.get("schema_version") or SCHEMA_VERSION),
         "taxonomy_version": str(value.get("taxonomy_version") or TAXONOMY_VERSION),
@@ -134,13 +136,25 @@ def _verifier_is_independent(item: dict[str, Any]) -> bool:
     kind = str(item.get("verifier_kind") or "")
     status = str(item.get("status") or "").lower()
     scope = str(item.get("scope") or item.get("verification_scope") or "").lower()
-    if scope in {"episode_existence_only", "candidate_shape_only", "source_locator_only"}:
+    if scope in {"episode_existence_only", "candidate_shape_only", "source_locator_only", "tool_execution_only", "tool_returned"}:
         return False
     return kind in INDEPENDENT_VERIFIERS and status in {"passed", "accepted", "verified", "success"}
 
 
 def _has_verifier(items: list[Any]) -> bool:
     return any(isinstance(item, dict) and _verifier_is_independent(item) for item in items)
+
+
+def project_task_outcome(record: dict[str, Any]) -> dict[str, Any]:
+    """Read legacy mechanical success honestly while preserving its original claim."""
+    value = dict(record)
+    verified = _has_verifier(_list(value.get("verification_evidence")))
+    value["task_verified"] = verified
+    if not verified and value.get("outcome") in {"correct", "recovered", "partially_correct"}:
+        value.setdefault("recorded_outcome", value["outcome"])
+        value["outcome"] = "ambiguous"
+        value["outcome_basis"] = "task_verification_missing"
+    return value
 
 
 def compatibility_match(record: dict[str, Any], compatibility: dict[str, Any] | None) -> bool:
@@ -250,7 +264,7 @@ class ProcessMemoryStore:
                 pass
 
     def all(self) -> list[dict[str, Any]]:
-        return list(self._read().get("records") or [])
+        return [project_task_outcome(row) for row in self._read().get("records") or []]
 
     @staticmethod
     def _source_id_index(records: list[dict[str, Any]]) -> set[str]:
@@ -503,15 +517,23 @@ class ProcessMemoryStore:
         records = self.all()
         known_ids = self._source_id_index(records)
         candidates = []
+        # Count only the first rejecting gate. This distinguishes an explicit
+        # mature-only request from a content-relevance zero without exposing
+        # excluded record bodies, contexts, or compatibility values.
+        excluded_by_gate = dict.fromkeys(("diagnostic", "rollout", "status_or_drift", "maturity", "context", "compatibility"), 0)
         for record in records:
             if _is_diagnostic_process_record(record):
+                excluded_by_gate["diagnostic"] += 1
                 continue
             rollout = record.get('rollout_state', 'active')
             if rollout in {'shadow', 'rolled_back'} or (rollout == 'canary' and (not experiment_id or experiment_id != record.get('experiment_id'))):
+                excluded_by_gate["rollout"] += 1
                 continue
             if record.get("status") in {"deprecated", "blocked"} or record.get("drift_status") in {"deprecated", "revalidation_required"}:
+                excluded_by_gate["status_or_drift"] += 1
                 continue
             if not include_unverified and record.get("maturity") not in {"verified", "replicated", "generalized"}:
+                excluded_by_gate["maturity"] += 1
                 continue
             record_families = set(record.get("task_archetype") or [])
             # No task-family constraint means the family is unknown, not a
@@ -522,6 +544,7 @@ class ProcessMemoryStore:
                 # Context mismatch is a soft penalty unless the record carries
                 # an explicit conflicting project/session identity.
                 if any((record.get("primary_context") or {}).get(k) not in (None, "", v) for k, v in primary_context.items()):
+                    excluded_by_gate["context"] += 1
                     continue
             compatibility_match_value = compatibility_match(record, compatibility)
             # A caller-supplied model/tool compatibility constraint is a hard
@@ -529,6 +552,7 @@ class ProcessMemoryStore:
             # inside that boundary, but must never mix an explicitly
             # incompatible model family or version into the candidate set.
             if compatibility and not compatibility_match_value:
+                excluded_by_gate["compatibility"] += 1
                 continue
             context_match = bool(primary_context) and all((record.get("primary_context") or {}).get(k) == v for k, v in primary_context.items())
             related_by_scope = family_match or (bool(compatibility) and compatibility_match_value) or context_match
@@ -539,7 +563,9 @@ class ProcessMemoryStore:
             candidates.append(copy)
         resolved = self._search_relevance_policy(policy, minimum_relevance)
         rows, audit = apply_relevance_policy(query, candidates, resolved, main_query=main_query)
-        audit.update({"eligible_candidate_count": len(candidates), "scope_or_maturity_excluded_count": len(records) - len(candidates)})
+        audit.update({"eligible_candidate_count": len(candidates), "scope_or_maturity_excluded_count": len(records) - len(candidates),
+                      "eligibility_audit": {"include_unverified": bool(include_unverified), "total_record_count": len(records),
+                                            "eligible_candidate_count": len(candidates), "excluded_by_gate": excluded_by_gate}})
         for row in rows:
             row["recall_match_audit"]["lexical_term_hits"] = len(row["relevance_match_signals"].get("matched_terms") or [])
         # Dates remain metadata, never overwrite relevance or outrank relations.

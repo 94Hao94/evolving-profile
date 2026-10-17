@@ -47,7 +47,9 @@ def test_source_dict_body_records_activity_and_completed_trace(mcp, tmp_path):
     assert trace['primary_context']['session_id'] == 's1'
     assert trace['primary_context']['turn_id'] == 't1'
     assert trace['primary_context']['project_id'] == 'p1'
-    assert trace['outcome'] == 'correct'
+    assert trace['outcome'] == 'ambiguous'
+    assert trace['tool_returned'] is True and trace['tool_success'] is True
+    assert trace['task_verified'] is False
     assert trace['tool_result']['returned_count'] == 1
     assert trace['task_archetype'] != ['coordination_multi_agent']
     assert trace['source_locator']['transcript_path'] == '/raw/s1.jsonl'

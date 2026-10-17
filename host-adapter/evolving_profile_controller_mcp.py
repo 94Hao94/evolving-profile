@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
-GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", "/Users/apple/.evolving-profile/runtime/guidance")
+GUIDANCE_V1_SRC = os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path(__file__).resolve().parents[1] / "guidance"))
 if GUIDANCE_V1_SRC not in sys.path:
     sys.path.insert(0, GUIDANCE_V1_SRC)
 from evidence_workspace import discover, search, read_page, source_witness, record_stdout, DEFAULT_ROOT
@@ -482,7 +482,9 @@ def capture_tool_trajectory(tool_name: str, arguments: dict, *, outcome: str = '
         dimensions.append('retrieval')
     if tool_name in {'read_source', 'read_scenario_summary', 'read_context_summary'}:
         dimensions.append('context_management')
-    text = f"tool={tool_name}; outcome={outcome}"
+    mechanical_outcome = outcome
+    outcome = 'blocked' if outcome == 'blocked' or error else 'ambiguous'
+    text = f"tool={tool_name}; outcome={outcome}; task_verification=not_measured"
     if error:
         text += f"; error={str(error)[:240]}"
     try:
@@ -505,6 +507,8 @@ def capture_tool_trajectory(tool_name: str, arguments: dict, *, outcome: str = '
             'process_dimensions': dimensions,
             'phase': 'observe',
             'outcome': outcome,
+            'tool_returned': result is not None,
+            'tool_success': False if error or mechanical_outcome == 'blocked' else (True if result is not None else None),
             'text': text,
             'toolchain': [tool_name],
             'environment_fingerprint': {'host': 'evolving-profile-controller-mcp', 'cwd': bound.get('cwd'),
@@ -527,7 +531,7 @@ def capture_tool_trajectory(tool_name: str, arguments: dict, *, outcome: str = '
     except Exception:
         # Process-memory capture cannot break an EP5.1 tool response.
         return
-GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", "/Users/apple/.evolving-profile/guidance-v1/guidance-v1.json")
+GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json"))
 TOPIC_CATALOG_PATH = Path(os.environ.get("EVOLVING_PROFILE_TOPIC_CATALOG", str(Path.home()/'.evolving-profile/catalog/topics.sqlite3')))
 EVIDENCE_DECISION_ROOT = Path(os.environ.get("EVOLVING_PROFILE_EVIDENCE_DECISION_ROOT", str(Path.home()/'.evolving-profile/audit/evidence-decisions')))
 TASK_STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_TASK_STATE_ROOT", str(Path.home()/'.evolving-profile/task-state')))
@@ -590,6 +594,9 @@ SCENARIO_SUMMARY_TOOL = {
         'scenario_type': {'type':'string','enum':['session','project']}, 'scenario_id': {'type':'string','minLength':1},
         'tier': {'type':'string','enum':['compact','standard','full'],'default':'compact'}, 'session_id': {'type':'string'}, 'project_key': {'type':'string'},
         'episode_id': {'type':'string','minLength':1},
+        'coverage_view': {'type':'string','enum':['overview','requirements','relations','source']},
+        'coverage_requirement_id': {'type':'string','maxLength':64},
+        'coverage_cursor': {'type':'string','maxLength':4096},
         'offset': {'type':'integer','minimum':0,'default':0}, 'limit': {'type':'integer','minimum':1,'maximum':20,'default':10}
     },'required':['scenario_type']}, 'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False}
 }
@@ -1029,6 +1036,9 @@ def _record_failed_tool_call(tool, args, error, event_at):
 def _returned_count(value, tool):
     if not isinstance(value,dict):return 0
     tool=str(tool or '')
+    if tool in {'read_scenario_summary', 'read_context_summary'} and value.get('source') == 'scenario_coverage_ledger':
+        from lib.returned_content import returned_items
+        return len(returned_items(value))
     if tool.endswith(('read_preference_unit', 'read_guidance_unit')) and isinstance(value.get('unit'), dict):
         unit = value['unit']
         return 1 if unit.get('id') or unit.get('unit_id') or unit.get('text') else 0
@@ -1087,6 +1097,12 @@ def _source_navigation_fields(value):
 
 
 def _scenario_activity_fields(value):
+    if isinstance(value, dict) and value.get('source') == 'scenario_coverage_ledger':
+        return {'scenario_type': 'session', 'scenario_ids': [value['scenario_id']] if value.get('scenario_id') else [],
+                'scenario_summary_status': value.get('status'), 'scenario_coverage_view': value.get('view'),
+                'scenario_coverage_snapshot_id': value.get('snapshot_id'),
+                'scenario_semantic_review_status': value.get('semantic_review_status'),
+                'scenario_has_unread_requirements': value.get('has_unread_requirements')}
     if not isinstance(value, dict) or not isinstance(value.get('source'), str) or value.get('source') not in {'scenario_summary_index', 'scenario_context_index'}:
         return {}
     items = [item for item in value.get('items') or [] if isinstance(item, dict)]
@@ -1145,51 +1161,8 @@ def _agent_process_scenario_activity_fields(value):
 
 
 def _prompt_binding_for_check_id(check_id,event_at,home=None):
-    check_id=str(check_id or '').strip()
-    if not check_id:return {'state':'unbound_missing_check_id'}
-    home=Path(home) if home is not None else Path.home()
-    ingress_path=home/'.evolving-profile/audit/prompt-ingress.jsonl'
-    rows=[]
-    try:
-        from collections import deque
-        recent=deque(maxlen=4000)
-        with ingress_path.open('r',encoding='utf-8') as stream:
-            recent.extend(stream)
-        for line in recent:
-            try:
-                row=json.loads(line)
-                if isinstance(row,dict):rows.append(row)
-            except (ValueError,TypeError):continue
-    except OSError:
-        return {'state':'unknown_prompt_ingress','check_id':check_id}
-    matches=[row for row in rows if str(row.get('hook_invocation_id') or '')==check_id]
-    if len({(str(row.get('session_id') or ''),str(row.get('turn_id') or '')) for row in matches}) > 1:
-        return {'state':'ambiguous_prompt_binding','check_id':check_id}
-    bound=matches[-1] if matches else None
-    if not bound:return {'state':'unknown_check_id','check_id':check_id}
-    session_id=str(bound.get('session_id') or '')
-    try:event_time=datetime.datetime.fromisoformat(str(event_at).replace('Z','+00:00'))
-    except (TypeError,ValueError,OverflowError):return {'state':'unknown_event_time','check_id':check_id}
-    if event_time.tzinfo is None:event_time=event_time.replace(tzinfo=datetime.timezone.utc)
-    try:bound_time=datetime.datetime.fromisoformat(str(bound.get('at') or '').replace('Z','+00:00'))
-    except (ValueError,TypeError):return {'state':'unknown_prompt_time','check_id':check_id}
-    if bound_time.tzinfo is None:bound_time=bound_time.replace(tzinfo=datetime.timezone.utc)
-    if bound_time > event_time:return {'state':'unknown_check_id_at_call_time','check_id':check_id}
-    latest=None;latest_time=None
-    for row in rows:
-        if str(row.get('session_id') or '')!=session_id:continue
-        try:row_time=datetime.datetime.fromisoformat(str(row.get('at') or '').replace('Z','+00:00'))
-        except (TypeError,ValueError,OverflowError):continue
-        if row_time.tzinfo is None:row_time=row_time.replace(tzinfo=datetime.timezone.utc)
-        if row_time<=event_time and (latest_time is None or row_time>latest_time):latest=row;latest_time=row_time
-    value={'state':'prompt_bound','check_id':check_id,'session_id':session_id,'turn_id':bound.get('turn_id'),
-           'hook_invocation_id':bound.get('hook_invocation_id')}
-    for key in ('project_id', 'project_key', 'cwd', 'transcript_path', 'model', 'model_provider', 'host', 'host_id'):
-        if bound.get(key): value[key] = bound[key]
-    if latest and str(latest.get('hook_invocation_id') or '')!=check_id:
-        value.update(state='stale_prompt_binding',latest_turn_id=latest.get('turn_id'),
-                     latest_hook_invocation_id=latest.get('hook_invocation_id'))
-    return value
+    from context_binding import resolve_prompt_binding
+    return resolve_prompt_binding(check_id, event_at, home)
 
 
 def _query_scope_audit(check_id, query, binding, home=None):
@@ -1275,8 +1248,9 @@ def reply(message_id, result=None, error=None):
                                     'user_preference','get_preference','read_preference','read_preference_unit','read_agent_process_memory',
                                     'search_scenario_summary','search_scenario_contexts','read_scenario_summary','read_context_summary','scenario_gate'}:
                             value['returned_count']=_returned_count(value,tool)
-                        if tool == 'read_agent_process_memory':
-                            value['original_message_readback_count'] = int(bool((value.get('raw_source') or {}).get('text')))
+                        if tool in {'read_agent_process_memory', 'read_scenario_summary', 'read_context_summary'}:
+                            from lib.returned_content import original_message_readback_count
+                            value['original_message_readback_count'] = original_message_readback_count(value,tool)
                         if binding.get('state')=='stale_prompt_binding':
                             value['observability_warning']='check_id belongs to an earlier Prompt; this result was returned but was not attached to its older Prompt receipt.'
                         elif binding.get('state') in {'unbound_missing_check_id','unknown_check_id','unknown_prompt_ingress'}:
@@ -1341,6 +1315,7 @@ def reply(message_id, result=None, error=None):
                 except (OSError, ValueError, TypeError):
                     snapshot=None
             event={'at':event_at,'tool':tool,'check_id':check_id,
+                   'adapter_build_sha256':ADAPTER_BUILD_SHA256,'adapter_process_id':os.getpid(),
                    'tool_call_id':call.get('tool_call_id'), 'occurrence_id':call.get('tool_call_id'),
                    'host_call_id':call.get('host_call_id'), 'mcp_request_id':call.get('mcp_request_id'),
                    'invocation_started_at':call.get('invocation_started_at'),
@@ -1384,7 +1359,7 @@ def reply(message_id, result=None, error=None):
         except (ValueError, TypeError, IndexError): pass
         failed = error is not None or bool((result or {}).get('isError'))
         unavailable = isinstance(body,dict) and (body.get('status') in {'source_missing', 'source_empty', 'not_found', 'disabled', 'unavailable', 'source_unavailable', 'episode_not_found'} or str(body.get('status') or '').startswith('unknown'))
-        capture_tool_trajectory(tool,args,outcome='blocked' if failed else 'ambiguous' if unavailable or not body else 'correct',
+        capture_tool_trajectory(tool,args,outcome='blocked' if failed else 'ambiguous',
                                 error=str(error) if error else None,binding=binding,result=body,tool_call_id=call['tool_call_id'])
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
@@ -1395,6 +1370,7 @@ def reply(message_id, result=None, error=None):
                 target,receipt=_route_receipt_for_binding(root,check_id,binding)
                 events=list(receipt.get('tool_events') or [])
                 events.append({'tool':tool,'at':event_at,'check_id':check_id,
+                               'adapter_build_sha256':ADAPTER_BUILD_SHA256,'adapter_process_id':os.getpid(),
                                'tool_call_id':call.get('tool_call_id'), 'occurrence_id':call.get('tool_call_id'),
                                'host_call_id':call.get('host_call_id'), 'mcp_request_id':call.get('mcp_request_id'),
                                'invocation_started_at':call.get('invocation_started_at'), 'failed':bool(result.get('isError')),
@@ -1729,6 +1705,24 @@ def read_context_summary(args):
         matches.append(row)
     if not wanted_id and not wanted_session and not wanted_project:
         raise ValueError('context_id_or_scope_required')
+    if args.get('coverage_view') or args.get('coverage_cursor'):
+        if args.get('coverage_view')=='source':
+            source_disabled=runtime_disabled('source_readback','retrieve')
+            if source_disabled:return source_disabled
+        if context_type!='session' or anchor_turn or len(matches)!=1 or args.get('episode_id'):
+            raise ValueError('coverage_requires_exact_session_scope')
+        row=matches[0]
+        if not row.get('bank_id') or row.get('bank_id')!=BANK or str(row.get('status','')).endswith('_protected'):
+            raise ValueError('coverage_scope_or_permission_unverified')
+        from lib.scenario_coverage_read import read_coverage_view
+        from lib.scenario_coverage_contract import coverage_permission,validate_settings
+        root=Path(CONTEXT_INDEX_PATH).parent
+        settings_path=root.parent/'config/runtime-settings.json'
+        settings=json.loads(settings_path.read_text()) if settings_path.is_file() else {}
+        value=read_coverage_view(root/'coverage',row['session_id'],args.get('coverage_view','overview'),
+            cursor=args.get('coverage_cursor'),permission=coverage_permission(root.parent),expected_scope={'bank_id':row['bank_id'],'project_key':row.get('project_key')},requirement_id=args.get('coverage_requirement_id'),review_protocol=validate_settings(settings.get('scenario_coverage'))['review_protocol'])
+        value.update(summary_status='segmented_navigation_only',source='scenario_coverage_ledger',scenario_id=row['context_id'])
+        return {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
     episode_id = str(args.get('episode_id') or '').strip()
     if episode_id:
         if context_type != 'session':
@@ -1747,7 +1741,8 @@ def read_context_summary(args):
                 if not accepted_session_source(parent,live_source):
                     single_projection_status = 'stale_source_changed' if live_source.get('status') == 'complete' else 'episode_source_unavailable'
                 else:
-                    partition = partition_source(live_source,[])[0]
+                    from lib.memory_recovery_scenario import _reviewed_location_source
+                    partition = partition_source(_reviewed_location_source(parent,live_source),[])[0]
                     if partition['episode_id'] == episode_id:
                         episode = {**{key:value for key,value in partition.items() if key!='_messages'},
                             'summary':parent.get('summary') or {},'summary_budget':parent.get('summary_budget') or {},
@@ -1762,10 +1757,13 @@ def read_context_summary(args):
                      'episode_id': episode_id, 'tier': tier, 'items': [], 'source': 'scenario_summary_index',
                      'total': 0, 'offset': 0, 'next_offset': None}
         else:
+            episode_live_paths=[]
             try:
                 live_source = read_session_source(str(parent.get('session_id') or ''), THREAD_SESSION_ROOT,
                                                   max_chars=500000)
                 freshness = revalidate_persisted_episode_source(live_source, parent, episode_id)
+                if freshness.get('status') in {'current','span_current_parent_revision_changed'}:
+                    episode_live_paths=live_source.get('source_files') or []
             except (OSError, TypeError, ValueError):
                 freshness = {'status': 'episode_source_unavailable'}
             item = {'scenario_id': episode_id, 'scenario_type': 'episode',
@@ -1780,7 +1778,8 @@ def read_context_summary(args):
                     'projection_basis':episode.get('projection_basis'),
                     'evidence_role': 'context_navigation_only',
                     'review_scope': episode.get('review_scope') or 'conversation_episode_only_not_external_fact_verification',
-                    'raw_source_files': parent.get('raw_source_files') or [],
+                    'raw_source_files': episode_live_paths,
+                    'reviewed_raw_source_files': parent.get('raw_source_files') or [],
                     'source_readback': 'local_source_path_not_bank_read_source'}
             if freshness.get('parent_source_revision_changed'):
                 item['parent_source_revision_changed'] = True
@@ -1798,10 +1797,19 @@ def read_context_summary(args):
         return {'content': [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}], 'isError': False}
 
     pending_summary = next((row for row in matches if str(row.get('status') or '').startswith('raw_available_summary_')), None)
+    verified_live_paths = {}
     if context_type == 'session' and len(matches) == 1 and not pending_summary and matches[0].get('source_stat_revision'):
         from lib.context_incremental import _revision
         row = matches[0]
-        try: fresh = _revision([Path(p) for p in row.get('raw_source_files') or []]) == row['source_stat_revision']
+        try:
+            paths=row.get('raw_source_files') or []
+            if row.get('source_location_projection'):
+                from lib.memory_recovery_scenario import accepted_session_source
+                live=read_session_source(str(row.get('session_id') or ''),THREAD_SESSION_ROOT,max_chars=500000)
+                if accepted_session_source(row,live):
+                    paths=live['source_files'];verified_live_paths[row.get('context_id')]=paths
+                else:paths=[]
+            fresh=bool(paths) and _revision([Path(p) for p in paths])==row['source_stat_revision']
         except (OSError, ValueError, TypeError): fresh = False
         if not fresh: pending_summary = {**row, 'status':'stale_source_pending'}
     if pending_summary:
@@ -1824,7 +1832,9 @@ def read_context_summary(args):
                      'summary': (row.get('summary') or {}).get(tier) or '',
                      'summary_budget': (row.get('summary_budget') or {}).get(tier) or {},
                      'episodes': projected, 'episodes_total': len(episodes),
-                     'source_ids': row.get('source_ids') or [], 'updated_at': row.get('updated_at'),
+                     'source_ids': verified_live_paths.get(row.get('context_id'),row.get('source_ids') or []), 'updated_at': row.get('updated_at'),
+                     'raw_source_files': verified_live_paths.get(row.get('context_id'),row.get('raw_source_files') or []),
+                     'reviewed_raw_source_files': row.get('raw_source_files') or [],
                      'status': row.get('status') or 'episode_directory_ready',
                      'evidence_role': 'context_navigation_only',
                      'source_revision': row.get('source_revision'),
@@ -1842,6 +1852,7 @@ def read_context_summary(args):
         value = {'schema': 'evolving-profile.scenario-summary.v1', 'status': 'not_found' if index.get('status') in {'ready', 'legacy_ready'} else index.get('status') or 'not_found',
                  'scenario_type': context_type, 'tier': tier, 'items': [], 'source': 'scenario_summary_index',
                  'index_updated_at': index.get('updated_at'), 'total': 0, 'offset': offset, 'next_offset': None}
+        value['summary_status'] = value['status']
         session = wanted_session or (wanted_id[8:] if wanted_id.startswith('session:') else '')
         project_association_verified = not wanted_project or (
             any(r.get('identity_status') == 'verified_project' and r.get('project_key') == wanted_project for r in index.get('projects') or [])
@@ -1852,10 +1863,17 @@ def read_context_summary(args):
             from lib.raw_session_evidence import read_evidence
             from lib.context_summary import bounded_summary
             try:
-                raw = read_evidence(session, THREAD_SESSION_ROOT, turn_id=anchor_turn, max_chars=BUDGETS['session']['full']['max_chars'])
+                raw = read_evidence(session, THREAD_SESSION_ROOT, turn_id=anchor_turn, max_chars=BUDGETS['session']['full']['max_chars'],coverage_root=Path(CONTEXT_INDEX_PATH).parent/'coverage')
             except (ValueError, OSError) as error:
                 raw = {'status': 'source_unavailable', 'error_type': type(error).__name__}
             value['raw_source_status'] = raw.get('status')
+            value['raw_source_read_attempted'] = True
+            value['raw_source_coverage'] = raw.get('coverage') or {}
+            if (isinstance(raw.get('status'), str)
+                    and raw['status'] not in {'source_read', 'source_empty', 'source_missing'}):
+                # No index summary is not proof that a requested turn or raw
+                # source is absent. Preserve format/scan/scope failures.
+                value['status'] = raw['status']
             if (raw.get('source') or {}).get('text'):
                 body, budget = bounded_summary(raw['source']['text'], 'session', tier)
                 value.update(status='available_unreviewed', total=1, items=[{
@@ -1883,7 +1901,8 @@ def read_context_summary(args):
                 'identity_status': (row.get('identity_status') or 'unverified_workspace_bucket') if context_type == 'project' else 'session_id_matched',
                 'source_locator_type': 'codex_raw_rollout_and_summary_seed' if row.get('raw_source_files') else 'codex_rollout_summary_path',
                 'source_readback': 'local_source_path_not_bank_read_source',
-                'raw_source_files': row.get('raw_source_files') or [],
+                'raw_source_files': verified_live_paths.get(row.get('context_id'),row.get('raw_source_files') or []),
+                'reviewed_raw_source_files': row.get('raw_source_files') or [],
                 'source_revision': row.get('source_revision'),
                 'review_scope': row.get('review_scope') or 'not_reviewed',
                 'selection_coverage': row.get('selection_coverage') or {},

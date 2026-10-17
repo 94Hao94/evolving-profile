@@ -69,6 +69,7 @@ RUNTIME_GUIDANCE_TOOL = {
     "name": "refresh_runtime_guidance",
     "description": "当前任务执行中出现关键工具失败、超时或能力不可用时，携带已观察到的失败事实补查一次相关指导。只影响当前任务，不写入长期偏好，也不把替代验证冒充为原能力通过。",
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+        "check_id": {"type": "string", "description": "当前 UserPromptSubmit check_id；缺失时只返回无任务身份限制的指导。"},
         "task": {"type": "object", "additionalProperties": True, "properties": {
             "objective": {"type": "string", "minLength": 1},
             "current_user_message": {"type": "string"},
@@ -99,6 +100,8 @@ def load_repository(config_path: str | Path) -> GuidanceRepository:
 
 
 def get_preference_response(repo: GuidanceRepository, request: dict, *, record: bool = True) -> dict:
+    from context_binding import bind_preference_request
+    request = bind_preference_request(request)
     runtime = load_runtime_settings()
     if not module_enabled(runtime, "preferences", "retrieve"):
         return {

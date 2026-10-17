@@ -289,3 +289,31 @@ it('current page candidates receive lookup budget before an unresolved earlier o
   const result=await resolver.resolveRows([blocked,page],{pageOffset:1,pageLimit:1,promptSource:'all'});
   expect(result[1].origin_kind).toBe('human');expect(4096-(resolver as any).budget.bytesLeft).toBeLessThanOrEqual(4096);
 });
+
+it('cached nonmatching same-turn records never starve the matching fresh locator',async()=>{
+  const {PromptOriginResolver}=await import('@/lib/prompt-origin.server');
+  const row=await ingress('same-turn',{id:'same-turn',source:'vscode',thread_source:'user'},'real target request');
+  const [head,message]=(await readFile(row.transcript_path!,'utf8')).trim().split('\n');
+  const unrelated=Array.from({length:30},(_,i)=>{const item=JSON.parse(message);item.payload.content[0].text=`unrelated-${i}${'x'.repeat(3500)}`;return JSON.stringify(item);});
+  await writeFile(row.transcript_path!,[head,...unrelated,message].join('\n')+'\n');
+  expect((await new PromptOriginResolver([path.join(root,'sessions')]).resolve(row)).origin_kind).toBe('human');
+  const lookup=new PromptOriginResolver([path.join(root,'sessions')]);(lookup as any).budget.bytesLeft=4096;
+  expect((await lookup.resolve(row)).origin_kind).toBe('human');
+  expect(4096-(lookup as any).budget.bytesLeft).toBeLessThan(1024);
+  await writeFile(row.transcript_path!,(await readFile(row.transcript_path!,'utf8')).replace('real target request','fake target request')+JSON.stringify({type:'event_msg',payload:{type:'token_count'}})+'\n');
+  const changed=new PromptOriginResolver([path.join(root,'sessions')]);(changed as any).budget.bytesLeft=4096;
+  expect(await changed.resolve(row)).toMatchObject({origin_kind:'unknown',origin_evidence:{reason:'native_prompt_source_changed'}});
+});
+
+it('cold recent prompts beyond the final chunk remain discoverable without timestamp anchors',async()=>{
+ const {PromptOriginResolver}=await import('@/lib/prompt-origin.server');
+ const row=await ingress('recent-tail',{id:'recent-tail',source:'vscode',thread_source:'user'},'recent real request');
+ const [head,message]=(await readFile(row.transcript_path!,'utf8')).trim().split('\n');
+ const filler=JSON.stringify({type:'response_item',payload:{type:'function_call_output',output:'x'.repeat(2000)}})+'\n';
+ await writeFile(row.transcript_path!,head+'\n'+filler.repeat(1500)+message+'\n'+filler.repeat(400));
+ const narrow=new PromptOriginResolver([path.join(root,'sessions')]);(narrow as any).budget.bytesLeft=1024*1024;
+ expect((await narrow.resolve(row)).origin_kind).toBe('unknown');
+ const lookup=new PromptOriginResolver([path.join(root,'sessions')]);(lookup as any).budget.bytesLeft=6*1024*1024;
+ expect((await lookup.resolve(row)).origin_kind).toBe('human');
+ expect(6*1024*1024-(lookup as any).budget.bytesLeft).toBeLessThanOrEqual(6*1024*1024);
+});

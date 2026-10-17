@@ -30,12 +30,20 @@ def _route_hint(prompt: str, gaps: list[str], rows: list[dict], project_count: i
         "状态", "是否完成", "谁负责",
     ))
     if exact and project_scope:
+        if project_count == 0 and any(str(row.get('process_memory_id') or '').strip() for row in rows):
+            return {"recommended_route": "search_scenario_summary", "recommended_tier": None,
+                    "raw_read_trigger": "Project范围尚未核实，须先核对情景导航；Session和工作目录不能证明Project归属"}
         return {"recommended_route": "audit_project_sessions", "recommended_tier": None,
                 "raw_read_trigger": "用户明确需要 Project 下多个 Session 的原始过程或逐字内容"}
     if exact:
         return {"recommended_route": "audit_session", "recommended_tier": None,
                 "raw_read_trigger": "用户明确需要原始 Session 对话、原话或完整过程"}
     if factual:
+        process_rows = [row for row in rows if str(row.get('process_memory_id') or '').strip()]
+        if process_rows:
+            return {"recommended_route": "read_agent_process_memory" if len(process_rows) == len(rows) else "agent_decides",
+                    "recommended_tier": None,
+                    "raw_read_trigger": "Agent过程候选须按过程记忆读取；混合证据面由当前Agent分别核对"}
         has_memory_id = any(str(row.get("canonical_memory_id") or row.get("memory_id") or row.get("id") or "").strip()
                             for row in rows)
         return {"recommended_route": "read_source" if has_memory_id else "research_then_read_source",
@@ -52,8 +60,10 @@ def _deduplicate(candidates):
     for item in candidates or []:
         if not isinstance(item, dict):
             continue
-        key = str(item.get("canonical_memory_id") or item.get("id") or "").strip()
-        if key and key not in result:
+        process_id = str(item.get('process_memory_id') or '').strip()
+        identity = process_id or str(item.get("canonical_memory_id") or item.get("id") or "").strip()
+        key = ('agent_process' if process_id else 'bank', identity)
+        if identity and key not in result:
             result[key] = item
     return list(result.values())
 
@@ -64,11 +74,31 @@ def decide_scenario_summary(prompt: str, candidates=None, current_context_suffic
     rows = _deduplicate(candidates)
     projects = defaultdict(list)
     sessions = defaultdict(list)
+    source_scenario_ids = []
     for row in rows:
-        metadata = row.get("metadata") or {}
-        project = str(row.get("project_key") or metadata.get("project_key") or
-                      project_key(metadata.get("project") or metadata.get("cwd")) or "").strip()
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        process_id = str(row.get('process_memory_id') or '').strip()
+        context = row.get('primary_context') if isinstance(row.get('primary_context'), dict) else {}
+        if process_id:
+            # Explicit keys are navigation links only. A process workspace path
+            # cannot establish Project identity or merge unrelated Sessions.
+            explicit_project = row.get('project_key') or metadata.get('project_key') or context.get('project_key')
+            project = explicit_project.strip() if isinstance(explicit_project, str) else ''
+        else:
+            project = str(row.get("project_key") or metadata.get("project_key") or
+                          project_key(metadata.get("project") or metadata.get("cwd")) or "").strip()
         session_values = row.get("session_ids") or metadata.get("session_ids") or metadata.get("session_id") or []
+        if process_id:
+            session = context.get('session_id')
+            if isinstance(session, str) and session.strip():
+                session = session.strip()
+                session_values = [session]
+                turn = context.get('turn_id')
+                locator = 'session:' + session
+                if isinstance(turn, str) and turn.strip():
+                    locator += '/turn/' + turn.strip()
+                if locator not in source_scenario_ids:
+                    source_scenario_ids.append(locator)
         if isinstance(session_values, str):
             session_values = [v.strip() for v in session_values.split(",") if v.strip()]
         if project:
@@ -98,8 +128,9 @@ def decide_scenario_summary(prompt: str, candidates=None, current_context_suffic
         "deduplicated_count": len(rows),
         "project_groups": {key: len(value) for key, value in projects.items()},
         "session_groups": {key: len(value) for key, value in sessions.items()},
+        "source_scenario_ids": source_scenario_ids,
         "max_hops": max(0, min(2, int(max_hops))),
         **route,
         "evidence_role": "scenario_explanation_only",
-        "boundary": "Decision is not fact verification. Summary tiers explain scope; read_source verifies Bank facts; audit_session/audit_project_sessions reads bounded raw conversation only when the prompt requires original wording or process.",
+        "boundary": "Decision and explicit Project keys are navigation, not fact verification. Summary tiers explain scope; read_source verifies Bank facts; read_agent_process_memory reads Agent process candidates; audit_session/audit_project_sessions reads bounded raw conversation only when the prompt requires original wording or process.",
     }

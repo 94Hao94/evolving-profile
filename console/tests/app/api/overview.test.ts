@@ -31,7 +31,9 @@ describe("overview evidence route", () => {
     expect(body.pipeline.failedBatches).toBe(1);
     expect(body.pipeline.localRetention).toMatchObject({ status: "observed", quarantinedRecords: 1, inflightRecords: 0, pendingRecords: 0,
       quarantineBatches: [{ operationId: "parent-a", count: 1, at }], dispatcher: { status: "observed", activity: "idle", at } });
-    expect(JSON.stringify(body)).not.toMatch(/PRIVATE|SECRET|other-op|other-bank|999|result_metadata/);
+    expect(JSON.stringify(body)).not.toMatch(/PRIVATE|SECRET|other-op|other-bank|result_metadata/);
+    const numbers=(value:unknown):number[]=>typeof value==='number'?[value]:value&&typeof value==='object'?Object.values(value).flatMap(numbers):[];
+    expect(numbers(body)).not.toContain(999); // A timestamp ending .999Z is not the foreign numeric queue count.
   });
 
   it("reports stale dispatcher receipts and malformed queue evidence explicitly without inventing zero counts", async () => {

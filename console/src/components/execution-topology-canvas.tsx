@@ -9,7 +9,7 @@ import type { FlowReceipt } from "@/lib/flow-receipt";
 import { sumFlowCounts } from "@/lib/flow-receipt";
 import { TopologyEngineLab } from "@/components/topology-engine-lab";
 import { projectToolBranches } from "@/lib/topology-mapping";
-import { contextChildren } from "@/lib/topology-presentation";
+import { contextChildren,topologySourceScope } from "@/lib/topology-presentation";
 
 type Audit = ReturnType<typeof projectFlowAudit>;
 const STATUS: Record<string, { en: string; zh: string }> = { not_observed: { en: "Not observed", zh: "未观测" }, observed: { en: "Observed", zh: "已观测" }, delivered: { en: "Delivered", zh: "已送达" }, candidate_returned: { en: "Candidates returned", zh: "已返回候选" }, unknown: { en: "Unknown", zh: "未知" }, failed: { en: "Failed", zh: "失败" } };
@@ -100,7 +100,7 @@ export function ExecutionTopologyCanvas({ promptId, promptText, english, audit, 
     return branches;
   }, [apiLanes, audit, english, promptText,guidanceHostObserved,guidanceItems,guidanceFallback]);
   const spec = useMemo(() => {
-    const result=buildTopologySpec({english,summaries,sourceScope:audit?.history?.routeReceipt?.tool_events?.length ? "同一 Prompt / 宿主原始工具结果回放（不代表回答采用）" : sourceScope,historyItems,guidanceItems,branchSummaries});
+    const result=buildTopologySpec({english,summaries,sourceScope:topologySourceScope(audit?.history?.routeReceipt?.tool_events ?? [],english,sourceScope),historyItems,guidanceItems,branchSummaries});
     const packets=["user-packet","agent-packet","rag-packet"];
     for(const [lane,packetId,root] of [["user_memory","user-packet","user-root"],["agent_process","agent-packet","agent-root"],["external_rag","rag-packet","rag-root"]] as const) {
       const children=contextChildren(result.nodes,lane,root,packetId);

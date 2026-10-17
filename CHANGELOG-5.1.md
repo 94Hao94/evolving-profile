@@ -14,6 +14,36 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
+### Publication hardening and product documentation — 2026-10-17
+
+- Rewrote English/Chinese READMEs around user value, memory-plane coordination,
+  concrete workflows, actual setup commands and separately verified host readiness.
+  Version changes remain in this changelog/release notes, not the README body.
+- Replaced current README captures with separately localized, dated real audit
+  images that exclude private Prompt lists; unknown host delivery remains unknown.
+- Applied bounded dependency repairs and explicitly tested the scoped Typography
+  parser override. Production-classified audit reports0; full workspace retains
+  36 development/tooling package rows with0critical. See [risk disposition](docs/DEPENDENCY-RISKS.md).
+- Removed author-machine path defaults from the published adapter/Guidance
+  bridges, preserved explicit overrides, templated macOS worker paths and replaced
+  projection fixture identities with synthetic test metadata.
+- Scope parsing ignores OS account containers structurally across macOS/Linux
+  home paths, instead of treating one author's login as a special word.
+- Local-home leakage scanning now covers source while excluding actual Git/task
+  metadata; tracked runtime/task artifacts are still rejected.
+- Historical EP2.1 rollback assets are explicit opt-in integration fixtures.
+  Their absence is reported as skips, not a claim of current-installer failure
+  or a request to copy private backup data into this release.
+
+### Local repair closeout — 2026-10-17
+
+Clean-install SDK ordering, build-only startup documentation, failed-upgrade
+preservation, partial-move rollback diagnostics, release source-scan boundaries
+and unavailable-service UI resilience are verified as a local repair candidate.
+See [repair closeout](docs/RELEASE-CLOSEOUT-5.1.md) for exact suites, source review,
+real isolated startup/rollback and unmeasured limits. This entry does not mean
+GitHub branches/tags/releases have received these local changes.
+
 ### Background retention hotfix — 2026-10-13
 
 - Source-quote quality retries now receive a bounded, exact-source selector

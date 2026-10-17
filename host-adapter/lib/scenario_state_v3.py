@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import copy
 from datetime import datetime, timezone
 
 from .context_summary import BUDGETS, bounded_summary
@@ -113,14 +114,65 @@ def whole_user_clauses(text):
     for line in str(text).splitlines():
         match=re.match(r'^\s*(?:[-*•]|[0-9]+[.)、])\s+(.+)$',line)
         if match:clauses.append(' '.join(match.group(1).split()).strip(' "\'“”‘’'))
+    # Blank-line paragraph boundaries remain selectable without deleting any
+    # source. A paragraph is a quote option, never semantic sufficiency proof;
+    # conditions crossing paragraphs still require the complete original.
+    for paragraph in re.split(r'\n\s*\n',str(text)):
+        clauses.append(' '.join(paragraph.split()).strip(' "\'“”‘’'))
     return list(dict.fromkeys(c for c in clauses if c))
 
 
 def user_clause_catalog(source):
     from source_safety import mask_text
     return [{'message_id':m['evidence_id'],'clauses':[
-        {'text':mask_text(c),'eligible':len(c)<=STATE_LIMITS.get('verbatim_text_max_chars_per_claim',STATE_LIMITS['text_max_chars_per_claim']) and mask_text(c)==c}
-        for c in whole_user_clauses(m['text'])]} for m in source['messages'] if m['role']=='user']
+        {'clause_index':index,'text':mask_text(c),'eligible':len(c)<=STATE_LIMITS.get('verbatim_text_max_chars_per_claim',STATE_LIMITS['text_max_chars_per_claim']) and mask_text(c)==c}
+        for index,c in enumerate(whole_user_clauses(m['text']))]} for m in source['messages'] if m['role']=='user']
+
+
+def source_clause_transport(source,messages):
+    """Lossless quote directory over already-masked projected source text.
+
+    This is only a wire representation. Expansion/eligibility still uses the
+    original host catalog, not provider-returned spans or normalized strings.
+    """
+    by_id={m['message_id']:m['text'] for m in messages}
+    rows=user_clause_catalog(source)
+    for row in rows:
+        text=by_id.get(row['message_id'],'')
+        for i,clause in enumerate(row['clauses']):
+            words=clause['text'].split()
+            match=re.search(r'\s+'.join(re.escape(w) for w in words),text) if words else None
+            if not match:continue
+            encoded={k:v for k,v in clause.items() if k!='text'}
+            encoded.update(source_span=[match.start(),match.end()],text_normalization='whitespace_folded')
+            if len(json.dumps(encoded,ensure_ascii=False))<len(json.dumps(clause,ensure_ascii=False)):
+                row['clauses'][i]=encoded
+    return rows
+
+
+def expand_state_clause_selections(source,state):
+    """Expand model-chosen whole clauses, never infer their semantic category.
+
+    Caller checks the returned source revision first. Normal role, verbatim,
+    cardinality, summary budget and independent coverage gates still follow.
+    """
+    if not isinstance(state,dict):return state
+    catalog={m['message_id']:m['clauses'] for m in user_clause_catalog(source)}
+    result=copy.deepcopy(state)
+    for field in ('constraints','corrections'):
+        rows=result.get(field)
+        if not isinstance(rows,list):continue
+        for i,row in enumerate(rows):
+            if not isinstance(row,dict) or 'clause_index' not in row:continue
+            ids=row.get('message_ids');index=row.get('clause_index')
+            if (set(row)!={'clause_index','message_ids'} or not isinstance(ids,list) or len(ids)!=1
+                or not isinstance(ids[0],str) or type(index) is not int or index<0):
+                raise ValueError('scenario_state_clause_reference_invalid')
+            clauses=catalog.get(ids[0],[])
+            if index>=len(clauses) or clauses[index]['eligible'] is not True:
+                raise ValueError('scenario_state_clause_reference_invalid')
+            rows[i]={'text':clauses[index]['text'],'message_ids':list(ids)}
+    return result
 
 
 def state_field_catalog(source,draft,refs=None):
@@ -181,6 +233,17 @@ def project_source_messages(source: dict) -> list[dict]:
     return projected
 
 
+def source_turn_inventory(source: dict) -> list[dict]:
+    """Order-only navigation, not a semantic answeredness or coverage verdict."""
+    turns=[]
+    for row in source.get('messages') or []:
+        if row.get('role')=='user':
+            turns.append({'user_message_id':row['evidence_id'],'following_assistant_candidate_ids':[]})
+        elif row.get('role')=='assistant' and turns:
+            turns[-1]['following_assistant_candidate_ids'].append(row['evidence_id'])
+    return turns
+
+
 def correction_review_hints(source: dict, limit: int = 12) -> list[dict]:
     """Focus model attention without treating keyword matches as corrections."""
     from source_safety import mask_text
@@ -221,17 +284,59 @@ def _list_claims(value: object, source_by_id: dict, role: str, maximum=None) -> 
     return [_claim(item, source_by_id, role,maximum) for item in value]
 
 
-def _normalize_correction_categories(state: dict, source_by_id: dict) -> None:
-    """Move explicit user corrections out of constraints without rewriting text.
+def state_partition_source(source, messages, revision):
+    """Keep original earlier-user context across transport-only episode splits.
 
-    Provider state passes occasionally classify a verbatim correction such as
-    "不要把……写死" as a constraint.  The coverage contract treats the two
-    fields differently, so keeping that misclassification would reject an
-    otherwise source-complete draft.  Only an exact user clause containing one
-    of the existing correction markers is eligible; generic constraints and
-    assistant text are untouched.  This is categorisation, not semantic
-    expansion or truncation.
+    This host-only reference never becomes an additional claim citation or a
+    model verdict; bundle revalidation reconstructs it from the full source.
     """
+    return {**source,'messages':messages,'source_revision':revision,
+            '_scenario_parent_source':source.get('_scenario_parent_source') or source}
+
+
+def source_correction_supported(source, mid, clause):
+    """Narrow direct revision declarations or an exact earlier-user conflict.
+
+    Negation words alone stay review hints. Uncertain cases preserve the
+    provider category rather than manufacturing mandatory correction identity.
+    """
+    original=source.get('_scenario_parent_source') or source
+    rows=original.get('messages') or []
+    current=next((m for m in rows if m.get('evidence_id')==mid and m.get('role')=='user'),None)
+    if current is None or clause not in whole_user_clauses(current['text']):return False
+    if current['text'].lstrip().startswith(('>','"',"'",'“','`')):return False
+    direct=(r'^(?:(?:请|现在|这里|另外)[，,：:\s]*)?(?:更正[：:]|纠正[：:]|改成|改为|修改为|替换为|撤回)',
+            r'^(?:correction\s*:|replace\s+.+?\s+with\b|change\s+.+?\s+to\b)',
+            r'^(?:刚才|之前|前面|上一)[^。！？\n]{0,120}(?:发错|说错|写错|撤回|忽略)')
+    if any(re.search(pattern,clause,re.I) for pattern in direct):return True
+    prior=[]
+    for row in rows:
+        if row.get('evidence_id')==mid:break
+        if row.get('role')=='user' and not row['text'].lstrip().startswith(('>','"',"'",'“','`')):
+            prior.extend(c.casefold() for c in whole_user_clauses(row['text']))
+    negation=re.match(r'^(?:不要|别再|不再|不用|别)(?:把|再)?\s*([^。；，,！？!?]+)',clause)
+    if negation:
+        positive=negation.group(1).rstrip('了 ').casefold()
+    else:
+        negation=re.match(r"^(?:do not|don't|no longer)\s+(.+?)(?:[.;!?]|$)",clause,re.I)
+        positive=re.sub(r'\s+anymore$','',negation.group(1),flags=re.I).casefold() if negation else ''
+    if len(positive)<4:return False
+    for previous in prior:
+        for match in re.finditer(re.escape(positive),previous):
+            prefix=previous[:match.start()]
+            suffix=previous[match.end():]
+            # An occurrence inside an earlier prohibition, question, quoted
+            # example or conditional is not a positive instruction witness.
+            if (re.fullmatch(r'\s*[。.!；;]?\s*',suffix) and
+                (re.fullmatch(r'\s*(?:(?:请|先|现在|就|要|需要|必须|将|把|用|使用)[\s，,]*)*',prefix)
+                 or re.fullmatch(r'\s*(?:(?:please|first|now|you should|you must|we will|we need to)\s+)*',prefix,re.I))):
+                return True
+    return False
+
+
+def _normalize_correction_categories(state: dict, source: dict) -> None:
+    """Move only source-demonstrated revisions; preserve initial constraints."""
+    source_by_id={m['evidence_id']:m for m in source['messages']}
     constraints = state.get("constraints") or []
     corrections = state.get("corrections") or []
     existing = {(item.get("text"), tuple(item.get("message_ids") or []))
@@ -243,7 +348,7 @@ def _normalize_correction_categories(state: dict, source_by_id: dict) -> None:
             continue
         text = str(claim.get("text") or "")
         ids = claim.get("message_ids") or []
-        is_explicit = bool(CORRECTION_HINT.search(text)) and bool(ids)
+        is_explicit = bool(ids) and any(source_correction_supported(source,mid,text) for mid in ids)
         is_user_clause = any(
             source_by_id.get(mid, {}).get("role") == "user"
             and text in whole_user_clauses(source_by_id[mid].get("text", ""))
@@ -279,10 +384,10 @@ def _ensure_explicit_corrections(state: dict, source: dict) -> None:
             continue
         mid = message.get("evidence_id")
         for clause in whole_user_clauses(message.get("text", "")):
-            if len(clause) > maximum or not CORRECTION_HINT.search(clause):
+            if len(clause) > maximum or not source_correction_supported(source,mid,clause):
                 continue
             key = (clause, (mid,))
-            if key in existing:
+            if key in existing or any(mid in item['message_ids'] and clause in item['text'] for item in corrections):
                 continue
             if len(corrections) >= STATE_LIMITS["claims_max_per_array"]:
                 return
@@ -309,7 +414,16 @@ def _render_tiers(state: dict) -> dict:
         standard_lines.append("助手报告（未独立核验）：" + state["assistant_reports"][-1]["text"])
     if len(state["unresolved"]) > 1:
         standard_lines.extend("其他待核：" + item["text"] for item in state["unresolved"][1:3])
-    standard = "\n".join(standard_lines)
+    # Navigation may select fewer whole fields than full. Never truncate a
+    # condition or reject a valid full state merely because its first three
+    # long verbatim conditions cannot also fit the cheaper standard tier.
+    selected=[]
+    for line in standard_lines:
+        candidate='\n'.join([*selected,line])
+        _, receipt=bounded_summary(candidate,'session','standard')
+        if not receipt['truncated'] and len(candidate)<=BUDGETS['session']['standard']['max_chars']:
+            selected.append(line)
+    standard = "\n".join(selected)
     full_lines = [f"对象：{state['subject']['text']} [来源:{','.join(state['subject']['message_ids'])}]",
                   f"任务：{state['goal']['text']} [来源:{','.join(state['goal']['message_ids'])}]",
                   f"当前阶段：{PHASE_LABELS[state['phase']]}"]
@@ -324,9 +438,13 @@ def validate_state_draft(source: dict, state: dict, *, model: str, user_claim_pr
     if source.get("status") != "complete" or not source.get("messages") or not source.get("source_revision"):
         raise ValueError("scenario_source_incomplete")
     source_by_id = {row["evidence_id"]: row for row in source["messages"]}
+    # Validate provider containers before any categorisation reads them. Keep
+    # rejected provider evidence intact for diagnostics and bounded repairs.
+    _check_state_contract(state)
+    state = copy.deepcopy(state)
     # Normalize a narrow provider categorisation error before the structural
     # contract check; no text is generated, widened, or dropped.
-    _normalize_correction_categories(state, source_by_id)
+    _normalize_correction_categories(state, source)
     # A merge projection contains compressed candidate text, not the original
     # user wording; do not manufacture a new clause from that projection.
     if not source.get("merge_projection"):
@@ -343,9 +461,10 @@ def validate_state_draft(source: dict, state: dict, *, model: str, user_claim_pr
         normalized[field] = _list_claims(state[field], source_by_id, STATE_FIELD_ROLES[field],maximum)
     if user_claim_protocol not in {None,USER_CLAIM_PROTOCOL}:raise ValueError('scenario_state_invalid')
     if user_claim_protocol==USER_CLAIM_PROTOCOL:
+        eligible={m['message_id']:{c['text'] for c in m['clauses'] if c['eligible']} for m in user_clause_catalog(source)}
         for field in ('constraints','corrections'):
             for claim in normalized[field]:
-                if not any(claim['text'] in whole_user_clauses(source_by_id[mid]['text']) for mid in claim['message_ids']):
+                if not any(claim['text'] in eligible.get(mid,set()) for mid in claim['message_ids']):
                     raise ValueError('scenario_user_claim_not_verbatim')
     positions={row['evidence_id']:i for i,row in enumerate(source['messages'])}
     normalized['assistant_reports'].sort(key=lambda claim:max(positions[mid] for mid in claim['message_ids']))

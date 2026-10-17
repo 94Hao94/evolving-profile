@@ -8,6 +8,11 @@ import { RELEASE_UI_COPY } from "./release-ui-copy";
 import { RELEASE_UI_LOCALIZED } from "./release-ui-localized";
 const RELEASE_SOURCE_KEYS=Object.fromEntries(Object.entries(RELEASE_UI_COPY).map(([key,item])=>[item.source,key]));
 const ZH_TO_EN: Record<string, string> = {
+  "待语义审核": "Pending semantic review",
+  "已审核偏好": "Reviewed preference",
+  "未提供": "Not provided",
+  "级别": "Severity",
+  "暂无候选回执，不能推断为零候选。": "No candidate receipts are available; this does not imply zero candidates.",
   "原文导航返回数": "Source navigation returned",
   "已返回原文导航；可回读来源核对主体与断言。": "Source navigation was returned; review the original source to check its subject and claims.",
   "智能体记忆": "Agent memory",
@@ -276,6 +281,8 @@ export function isKnownInlineUiText(source: string): boolean {
 export function enumUiText(value: string, locale = localeFromDocument()): string {
   if (RELEASE_UI_LOCALIZED[locale]?.[value]) return RELEASE_UI_LOCALIZED[locale][value];
   const labels: Record<string, [string,string]> = {
+    global_pending:["全局审查待完成","Global review pending"],not_reviewed:["尚未语义复核","Not semantically reviewed"],
+    coverage_overview:["覆盖概览","Coverage overview"],coverage_requirements:["要求目录","Requirement inventory"],coverage_relations:["关系目录","Relation inventory"],coverage_source:["原始消息","Original messages"],
     unconfigured:["未配置","Not configured"],
     configured_but_inactive:["已配置但未启用","Configured, inactive"],disabled_saved:["已保存，未启用","Saved, disabled"],inactive:["未启用","Inactive"],archived_configured:["已归档配置","Archived configuration"],
     protected:["写入权限禁止；保留原文","Write prohibited; raw source retained"],partial_protected:["部分完成；其余受权限保护","Partial; remaining sources protected"],raw_available_summary_protected:["原文可用；摘要写入受权限保护","Raw available; summary write protected"],

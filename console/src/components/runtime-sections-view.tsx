@@ -23,6 +23,8 @@ import { JEV_BASE_URL, JEV_MODEL, JEV_SCOPE_DEFAULTS } from "@/lib/jev-provider"
 import { RecallPolicySettings, updateRecallPolicy, RagMinimumRelevanceField, updateRagMinimumRelevance } from "./recall-policy-settings";
 import { normalizeRecallPolicy } from "@/lib/recall-policy";
 import { modelIdentityMatches } from "@/lib/retrieval-model-identity";
+import {ScenarioCoverageSettings} from "./scenario-coverage-settings";
+import {RuntimeLoadStatus} from "./runtime-load-status";
 type Section = "runtime" | "memory" | "models" | "rag" | "providers" | "scenario" | "backup";
 
 type RuntimeState = any;
@@ -271,7 +273,7 @@ export function RuntimeSectionsView({ section }: { section: Section }) {
       />
     );
   if (section === "providers") return <ProviderPanel state={state} />;
-  if (section === "scenario") return <ScenarioPanel state={state} />;
+  if (section === "scenario") return <><ScenarioPanel state={state} /><ScenarioCoverageSettings value={state.runtimeSettings.scenario_coverage} onChange={value=>setState({...state,runtimeSettings:{...state.runtimeSettings,scenario_coverage:value}})} onSave={async()=>{const response=await fetch("/api/evolving-profile/runtime-settings",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({scenario_coverage:state.runtimeSettings.scenario_coverage})});if(!response.ok)throw new Error(inlineUiText("保存失败"));return response.json();}}/></>;
   return (
     <BackupPanel
       state={state}
@@ -1127,6 +1129,7 @@ function RuntimeOverview({ state }: { state: any }) {
         title={inlineUiText("运行配置概览")}
         description={`${inlineUiText("查看当前实际使用的模型、宿主和本机服务。版本")} ${state.release?.product_version ?? "5.1"}`}
       />
+      <RuntimeLoadStatus data={state.runtimeLoad}/>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border p-4">
           <div className="flex items-center gap-2 font-medium">

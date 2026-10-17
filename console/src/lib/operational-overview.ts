@@ -1,7 +1,8 @@
+import type { ScenarioOperationalEvidence } from "./scenario-operational";
 export type HealthState = "healthy" | "warning" | "critical" | "unknown";
 export type OperationalIncident = {
   id: string;
-  category: "backup" | "model" | "retention" | "map" | "service";
+  category: "backup" | "model" | "retention" | "scenario" | "map" | "service";
   severity: Exclude<HealthState, "healthy">;
   title: string;
   detail: string;
@@ -11,7 +12,7 @@ export type OperationalIncident = {
   sourceId?: string;
   sourceIds?: string[];
   taskRowCount?: number;
-  action: "runtime" | "operations" | "llm-requests" | "flow";
+  action: "runtime" | "operations" | "llm-requests" | "flow" | "scenario";
   titleKey?: string;
   detailKey?: string;
   count?: number;
@@ -109,7 +110,7 @@ export function parseOperationalAcknowledgements(raw: string | null): Operationa
     const value: unknown = JSON.parse(raw || "{}");
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(Object.entries(value).filter(([category, entry]) => {
-      if (!["backup", "model", "retention", "map", "service"].includes(category) || !entry || typeof entry !== "object") return false;
+      if (!["backup", "model", "retention", "scenario", "map", "service"].includes(category) || !entry || typeof entry !== "object") return false;
       const row = entry as Record<string, unknown>;
       return typeof row.signature === "string" && typeof row.confirmedAt === "number" && Number.isFinite(row.confirmedAt)
         && Array.isArray(row.failureRequestIds) && row.failureRequestIds.every(id => typeof id === "string");
@@ -151,6 +152,7 @@ type Input = {
   llm: { status: "observed" | "unavailable"; currentStatus?: "observed" | "unavailable"; items: LlmEvidence[]; total?: number | null; groupTotal?: number | null; relatedSuccessStatus?: "observed" | "partial" | "unavailable"; relatedTracesChecked?: string[] };
   operations: { status: "observed" | "unavailable"; items: OperationEvidence[]; total?: number | null; returned?: number };
   localRetention?: LocalRetentionEvidence;
+  scenario?: ScenarioOperationalEvidence;
   bankStats?: { status: "observed" | "unavailable"; failed_consolidation?: number; pending_consolidation?: number; operations_by_status?: Record<string, number> };
   map: { status: string; checked_at?: string; error_type?: string; last_success_at?: string; stale_after_seconds?: number; semantic_status?: string; semantic_worker_status?: string; semantic_error_type?: string };
 };
@@ -239,6 +241,8 @@ export function buildOperationalOverview(input: Input) {
   const { now, runtime } = input;
   const incidents: OperationalIncident[] = [];
   const localRetention = input.localRetention ?? missingLocalRetention;
+  const scenario = input.scenario;
+  const scenarioState: HealthState = !scenario || scenario.status !== "observed" ? "unknown" : (scenario.failed ?? 0) > 0 ? "critical" : (scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0 ? "warning" : (scenario.unknown ?? 0) > 0 || !(scenario.reviewed ?? 0) ? "unknown" : "healthy";
   const failedBatches = failedOperationBatches(input.operations.items, now);
   const history = attemptGroups(input);
   const latestLlm = (input.llm.currentStatus ?? input.llm.status) === "observed" ? [...input.llm.items].filter((row) => recent(row.started_at, now)).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0] : undefined;
@@ -275,6 +279,8 @@ export function buildOperationalOverview(input: Input) {
     add({ id: `operation:${batchId}`, category: "retention", severity: isRetain && !isolated ? "critical" : "warning", title: `${operation.task_type} 批次失败`, titleKey: isRetain ? "failedBatch" : "operationFailed", operation: operation.task_type, detail: `错误类别：${code}；请打开操作详情核对`, detailKey: `advice.${code}`, at: operation.created_at, source: "Bank 操作回执", sourceKey: "bankOperationReceipt", sourceId: batchId, sourceIds: rows.map(row => row.id), taskRowCount: rows.length, action: "operations" });
   }
   const unmatchedQuarantine = localRetention.quarantineBatches.filter(batch => !failedBatches.has(batch.operationId));
+  if (scenario?.status === "observed" && (scenario.failed ?? 0) > 0) add({ id: "scenario:failed", category: "scenario", severity: "critical", title: "情景摘要失败", titleKey: "scenarioFailed", count: scenario.failed!, detail: "原文保留；摘要未通过来源或覆盖审查。", detailKey: "scenarioHelp", at: scenario.at, source: "当前记忆库情景索引", sourceKey: "scenarioReceipt", sourceIds: scenario.failures.map(row => row.id), action: "scenario" });
+  else if (scenario?.status === "observed" && ((scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0)) add({ id: "scenario:pending", category: "scenario", severity: "warning", title: "情景摘要待审查", titleKey: "scenarioPending", count: (scenario.pending ?? 0) + (scenario.waitingSource ?? 0), detail: "原文保留；待审查不代表发布成功。", detailKey: "scenarioHelp", at: scenario.at, source: "当前记忆库情景索引", sourceKey: "scenarioReceipt", action: "scenario" });
   if (localRetention.status === "observed" && (localRetention.quarantinedRecords ?? 0) > 0 && (!failedBatches.size || unmatchedQuarantine.length))
     add({ id: "retention:quarantine", category: "retention", severity: "warning", title: "已隔离的保留记录仍待恢复", titleKey: "quarantineTitle", detail: "队列原始记录保留；隔离失败不会自动清除。", detailKey: "quarantineHelp", count: localRetention.quarantinedRecords!, at: localRetention.observedAt, source: "本机队列元数据", sourceKey: "queueMetadataReceipt", sourceIds: unmatchedQuarantine.map(batch => batch.operationId), action: "operations" });
   const mapAge = now - Date.parse(input.map.checked_at ?? "");
@@ -299,6 +305,7 @@ export function buildOperationalOverview(input: Input) {
     { id: "model", label: "模型与 API Key", observed: (input.llm.currentStatus ?? input.llm.status) === "observed" && latestLlm?.status === "success", at: latestLlm?.started_at ?? null, ok: "最近模型调用成功", unknown: runtime.model?.apiKey ? "已配置密钥，近期连通性未核验" : "密钥未配置或连通性未核验" },
     { id: "retention", label: "记忆保留", observed: input.operations.status === "observed" && input.operations.items.some((row) => /retain/i.test(row.task_type) && row.status === "completed" && recent(row.created_at, now)), at: input.operations.items[0]?.created_at ?? null, ok: "最近保留已完成", unknown: "近期保留回执未核验" },
     { id: "map", label: "地图更新", observed: mapUpdating || input.map.status === "ready" && !mapStale && recent(input.map.checked_at, now), at: input.map.checked_at ?? null, ok: "源版本已核对", unknown: "目录同步状态未核验" },
+    ...(scenario ? [{ id: "scenario" as const, label: "情景摘要", observed: scenario.status === "observed", at: scenario.at, ok: "已发布摘要可用", unknown: "摘要状态未核验" }] : []),
     { id: "service", label: "本机服务", observed: Boolean(runtime.services?.length), at: null, ok: "已探测服务在线", unknown: "服务状态未探测" },
   ];
   const successLlm = latestLlm?.status === "success" ? latestLlm : undefined;
@@ -328,6 +335,8 @@ export function buildOperationalOverview(input: Input) {
       { label: "语义目录", state: input.map.semantic_worker_status === "failed" ? "warning" : ["ready", "fresh_with_pending_changes"].includes(input.map.semantic_status || "") ? "healthy" : "unknown", at: input.map.checked_at ?? null,
         detail: input.map.semantic_worker_status === "failed" ? `本轮未发布 · ${input.map.semantic_error_type || "质量检查未通过"}` : input.map.semantic_status === "fresh_with_pending_changes" ? "已发布版本可用 · 新增资料排队整理" : input.map.semantic_status === "ready" ? "已覆盖当前源版本" : "尚未发布有效摘要" },
     ],
+    scenario: [{ label: "情景摘要", labelKey: "scenarioReceipt", state: scenarioState, at: scenario?.at ?? null, detail: "", detailKey: scenario?.status === "observed" ? "scenarioReviewed" : "scenarioUnavailable", detailCount: scenario?.reviewed ?? undefined },
+      ...(scenario?.status === "observed" ? [{ label: "待处理", labelKey: "scenarioPendingLabel", state: scenarioState, at: scenario.at, detail: "", detailKey: "scenarioPending", detailCount: scenario.pending ?? undefined }] : [])],
     service: (runtime.services ?? []).map((service) => ({ label: service.name, state: service.status === "healthy" ? "healthy" : "critical", detail: service.detail || service.status, at: null })),
   };
   const lanes: OperationalLane[] = specs.map((spec) => {
@@ -337,6 +346,7 @@ export function buildOperationalOverview(input: Input) {
     const pending = spec.id === "retention" && !own.length && pendingMemories != null && pendingMemories > 0;
     return { id: spec.id, label: spec.label, state, summary: own[0]?.title || (pending ? `待处理 ${pendingMemories} 条源记忆` : state === "healthy" ? spec.ok : spec.unknown),
       ...(spec.id === "map" && mapUpdating && !own.length ? { summaryKey: "mapUpdating" } : {}),
+      ...(spec.id === "scenario" && !own.length ? { summaryKey: scenario?.status === "observed" ? "scenarioReviewed" : "scenarioUnavailable", summaryCount: scenario?.reviewed ?? 0 } : {}),
       ...(pending ? { summaryKey: "pendingMemories", summaryCount: pendingMemories } : {}),
       detail: itemChecks.map((row) => `${row.label}：${row.detail}`).join("；"), lastObservedAt: spec.at, incidentCount: own.length, checks:itemChecks };
   });
@@ -346,7 +356,7 @@ export function buildOperationalOverview(input: Input) {
     lanes, incidents, attemptHistory: history,
     pipeline: { state: maxState([pipelineState, ...incidents.filter(row => row.category === "retention").map(row => row.severity)]), failedMemories, pendingMemories, failedBatches: input.operations.status === "observed" ? failedBatches.size : null,
       failedTaskRows: input.operations.status === "observed" ? [...failedBatches.values()].reduce((sum, rows) => sum + rows.length, 0) : null,
-      localRetention, processingOperations: input.bankStats?.operations_by_status?.processing ?? null, queuedOperations: input.bankStats?.operations_by_status?.pending ?? null },
+      localRetention, ...(scenario ? { scenario } : {}), processingOperations: input.bankStats?.operations_by_status?.processing ?? null, queuedOperations: input.bankStats?.operations_by_status?.pending ?? null },
     scan: { llmFailures: coverage(history.reduce((sum, group) => sum + group.attemptCount, 0), input.llm.total, input.llm.status),
       llmFailureGroups: { total: input.llm.groupTotal ?? null },
       failedOperations: coverage(input.operations.returned ?? input.operations.items.filter((row) => row.status === "failed").length, input.operations.total, input.operations.status),

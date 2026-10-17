@@ -1,4 +1,4 @@
-import { epStatePath, EP_API_ENV, EP_MANAGED_MAC_HOST } from "@/lib/ep-state-paths";
+import { epStatePath, EP_API_ENV, EP_MANAGED_MAC_HOST, EP_STATE_ROOT } from "@/lib/ep-state-paths";
 import { dataplaneBankUrl, DATAPLANE_URL, getDataplaneHeaders } from "@/lib/evolving-client";
 import { GET as getBackupSettings } from "../backup-settings/route";
 import { NextResponse } from "next/server";
@@ -12,6 +12,8 @@ import { readProcessSnapshot, processMetadata } from "@/lib/process-graph-data";
 import { resolveConsoleOrigin } from "@/lib/console-origin";
 import { normalizeJevJudge } from "@/lib/jev-provider";
 import { parseModelEnvironment, resolveEffectiveEmbedding, maskRetrievalModels } from "@/lib/retrieval-model-identity";
+import {normalizeCoverageSettings} from "@/lib/scenario-coverage";
+import {readRuntimeLoadEvidence} from "@/lib/runtime-load-evidence.server";
 
 const ENV_PATH = EP_API_ENV;
 const PROFILE_PATH = epStatePath("codex.json");
@@ -26,6 +28,7 @@ const CONTEXT_PROGRESS_PATH = epStatePath("context/context-pipeline-progress.jso
 const CONTEXT_AUDIT_PATH = epStatePath("context/context-audit.json");
 const RELEASE_MANIFEST_PATH = epStatePath("config/release-manifest.json");
 const RUNTIME_SETTINGS_DEFAULTS = {
+  scenario_coverage:normalizeCoverageSettings(),
   schema: "evolving-profile.runtime-settings.v1",
   modules: Object.fromEntries(["facts", "experiences", "entities", "preferences", "scenario_summary", "mental_models", "source_readback", "background_reflection", "agent_process_memory", "agent_process_trajectory", "agent_process_observation", "agent_process_failure_episode", "agent_process_repair_pattern", "agent_process_capability", "agent_process_strategy", "agent_process_revalidation"].map((name) => [name, { record: true, retrieve: true, inject: true }])),
   routing: { mode: "auto", ep_enabled: true, external_rag_enabled: false, allow_parallel: false, conflict_policy: "show_both" },
@@ -65,7 +68,8 @@ async function serviceState(url: string) {
   try {
     const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(1200) });
     const body = await response.json().catch(() => ({}));
-    return { url, status: response.ok ? "healthy" : "attention", detail: body.functional_status ?? body.status ?? response.status };
+    const detail = body?.functional_status ?? body?.status;
+    return { url, status: response.ok ? "healthy" : "attention", detail: typeof detail === "string" ? detail : `HTTP ${response.status}` };
   } catch {
     return { url, status: "unavailable", detail: "unreachable" };
   }
@@ -182,6 +186,7 @@ export async function GET(request?: Request) {
 
   return NextResponse.json({
     schema: "evolving-profile.runtime.v1",
+    runtimeLoad: await readRuntimeLoadEvidence(EP_STATE_ROOT),
     release: releaseManifest,
     model: {
       provider: effectiveProvider.name || env.EVOLVING_PROFILE_API_LLM_PROVIDER || "not_configured",

@@ -81,6 +81,12 @@ export function projectHostToolRows(rows: any[], binding: {session_id:string;tur
       memory_ids:normalized.memory_ids,
       ...(normalized.source_navigation ? {source_navigation:normalized.source_navigation,source_navigation_returned_count:normalized.source_navigation_returned_count,source_navigation_returned_ids:normalized.source_navigation_returned_ids} : {}),
       scenario_ids:normalized.scenario_ids,
+      ...(value.source === "scenario_coverage_ledger" ? {
+        reported_returned_count:normalized.reported_returned_count,return_count_basis:normalized.return_count_basis,
+        scenario_coverage_view:normalized.scenario_coverage_view,scenario_coverage_snapshot_id:normalized.scenario_coverage_snapshot_id,
+        scenario_semantic_review_status:normalized.scenario_semantic_review_status,scenario_has_unread_requirements:normalized.scenario_has_unread_requirements,
+        original_message_readback_count:normalized.original_message_readback_count,
+      } : {}),
       memory_plane:scenario?(value.memory_plane || value.purpose || args.memory_plane || args.purpose || lane):lane,
       mapping_items:mapping,failed,
       plane:value.plane,stage:value.stage,purpose:value.purpose || args.purpose || (scenario ? "unspecified" : lane),

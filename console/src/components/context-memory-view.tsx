@@ -11,6 +11,7 @@ import { describeManualSourceCoverage, selectContextEpisode, summaryDisplayStatu
 
 import { useWindowedGraph } from "@/lib/use-windowed-graph";
 import { inlineUiText } from "@/lib/inline-i18n";
+import {ScenarioCoverageDetails} from "./scenario-coverage-details";
 type ContextNode = {
   id: string;
   type: string;
@@ -195,6 +196,7 @@ export function ContextDetails({
       {node.type === "workspace" && (
         <p className="text-amber-700">{ui("这只是相同工作目录的会话集合，不能据此认定为同一个项目。")}</p>
       )}
+      {node.type==="session" && remote && /^session:[0-9a-f-]{36}$/i.test(rootNode.id)?<ScenarioCoverageDetails key={rootNode.id} sessionId={rootNode.id.slice(8)} bankId={remote.bankId}/>:null}
       {loaded && node.processing ? <section role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:bg-amber-950 dark:text-amber-100">
         <p className="font-semibold">{t(`scenarioProcessing_${node.processing.state}`)}</p>
         {node.processing.errorCode ? <p>{t("scenarioFailureCode")} <code className="break-all">{node.processing.errorCode}</code></p>:null}

@@ -202,6 +202,29 @@ def _resolve_template(value: str, template_vars: dict) -> str:
     return value
 
 
+def capture_native_process_on_stop(hook_input, config, bank_id, source_turns):
+    """Use the existing process store without treating task prose as verification."""
+    from lib.process_context import capture_native_process
+    from lib.process_memory import ProcessMemoryStore
+    guidance_root = str(Path(__file__).resolve().parent.parent / 'guidance')
+    if guidance_root not in sys.path: sys.path.insert(0, guidance_root)
+    from runtime_settings import load_runtime_settings, module_enabled, route_policy
+    root = Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT', '~/.evolving-profile')).expanduser()
+    settings = load_runtime_settings(root / 'config/runtime-settings.json')
+    if 'ep' not in route_policy(settings, 'ep')['sources'] or not all(
+            module_enabled(settings, module, 'record') for module in ('agent_process_memory', 'agent_process_trajectory')):
+        return {'reason': 'disabled_by_runtime_settings'}
+    allowed, denied = set(), set()
+    for turn in source_turns:
+        target = allowed if turn['write_policy']['knowledge_allowed'] else denied
+        target.update(str((m.get('source_record') or {}).get('turn_id')) for m in turn['messages']
+                      if (m.get('source_record') or {}).get('turn_id'))
+    return capture_native_process(hook_input.get('transcript_path') or '',
+        ProcessMemoryStore(config.get('processMemoryPath') or root / 'process-memory/records.json'),
+        session_id=hook_input.get('session_id'), bank_id=bank_id, project=hook_input.get('cwd'),
+        allowed_turn_ids=allowed - denied)
+
+
 def main():
     if sys.platform == "win32":
         sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
@@ -282,6 +305,11 @@ def main():
     if exclusion:
         debug_log(config, f"Retention held by {exclusion}; local evidence preserved")
         return
+    try:
+        process_capture = capture_native_process_on_stop(hook_input, config, bank_id, source_turns)
+        debug_log(config, 'Native process capture:', process_capture)
+    except Exception as error:
+        debug_log(config, 'Native process capture unavailable:', type(error).__name__)
     # Close the 10-30 minute token-batch freshness gap with a deterministic,
     # local-only task receipt. This performs no model or Hindsight request.
     if config.get("taskHandoffEnabled", True):

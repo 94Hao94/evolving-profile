@@ -234,5 +234,38 @@ class PromptOriginTest(unittest.TestCase):
         self.assertEqual(lookup.resolve(later_row)['origin_kind'],'human','a page made entirely of cached proofs must not freeze indexing forever')
 
 
+    def test_cached_same_turn_nonmatches_cannot_consume_the_real_prompt_budget(self):
+        import prompt_origin as origin
+        row=self.ingress('same-turn',prompt='real target request');path=Path(row['transcript_path'])
+        head,message=path.read_text().splitlines()
+        unrelated=[]
+        for i in range(30):
+            item=json.loads(message);item['payload']['content'][0]['text']='unrelated-'+str(i)+'x'*3500
+            unrelated.append(json.dumps(item))
+        path.write_text('\n'.join([head,*unrelated,message])+'\n')
+        self.assertEqual(origin.PromptOriginResolver([self.sessions]).resolve(row)['origin_kind'],'human')
+        lookup=origin.PromptOriginResolver([self.sessions]);lookup.bytes_left=4096
+        self.assertEqual(lookup.resolve(row)['origin_kind'],'human')
+        self.assertLess(4096-lookup.bytes_left,1024)
+        path.write_text(path.read_text().replace('real target request','fake target request')+json.dumps({'type':'event_msg','payload':{'type':'token_count'}})+'\n')
+        changed=origin.PromptOriginResolver([self.sessions]);changed.bytes_left=4096
+        result=changed.resolve(row)
+        self.assertEqual(result['origin_kind'],'unknown')
+        self.assertEqual(result['origin_evidence']['reason'],'native_prompt_source_changed')
+
+    def test_cold_recent_prompt_outside_last_chunk_is_found_without_timestamp_anchors(self):
+        import prompt_origin as origin
+        row=self.ingress('recent-tail',prompt='recent real request');path=Path(row['transcript_path'])
+        head,message=path.read_text().splitlines()
+        filler=json.dumps({'type':'response_item','payload':{'type':'function_call_output','output':'x'*2000}})+'\n'
+        path.write_text(head+'\n'+filler*1500+message+'\n'+filler*400)
+        narrow=origin.PromptOriginResolver([self.sessions]);narrow.bytes_left=1024*1024
+        self.assertEqual(narrow.resolve(row)['origin_kind'],'unknown')
+        resolver=origin.PromptOriginResolver([self.sessions]);resolver.bytes_left=6*1024*1024
+        result=resolver.resolve(row)
+        self.assertEqual(result['origin_kind'],'human')
+        self.assertLessEqual(6*1024*1024-resolver.bytes_left,6*1024*1024)
+
+
 if __name__ == '__main__':
     unittest.main()

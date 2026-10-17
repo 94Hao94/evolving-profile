@@ -1,5 +1,5 @@
 /** Shared read-only receipt normalization for canonical activity and host replay. */
-export type ReceiptItem = { id?: string; text: string; scenario_id?: string; text_truncated?:boolean;total_chars?:number;source_role?:string };
+export type ReceiptItem = { id?: string; text: string; scenario_id?: string; text_truncated?:boolean;total_chars?:number;source_role?:string;source_locator?:unknown };
 function bodyAllowed(row:any):boolean{
   if(!row||typeof row!=="object")return false;
   const scope=row.scope_verification;
@@ -30,6 +30,7 @@ export function normalizeSourceNavigation(value: unknown): SourceNavigation[] {
 }
 export function normalizeToolResult(tool: string, value: any, failed = false) {
   const body = value && typeof value === "object" ? value : {};
+  const coverage = ["read_scenario_summary","read_context_summary"].includes(tool) && body.source === "scenario_coverage_ledger";
   const guidance = body.guidance_view || body;
   const arrays = [body.memories, body.records, body.items, body.results, body.sources].find(Array.isArray) || [];
   let records = [...arrays];
@@ -37,6 +38,14 @@ export function normalizeToolResult(tool: string, value: any, failed = false) {
   if (body.unit) records.push(body.unit);
   if (/preference/.test(tool)) records.push(...["included", "stable_profile", "guidance_items", "model_sections", "entries"].flatMap(key => Array.isArray(guidance[key]) ? guidance[key] : []));
   if (body.source?.text) records.push({ ...body.source,id: body.memory?.id || body.source?.id, text: body.source.text });
+  if (coverage) {
+    records = [];
+    if (body.view === "requirements" && Array.isArray(body.requirements)) records = body.requirements.map((row:any)=>({...row,id:row?.requirement_id,source_role:"scenario_requirement"}));
+    if (body.view === "relations" && Array.isArray(body.relations)) records = body.relations.filter(bodyAllowed).map((row:any,index:number)=>({...row,id:`${body.snapshot_id}:relation:${index}`,text:JSON.stringify(row),source_role:"scenario_relation"}));
+    if (body.view === "source" && body.source_readback === true && body.raw_source_status === "source_read" && bodyAllowed(body.raw_source) && typeof body.raw_source.text === "string" && body.raw_source.text)
+      records = [{id:`${body.scenario_id}:${body.snapshot_id}:raw`,text:body.raw_source.text,source_role:"original_source",source_locator:{locators:body.raw_source.locators || []}}];
+    if (failed) records = [];
+  }
   const rawRecordCount=records.length;
   if(!bodyAllowed(body))records=[];
   const seen = new Set<string>();
@@ -47,12 +56,20 @@ export function normalizeToolResult(tool: string, value: any, failed = false) {
     const key = id || text;
     if (!key || seen.has(key)) return [];
     seen.add(key);
-    return [{ id, text: text.slice(0, 8000), scenario_id: record.scenario_id,...(text.length>8000?{text_truncated:true,total_chars:Array.from(text).length}:{} ) }];
+    return [{ id, text: text.slice(0, 8000), scenario_id: record.scenario_id,
+      ...(coverage ? {source_role:record.source_role,source_locator:record.source_locator} : {}),
+      ...(text.length>8000?{text_truncated:true,total_chars:Array.from(text).length}:{} ) }];
   });
-  const count = typeof body.returned_count === "number" && Number.isFinite(body.returned_count) && body.returned_count >= 0 ? body.returned_count
+  const count = coverage ? items.length : typeof body.returned_count === "number" && Number.isFinite(body.returned_count) && body.returned_count >= 0 ? body.returned_count
     : rawRecordCount || (Array.isArray(arrays) && ["memories", "records", "items", "results", "sources"].some(key => Array.isArray(body[key])) ? 0 : null);
   const navigation = failed ? [] : normalizeSourceNavigation(body.source_navigation);
-  return { returned_count: failed ? 0 : count, mapping_items: items, memory_ids: items.map(item => item.id).filter((id): id is string => Boolean(id)), scenario_ids: items.map(item => item.scenario_id).filter((id): id is string => Boolean(id)),
+  const rawLocators = coverage && items.some(item=>item.source_role === "original_source") && Array.isArray(body.raw_source?.locators) ? body.raw_source.locators : [];
+  return { returned_count: failed ? 0 : count, mapping_items: items, memory_ids: coverage ? [] : items.map(item => item.id).filter((id): id is string => Boolean(id)), scenario_ids: coverage ? (typeof body.scenario_id === "string" ? [body.scenario_id] : []) : items.map(item => item.scenario_id).filter((id): id is string => Boolean(id)),
+    ...(coverage ? {reported_returned_count:typeof body.returned_count === "number" ? body.returned_count : null,
+      return_count_basis:"coverage_returned_body",scenario_coverage_view:body.view,
+      scenario_coverage_snapshot_id:body.snapshot_id,scenario_semantic_review_status:body.semantic_review_status,
+      scenario_has_unread_requirements:body.has_unread_requirements,
+      original_message_readback_count:new Set(rawLocators.filter((row:any)=>typeof row?.raw_line_sha256 === "string" && row.raw_line_sha256).map((row:any)=>row.raw_line_sha256)).size} : {}),
     ...(Array.isArray(body.source_navigation) ? {source_navigation:navigation,source_navigation_returned_count:navigation.length,source_navigation_returned_ids:navigation.map(row=>row.memory_id)} : {}) };
 }
 

@@ -439,7 +439,7 @@ def build_observation_proposal(
 ) -> dict:
     if classification.get("disposition") != "guidance_candidate":
         raise ValueError("not_guidance_candidate")
-    if len(evidence) < 2:
+    if not evidence:
         raise ValueError("insufficient_independent_source_families")
     refs = []
     origins = set()
@@ -451,14 +451,21 @@ def build_observation_proposal(
         )
         origins.add(origin)
         refs.append(ref)
-    if len(origins) < 2:
+    if len(evidence) > 1 and len(origins) < 2:
         raise ValueError("insufficient_independent_original_user_sources")
+    contexts = independent_task_contexts(refs)
+    explicit_global = classification.get("nature") in {"explicit_requirement", "declared_preference"} and classification.get("scope_level") == "global" and explicit_enduring_rule(refs)
+    local = not explicit_global and len(contexts) < 2
+    if local and not contexts:
+        raise ValueError("independent_task_context_unavailable")
+    sessions = sorted({str(ref.get("source_record", {}).get("session_id")) for ref in refs if ref.get("source_record", {}).get("session_id")})
+    tasks = sorted({str(ref.get("source_record", {}).get("task_id")) for ref in refs if ref.get("source_record", {}).get("task_id")})
     return {
         "proposal_id": "observation-guidance:" + classification["id"],
         "operation": "create",
         "target_id": "observation-guidance:" + classification["id"],
         "base_revision": None,
-        "nature": "inferred_pattern",
+        "nature": classification["nature"] if explicit_global else ("task_local" if local else "inferred_pattern"),
         "primary_category": classification["primary_category"],
         "related_categories": classification.get("related_categories") or [],
         "text": classification["text"],
@@ -467,10 +474,11 @@ def build_observation_proposal(
         "effect_on_action": classification.get("effect_on_action")
         or "在匹配范围内调整行动",
         "scope": {
-            "user_id": "liuzhongyang",
+            "user_id": "ep-user",
             "agent_roles": [],
             "project_ids": [],
-            "task_ids": [],
+            "task_ids": tasks if local else [],
+            "session_ids": sessions if local and not tasks else [],
             "domains": [],
             "media": [],
         },
@@ -478,13 +486,15 @@ def build_observation_proposal(
         "source_family_ids": sorted(origins),
         "preference_kind": classification.get("preference_kind") or "behavior_pattern",
         "polarity": classification.get("polarity") or "neutral",
-        "scope_level": classification.get("scope_level") or "domain",
+        "scope_level": "global" if explicit_global else ("task" if local else classification.get("scope_level") or "domain"),
         "validity_kind": classification.get("validity_kind") or "context_sensitive",
         "confidence_inputs": {
             "independent_original_user_origins": len(origins),
+            "independent_task_contexts": len(contexts),
+            "scope_basis": "explicit_enduring_user_rule" if explicit_global else ("single_task_context" if local else "independent_task_contexts"),
             "source_span_verified": True,
         },
-        "support_count": len(origins),
+        "support_count": len(contexts),
         "contradiction_count": 0,
         "source_turn_ids": sorted(
             {
@@ -496,8 +506,55 @@ def build_observation_proposal(
         ),
         "supersedes": classification.get("supersedes") or [],
         "superseded_by": [],
-        "cross_cutting": bool(classification.get("cross_cutting", False)),
+        "cross_cutting": bool(classification.get("cross_cutting", False)) if not local else False,
     }
+
+
+def independent_task_contexts(refs: list[dict]) -> set[str]:
+    """Message/fragment IDs and recorded turns are not independent task votes.
+
+    Native task identity wins when available; otherwise a Session is the
+    conservative task boundary. Different turns in one Session stay one vote.
+    """
+    contexts = set()
+    tasks_by_session = {}
+    for ref in refs:
+        record = ref.get("source_record") or {}
+        if record.get("session_id") and record.get("task_id"):
+            tasks_by_session.setdefault(str(record["session_id"]), set()).add(str(record["task_id"]))
+    for ref in refs:
+        record = ref.get("source_record") or {}
+        task = record.get("task_id")
+        session = record.get("session_id")
+        if task:
+            contexts.add("task:" + str(task))
+        elif session and str(session) not in tasks_by_session:
+            # A partially populated original in a known Session adds evidence,
+            # but its unknown task cannot create another independent task vote.
+            contexts.add("session:" + str(session))
+    return contexts
+
+
+def explicit_enduring_rule(refs: list[dict]) -> bool:
+    # This is an additional source-bound veto, never a semantic review substitute.
+    pattern = r"以后|今后|从现在起|始终|默认|所有回答|每次回答|from now on|always|by default|every (?:answer|response|time)"
+    return any(re.search(pattern, str(ref.get("quote") or ""), re.I) for ref in refs)
+
+
+def validate_task_scope(proposal: dict) -> None:
+    refs = proposal.get("evidence_refs") or []
+    contexts = independent_task_contexts(refs)
+    if proposal.get("nature") == "inferred_pattern" and len(contexts) < 2:
+        raise ValueError("inferred_preference_requires_independent_task_contexts")
+    if proposal.get("nature") == "task_local":
+        scope = proposal.get("scope") or {}
+        if not scope.get("task_ids") and not scope.get("session_ids"):
+            raise ValueError("task_local_requires_source_context")
+        for plural, singular in (("task_ids", "task_id"), ("session_ids", "session_id")):
+            supported = {str((ref.get("source_record") or {}).get(singular)) for ref in refs
+                         if (ref.get("source_record") or {}).get(singular)}
+            if scope.get(plural) and not set(scope[plural]).issubset(supported):
+                raise ValueError("task_local_source_context_mismatch")
 
 
 def publication_review(
@@ -508,6 +565,8 @@ def publication_review(
     source_snapshots: list[dict] | None = None,
 ) -> dict:
     from schemas import validate_proposal
+
+    validate_task_scope(proposal)
 
     if not isinstance(semantic_review, dict) or not (
         semantic_review.get("support") == "supported"

@@ -403,9 +403,9 @@ def emit_bounded_system_probe(hook_input, prompt, config, invocation_id):
     route['check_id']=invocation_id
     route_context='<evolving_profile_memory_route>\n'+json.dumps(route,ensure_ascii=False).replace('<','\\u003c')+'\n</evolving_profile_memory_route>'
     output=route_context+'\n'+context
-    if not is_shadow_replay():
+    if not is_shadow_replay() and not hook_input.get('_ep_prompt_ingress_recorded'):
         record_prompt_ingress(config,prompt,str(hook_input.get('session_id') or 'unknown'),str(hook_input.get('cwd') or ''),
-            turn_id=hook_input.get('turn_id'),hook_invocation_id=invocation_id,prompt_origin=hook_input.get('memory_prompt_origin','user_direct'))
+            turn_id=hook_input.get('turn_id'),hook_invocation_id=invocation_id,prompt_origin=hook_input.get('memory_prompt_origin','user_direct'),task_id=hook_input.get('task_id'))
     emit_hook_output(output)
     probe['delivery_stage']='hook_stdout_write_completed'
     receipt={'at':datetime.now(timezone.utc).isoformat(),**identity,'raw_user_prompt':prompt,
@@ -611,7 +611,7 @@ def is_shadow_replay() -> bool:
 
 
 SHADOW_REPLAY_FIXTURE_ROOT = Path(HAM_SOURCE_ROOT) / "tests" / "fixtures" / "hindsight-replay"
-LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path("/Users/apple/Documents/Codex/2026-07-11/ag/hindsight-memory-os/tests/fixtures/hindsight-replay")
+LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_LEGACY_REPLAY_FIXTURES", str(Path(__file__).resolve().parent / "fixtures/hindsight-replay")))
 
 
 def allow_shadow_fixture_transcript(transcript_path: str) -> bool:
@@ -1402,7 +1402,7 @@ def append_recall_audit(config: dict, payload: dict) -> None:
         pass
 
 
-def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, *, turn_id=None, hook_invocation_id=None, prompt_origin="user_direct", transcript_path=None, model=None, model_provider=None) -> None:
+def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, *, turn_id=None, hook_invocation_id=None, prompt_origin="user_direct", transcript_path=None, model=None, model_provider=None, task_id=None) -> bool:
     """Append a local, model-free receipt before any recall branch can return.
 
     The receipt is deliberately separate from a Controller trace: it proves that
@@ -1415,12 +1415,13 @@ def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, 
         )))
         normalized = " ".join(str(prompt or "").split())
         if not normalized:
-            return
+            return False
         row = {
             "at": datetime.now(timezone.utc).isoformat(),
             "event": "prompt_ingress",
             "session_id": str(session_id or "unknown"),
             "turn_id": turn_id,
+            "task_id": str(task_id) if task_id else None,
             "hook_invocation_id": hook_invocation_id,
             "host_id": "codex",
             "cwd": str(cwd or ''),
@@ -1436,9 +1437,10 @@ def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, 
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return True
     except OSError:
         # A receipt must never make the prompt hook fail.
-        pass
+        return False
 
 
 def record_memory_route_probe(hook_input: dict, prompt: str, config: dict, invocation_id: str) -> dict:
@@ -2358,7 +2360,7 @@ def filter_timeline_evidence(query: str, results: list[dict]) -> tuple[list[dict
     )
     narrative_prefixes = (
         "助手解释", "助理解释", "助手建议", "助理建议", "助手澄清", "助理澄清", "回答用户",
-        "示例用户询问", "示例用户请求", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
+        "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
         "用户认为", "用户担忧", "用户偏好", "用户决定", "用户设定", "对用户当前场景的判断", "当前问题",
     )
     realization_terms = ("已完成", "完成", "已实现", "实现", "已上线", "上线", "已启用", "启用", "已生效", "生效", "正式启用", "正式切换", "生产切换", "生产运行", "已切换", "切换成功", "部署完成", "验证通过", "测试通过", "落地", "运行中")
@@ -2415,7 +2417,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         return list(results or []), []
     narrative_prefixes = (
         "用户询问", "用户提问", "用户问题", "用户请求", "用户要求", "用户希望",
-        "示例用户询问", "示例用户提问", "示例用户请求", "示例用户要求", "当前问题",
+        "当前问题",
     )
     # Do not use generic words such as "解决" or "验证" here: a historical
     # *question* can ask for a solution or verification and would then evade
@@ -2425,7 +2427,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         "当前运行态", "当前正式架构运行态", "独立公司", "独立主体", "不是同一实体",
         "版本为", "版本号", "故障已修复", "修复已完成",
     )
-    # A historical user-led sentence can start with “用户要求/示例用户要求”
+    # A historical user-led sentence can start with “用户要求”
     # and still contain a durable rule rather than merely echoing a question.
     # These governance markers describe an ordering, prohibition, scope or
     # expiry condition that independently answers the current request.  The
@@ -2630,6 +2632,18 @@ def main():
     # available; an all-memory prohibition disables both lanes.
     memory_policy = classify_memory_policy(prompt)
 
+    # Native ingress must exist before the shared selector binds this exact
+    # occurrence. A caller's task/session assertion is never the substitute.
+    prompt_origin = str(hook_input.get("memory_prompt_origin") or "user_direct").strip().casefold()
+    if prompt_origin not in {"user_direct", "agent_generated", "test_probe"}: prompt_origin = "user_direct"
+    if is_shadow_replay(): prompt_origin = 'test_probe'
+    session_id = str(hook_input.get("session_id") or "unknown")
+    if not is_shadow_replay():
+        hook_input['_ep_prompt_ingress_recorded'] = record_prompt_ingress(config, prompt, session_id, str(hook_input.get('cwd') or ''),
+            turn_id=hook_input.get('turn_id'), hook_invocation_id=hook_invocation_id, prompt_origin=prompt_origin,
+            transcript_path=hook_input.get('transcript_path'), model=hook_input.get('model'),
+            model_provider=hook_input.get('model_provider'), task_id=hook_input.get('task_id'))
+
     # Agent-owned mode supplies local navigation before deeper Agent choice;
     # legacy mode still runs the guidance selector. Neither authorizes actions
     # or forces historical recall or long-term publication.
@@ -2670,12 +2684,6 @@ def main():
     # UserPromptSubmit is user-authored by default. Controlled replays and
     # adapters can state a different origin explicitly so observability never
     # labels an agent-generated probe as something the user typed.
-    prompt_origin = str(hook_input.get("memory_prompt_origin") or "user_direct").strip().casefold()
-    if prompt_origin not in {"user_direct", "agent_generated", "test_probe"}:
-        prompt_origin = "user_direct"
-    if is_shadow_replay():prompt_origin='test_probe'
-
-    session_id = str(hook_input.get("session_id") or "unknown")
     # This identifies one concrete UserPromptSubmit delivery.  The controller
     # may reuse a recent read, but must still create a separate, inspectable
     # chain for this turn so 9998 never shows an unexplained missing route.
@@ -2686,8 +2694,9 @@ def main():
     # trace coverage can be audited without treating a skipped recall as bad.
     capture_hook_cassette(config, hook_input, raw_prompt, prompt)
     if not is_shadow_replay():
-        record_prompt_ingress(config, prompt, session_id, str(hook_input.get("cwd") or ""),turn_id=hook_input.get('turn_id'),hook_invocation_id=hook_invocation_id,prompt_origin=prompt_origin,
-                              transcript_path=hook_input.get('transcript_path'), model=hook_input.get('model'),model_provider=hook_input.get('model_provider'))
+        if not hook_input.get('_ep_prompt_ingress_recorded'):
+            record_prompt_ingress(config, prompt, session_id, str(hook_input.get("cwd") or ""),turn_id=hook_input.get('turn_id'),hook_invocation_id=hook_invocation_id,prompt_origin=prompt_origin,
+                              transcript_path=hook_input.get('transcript_path'), model=hook_input.get('model'),model_provider=hook_input.get('model_provider'),task_id=hook_input.get('task_id'))
         route_probe=record_memory_route_probe(hook_input, prompt, config, hook_invocation_id)
         ENTRY_GUIDANCE_CONTEXT += '\n'+format_memory_route_context(route_probe)
         reconcile_native_context_async(hook_input)

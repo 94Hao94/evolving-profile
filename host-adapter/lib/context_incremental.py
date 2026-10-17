@@ -23,6 +23,9 @@ from .context_summary import read_context_index, update_context_index, context_i
 from .scenario_source import read_session_source, normalize_scenario_user
 from .content import is_synthetic_codex_user_message
 from .context_retry import summary_failure_class, SOURCE_WAIT_ERRORS
+from .session_paths import session_roots
+from .context_reassessment_journal import (pending_reassessment, prepare_reassessment,
+    recover_reassessment, sync_reassessment_index, validate_reassessment_paths)
 
 MAX_HEADER_BYTES = 1024 * 1024
 MAX_NAVIGATION_BYTES = 1024 * 1024
@@ -64,7 +67,10 @@ def _revision(paths):
 def _serialized(method):
     @wraps(method)
     def call(self, *args, **kwargs):
+        if pending_reassessment(self.root):
+            validate_reassessment_paths(self.root)
         with context_index_lock(self.db_path):
+            self._recover_reassessment()
             return method(self, *args, **kwargs)
     return call
 
@@ -81,10 +87,20 @@ def _source_policy(source):
     return [turn['write_policy'] for turn in retention_turns(messages)]
 
 
+INPUT_REVISION_SCHEME='semantic-source-budget.v1'
+
+
 def _input_revision(source,project,bank_id):
-    payload={'revision':source.get('source_revision'),'status':source.get('status'),
-        'files':source.get('source_files'),'exclusions':source.get('context_metadata_exclusions'),
-        'authorization':_source_policy(source),'project':project,'bank_id':bank_id}
+    # Model budgets follow the ordered semantic input and effective permission,
+    # while publication still requires the independent exact raw-source hash.
+    # Host page context, byte offsets and raw-line wrappers cannot buy retries.
+    budget_source={**source,'messages':source.get('_budget_messages',source.get('messages') or [])}
+    authorization=[]
+    for policy in _source_policy(budget_source):
+        authorization.append({key:policy.get(key) for key in ('version','knowledge_allowed','scope','reason')})
+    payload={'scheme':INPUT_REVISION_SCHEME,'status':source.get('status'),'thread_id':source.get('thread_id'),
+        'messages':[{key:m.get(key) for key in ('role','text','turn_id')} for m in budget_source['messages']],
+        'authorization':authorization,'project':project,'bank_id':bank_id}
     return hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 
@@ -103,6 +119,7 @@ def qualify_summary_input(source):
     else:
         target, reason = 'eligible', None
     return {'status': target, 'reason': reason, 'source_status': status,
+            'input_revision_scheme': INPUT_REVISION_SCHEME,
             'source_revision': source.get('source_revision'),
             'user_count': sum(m.get('role') == 'user' for m in messages),
             'assistant_count': sum(m.get('role') == 'assistant' for m in messages),
@@ -174,8 +191,9 @@ def _require_summary_runtime_permission(state_root, expected=None):
     return current
 
 
-def _reassessment_plan(db, index, session_root, session_ids, runtime_permission):
+def _reassessment_plan(db, index, session_root, session_ids, runtime_permission, resume_remaining_budget=False):
     observations, changes = [], []
+    has_coverage_leases=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coverage_parent_leases'").fetchone() is not None
     indexed = {r.get('session_id'): r for r in index['sessions']}
     scope = ' WHERE session_id IN (' + ','.join('?' for _ in session_ids) + ')' if session_ids else ''
     for raw in db.execute('SELECT * FROM jobs' + scope + ' ORDER BY session_id', session_ids):
@@ -201,9 +219,49 @@ def _reassessment_plan(db, index, session_root, session_ids, runtime_permission)
             'current_source_stat_revision': current_stat, 'source_identity_verified': identity_ok,
             'source_stat_changed': current_stat != job['revision']}
         observations.append(observation)
+        if has_coverage_leases and db.execute('SELECT 1 FROM coverage_parent_leases WHERE session_id=? AND expires_at>?',(job['session_id'],time.time())).fetchone():
+            observation['coverage_parent_lease_active']=True
+            continue
         target = qualification['status']
+        if resume_remaining_budget:
+            from .memory_recovery_scenario import MAX_COVERAGE_INPUT_CHARS
+            from .scenario_review_catalog import mandatory_source_review_lower_bound
+            lower_bound = mandatory_source_review_lower_bound(source) if target == 'eligible' else None
+            paths = source.get('source_files') or []
+            try:
+                job_paths = json.loads(job.get('source_paths') or 'null')
+            except (ValueError, TypeError):
+                job_paths = None
+            scope_verified = (bool(headers) and identity_ok and bool(job['project']) and bool(row.get('bank_id'))
+                and isinstance(row.get('bank_id'), str) and bool(row['bank_id'].strip())
+                and sum(r.get('session_id') == job['session_id'] for r in index['sessions']) == 1
+                and row.get('session_id') == job['session_id']
+                and row.get('project_key') == project_key(job['project'])
+                and job_paths == paths == row.get('raw_source_files')
+                and row.get('source_stat_revision') == current_stat
+                and bool(source.get('source_revision')))
+            available = (target == 'eligible' and type(job['attempts']) is int
+                and 0 <= job['attempts'] < 3 and lower_bound is not None
+                and lower_bound <= MAX_COVERAGE_INPUT_CHARS)
+            observation['remaining_budget_resume'] = {'scope_verified':scope_verified,
+                'source_char_limit':MAX_SOURCE_CHARS, 'mandatory_review_chars':lower_bound,
+                'mandatory_review_char_limit':MAX_COVERAGE_INPUT_CHARS,
+                'available':bool(available and scope_verified and runtime_permission['allowed']
+                    and job['status'] == 'waiting_source')}
+            if observation['remaining_budget_resume']['available']:
+                changes.append({'session_id':job['session_id'], 'to_status':'pending',
+                    'action':'resume_remaining_budget', 'prior_error_code':job['error_code'],
+                    'qualification':{**qualification, 'input_revision':signature},
+                    'current_source_stat_revision':current_stat, 'input_revision':signature,
+                    'source_revision':source['source_revision'],
+                    'remaining_budget':observation['remaining_budget_resume'],
+                    'expected_job':job, 'expected_index_row':row})
+            # Explicit recovery never mixes in default classification/reuse
+            # changes whose evidence does not carry this operation's digest.
+            continue
         # Complete, protected and active work are never touched by a classifier.
-        # No paid work is requeued, including legacy unknown input baselines.
+        # Default classification never requeues paid work, including legacy
+        # unknown input baselines; explicit remaining-budget recovery is above.
         if (job['status'] in {'failed', 'waiting_source', 'source_not_applicable'}
                 and target in {'waiting_source', 'source_not_applicable', 'protected'}
                 and identity_ok and job['status'] != target and row):
@@ -227,21 +285,30 @@ def _reassessment_plan(db, index, session_root, session_ids, runtime_permission)
                     'restored_summary': completed, 'expected_job': job, 'expected_index_row': row})
     payload = {'session_ids': session_ids, 'runtime_permission':runtime_permission,
                'observations': observations, 'changes': changes}
+    if resume_remaining_budget:
+        payload['resume_remaining_budget'] = True
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return {'schema': 'evolving-profile.source-reassessment.v1', 'dry_run': True,
         'model_calls': 0, 'plan_sha256': digest, **payload}
 
 
-def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=False, expected_plan_sha256=None):
-    """Default is read-only. Apply needs exact scope and a fresh reviewed digest."""
+def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=False, expected_plan_sha256=None,
+                         resume_remaining_budget=False):
+    """Read-only by default; scoped reviewed recovery never resets attempts."""
     ids = sorted({str(uuid.UUID(sid)) for sid in session_ids or []})
+    if resume_remaining_budget and (not ids or len(ids) > 32):
+        raise ValueError('reassessment_explicit_scope_required_for_remaining_budget')
     if apply and (not ids or len(ids) > 32 or not expected_plan_sha256):
         raise ValueError('reassessment_explicit_scope_and_digest_required')
     root = Path(state_root).expanduser() / 'context'
     path, index_path = root / 'context-incremental.sqlite', root / 'context-index.json'
+    if not apply and pending_reassessment(root):
+        raise ValueError('reassessment_recovery_required')
     if not path.is_file():
         return {'schema': 'evolving-profile.source-reassessment.v1', 'dry_run': not apply,
                 'status': 'state_unavailable', 'model_calls': 0, 'changes': [], 'observations': []}
+    if resume_remaining_budget or pending_reassessment(root):
+        validate_reassessment_paths(root)
     def connect(read_only):
         db = sqlite3.connect(path.resolve().as_uri() + '?mode=' + ('ro' if read_only else 'rw'), uri=True, timeout=30)
         db.row_factory = sqlite3.Row
@@ -261,28 +328,52 @@ def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=Fa
                     shutil.copyfile(name, Path(directory) / Path(name).name)
                 if before != fingerprint():
                     continue
-                db = sqlite3.connect(snapshot.resolve().as_uri() + '?mode=ro', uri=True)
+                # This private copy may need to initialize its own WAL/SHM
+                # after a clean production checkpoint removed the sidecars.
+                # Only the disposable snapshot is writable, never the source.
+                db = sqlite3.connect(snapshot.resolve().as_uri() + '?mode=rw', uri=True)
                 db.row_factory = sqlite3.Row
                 try:
-                    return _reassessment_plan(db, read_context_index(index_path), session_root, ids,
-                                              summary_runtime_permission(state_root))
+                    plan = _reassessment_plan(db, read_context_index(index_path), session_root, ids,
+                                              summary_runtime_permission(state_root), resume_remaining_budget)
+                    if pending_reassessment(root):
+                        raise ValueError('reassessment_recovery_required')
+                    return plan
                 finally:
                     db.close()
         raise ValueError('reassessment_busy_snapshot')
     _require_summary_runtime_permission(state_root)
-    with context_index_lock(path):
+    with context_index_lock(path), context_index_lock(index_path):
         permission = _require_summary_runtime_permission(state_root)
         db = connect(False)
         try:
+            if resume_remaining_budget:
+                db.execute('PRAGMA synchronous=FULL')
             db.execute('BEGIN IMMEDIATE')
-            plan = _reassessment_plan(db, read_context_index(index_path), session_root, ids, permission)
+            recover_reassessment(db, root)
+            plan = _reassessment_plan(db, read_context_index(index_path), session_root, ids, permission,
+                                     resume_remaining_budget)
             if plan['plan_sha256'] != expected_plan_sha256:
                 raise ValueError('reassessment_stale_plan')
             _require_summary_runtime_permission(state_root, plan['runtime_permission'])
             _ensure_qualification_schema(db)
+            commit_evidence_ids = {}
             for change in plan['changes']:
                 current = db.execute('SELECT * FROM jobs WHERE session_id=?', (change['session_id'],)).fetchone()
-                _record_job_evidence(db, current, 'source_qualification_reassessment', change['qualification'])
+                if change.get('action') == 'resume_remaining_budget':
+                    evidence = {'kind':'remaining_budget_source_reassessment', 'prior_job':dict(current),
+                        'prior_index_row':change['expected_index_row'], 'plan_sha256':plan['plan_sha256'],
+                        'qualification':change['qualification'], 'remaining_budget':change['remaining_budget'],
+                        'source_revision':change['source_revision'], 'recorded_at':_utc(time.time())}
+                    # The complete old row is retained before adopting a comparable
+                    # baseline; the attempts column is deliberately never reset.
+                    cursor = db.execute('INSERT INTO job_evidence(session_id,evidence) VALUES(?,?)',
+                        (change['session_id'], json.dumps(evidence, sort_keys=True)))
+                    commit_evidence_ids[change['session_id']] = cursor.lastrowid
+                    db.execute('UPDATE jobs SET revision=?,due=0 WHERE session_id=?',
+                        (change['current_source_stat_revision'], change['session_id']))
+                else:
+                    _record_job_evidence(db, current, 'source_qualification_reassessment', change['qualification'])
                 db.execute('''UPDATE jobs SET status=?,input_revision=?,input_qualification=?,
                     source_check_pending=0,prior_status=NULL,token=NULL,lease_until=0 WHERE session_id=?''',
                     (change['to_status'], change['input_revision'], json.dumps(change['qualification']), change['session_id']))
@@ -292,6 +383,10 @@ def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=Fa
             def project(index):
                 _require_summary_runtime_permission(state_root, plan['runtime_permission'])
                 by_id = {c['session_id']: c for c in plan['changes']}
+                for c in plan['changes']:
+                    if (c.get('action') == 'resume_remaining_budget'
+                            and sum(r.get('session_id') == c['session_id'] for r in index['sessions']) != 1):
+                        raise ValueError('reassessment_index_changed')
                 for row in index['sessions']:
                     c = by_id.get(row.get('session_id'))
                     if c:
@@ -307,6 +402,12 @@ def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=Fa
                         if (not identity_ok or _revision([Path(p) for p in live['source_files']]) != c['current_source_stat_revision']
                                 or _input_revision(live, c['expected_job']['project'], row.get('bank_id')) != c['input_revision']):
                             raise ValueError('reassessment_source_changed')
+                        if c.get('action') == 'resume_remaining_budget':
+                            from .scenario_review_catalog import mandatory_source_review_lower_bound
+                            if (live.get('source_revision') != c['source_revision']
+                                    or qualify_summary_input(live)['status'] != 'eligible'
+                                    or mandatory_source_review_lower_bound(live) != c['remaining_budget']['mandatory_review_chars']):
+                                raise ValueError('reassessment_source_changed')
                         if c.get('action') == 'reuse_reviewed_summary':
                             from .memory_recovery_scenario import complete_same_source_metadata
                             if complete_same_source_metadata(c['restored_summary'], live) is None:
@@ -326,12 +427,25 @@ def reassess_source_jobs(state_root, session_root, *, session_ids=None, apply=Fa
                             row.update(status='raw_available_summary_' + c['to_status'],
                                        input_qualification=c['qualification'])
                 _require_summary_runtime_permission(state_root, plan['runtime_permission'])
+                if resume_remaining_budget and plan['changes']:
+                    prepare_reassessment(root, plan,
+                        {row['session_id']:row for row in index['sessions'] if row.get('session_id') in by_id},
+                        commit_evidence_ids)
                 return index
             if plan['changes']:
                 update_context_index(index_path, project)
+                if resume_remaining_budget:
+                    sync_reassessment_index(root)
             db.commit()
+            if resume_remaining_budget:
+                recover_reassessment(db, root)
         except Exception:
             db.rollback()
+            if resume_remaining_budget:
+                # A post-replace exception can leave JSON ahead of SQLite.
+                # Recover under the same locks; conflicts retain the journal.
+                db.execute('BEGIN IMMEDIATE')
+                recover_reassessment(db, root)
             raise
         finally:
             db.close()
@@ -361,14 +475,33 @@ def _navigation_title(paths):
 
 def process_summary(source, row, session_root, config):
     from .scenario_model import request_episode_bundle, request_episode_bundle_review
-    from .memory_recovery_scenario import request_source_coverage_review, publish_automated_session
+    from .memory_recovery_scenario import (request_source_coverage_review, publish_automated_session,
+                                          MandatorySourceBudgetError,MAX_COVERAGE_INPUT_CHARS)
+    from .scenario_review_catalog import mandatory_source_review_lower_bound
+    lower_bound=mandatory_source_review_lower_bound(source)
+    if lower_bound is not None and lower_bound>MAX_COVERAGE_INPUT_CHARS:
+        raise MandatorySourceBudgetError(lower_bound,MAX_COVERAGE_INPUT_CHARS,source.get('source_files'))
     params = {'base_url': config['EVOLVING_PROFILE_API_LLM_BASE_URL'],
               'api_key': config['EVOLVING_PROFILE_API_LLM_API_KEY'],
               'model': config['EVOLVING_PROFILE_API_LLM_MODEL']}
-    bundle = request_episode_bundle(source, **params)
-    review = request_episode_bundle_review(source, bundle, **params)
-    audit = request_source_coverage_review(source, bundle, **params)
-    return publish_automated_session(row, source, bundle, review, audit, session_root)
+    checkpoint = None
+    checkpoint_root = config.get('_scenario_checkpoint_root')
+    if checkpoint_root is not None:
+        from .scenario_checkpoint import load_or_generate
+        bundle, checkpoint = load_or_generate(source, params, checkpoint_root, request_episode_bundle)
+    else:
+        bundle = request_episode_bundle(source, **params)
+    try:
+        # A reusable draft is not acceptance: both independent review stages
+        # and the exact publication/source gates run again on every attempt.
+        review = request_episode_bundle_review(source, bundle, **params)
+        audit = request_source_coverage_review(source, bundle, **params)
+        return publish_automated_session(row, source, bundle, review, audit, session_root)
+    except ValueError as error:
+        if checkpoint is not None:
+            try: checkpoint.invalidate(str(error))
+            except (OSError, ValueError): pass  # Preserve the original rejection.
+        raise
 
 
 class ContextIncremental:
@@ -383,18 +516,31 @@ class ContextIncremental:
         self.bank_id = bank_id
         self.session_ids = sorted({str(uuid.UUID(sid)) for sid in session_ids or []})
         self.new_after = datetime.fromisoformat(new_after.replace('Z','+00:00')).timestamp() if new_after else None
-        with self.db() as db:
+        if pending_reassessment(self.root):
+            validate_reassessment_paths(self.root)
+        with context_index_lock(self.db_path), self.db() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS jobs(session_id TEXT PRIMARY KEY, revision TEXT,
                     source_paths TEXT, project TEXT, status TEXT, due REAL, attempts INTEGER,
                     lease_until REAL, token TEXT, error_code TEXT, completed_revision TEXT);
                 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT);
+                CREATE TABLE IF NOT EXISTS coverage_parent_leases(session_id TEXT PRIMARY KEY,token TEXT NOT NULL,
+                    expires_at REAL NOT NULL,revision TEXT NOT NULL,attempts INTEGER NOT NULL,original_status TEXT NOT NULL);
             ''')
             db.execute('BEGIN IMMEDIATE')
             columns={r[1] for r in db.execute('PRAGMA table_info(jobs)')}
             for name,kind in (('input_revision','TEXT'),('prior_status','TEXT'),('source_check_pending','INTEGER DEFAULT 0')):
                 if name not in columns: db.execute('ALTER TABLE jobs ADD COLUMN '+name+' '+kind)
             _ensure_qualification_schema(db)
+        with context_index_lock(self.db_path):
+            self._recover_reassessment()
+
+    def _recover_reassessment(self):
+        if pending_reassessment(self.root):
+            validate_reassessment_paths(self.root)
+            with context_index_lock(self.index), self.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                recover_reassessment(db, self.root)
 
     @contextmanager
     def db(self):
@@ -411,7 +557,7 @@ class ContextIncremental:
         now = time.time() if now is None else now
         if not 1 <= limit <= 4096: raise ValueError('invalid_discovery_limit')
         sources = {}
-        for path in self.session_root.rglob('rollout-*.jsonl'):
+        for path in (path for root in session_roots(self.session_root) for path in root.rglob('rollout-*.jsonl')):
             try: sid = str(uuid.UUID(path.stem[-36:]))
             except ValueError: continue
             sources.setdefault(sid, []).append(path)
@@ -517,7 +663,7 @@ class ContextIncremental:
             db.execute('BEGIN IMMEDIATE')
             db.execute("UPDATE jobs SET status='failed',error_code='worker_lease_expired' WHERE status='running' AND lease_until<=? AND attempts>=3", (now,))
             scope = ' AND session_id IN ('+','.join('?' for _ in self.session_ids)+')' if self.session_ids else ''
-            row = db.execute("SELECT * FROM jobs WHERE (attempts<3 OR source_check_pending=1) AND ((status IN ('pending','retrying') AND due<=?) OR (status='running' AND lease_until<=?))"+scope+" ORDER BY due,session_id LIMIT 1", (now, now, *self.session_ids)).fetchone()
+            row = db.execute("SELECT * FROM jobs WHERE (attempts<3 OR source_check_pending=1) AND ((status IN ('pending','retrying') AND due<=?) OR (status='running' AND lease_until<=?)) AND NOT EXISTS(SELECT 1 FROM coverage_parent_leases c WHERE c.session_id=jobs.session_id AND c.expires_at>?)"+scope+" ORDER BY due,session_id LIMIT 1", (now, now, now, *self.session_ids)).fetchone()
             if not row: return None
             token = uuid.uuid4().hex
             attempts=row['attempts']+(0 if row['source_check_pending'] else 1)
@@ -534,31 +680,52 @@ class ContextIncremental:
             if not current or current['token']!=job['token'] or current['revision']!=job['revision']:
                 return {'status':'superseded'}
             old=current['input_revision']; prior=current['prior_status']
+            try: previous_qualification=json.loads(current['input_qualification'] or '{}')
+            except (ValueError,TypeError): previous_qualification={}
+            previous_source_status=previous_qualification.get('source_status') if isinstance(previous_qualification,dict) else None
+            comparable_baseline=(isinstance(previous_qualification,dict)
+                and previous_qualification.get('input_revision_scheme')==INPUT_REVISION_SCHEME
+                and isinstance(previous_source_status,str) and bool(previous_source_status))
+            legacy_signature_unknown=(old is not None and old!=signature and
+                not comparable_baseline)
+            # Eligibility can change after normalization while the retained
+            # pre-classification messages, authorization and scope stay exact.
+            # Prove that case against the stored hash; never grant a fresh
+            # budget merely because a classifier now calls the source complete.
+            eligibility_only_change=(old is not None and old!=signature and comparable_baseline
+                and _input_revision({**source,'status':previous_source_status},job['project'],
+                                    self.bank_id or row.get('bank_id'))==old)
+            unchanged_budget=old==signature or eligibility_only_change
             if not reuse and current['source_check_pending'] and prior=='complete' and (old is None or old==signature):
                 code='scenario_accepted_summary_unavailable'
                 db.execute("UPDATE jobs SET status='failed',error_code=?,source_check_pending=0,prior_status=NULL,token=NULL,lease_until=0 WHERE session_id=?",(code,job['session_id']))
                 return {'status':'failed','error_code':code,'unchanged_source':old==signature,'provider_calls':0,'restore_terminal':True}
-            if not reuse and current['source_check_pending'] and prior in {'failed','protected'} and (old is None or old==signature):
+            if not reuse and current['source_check_pending'] and prior in {'failed','protected','waiting_source','source_not_applicable'} and (old is None or unchanged_budget or legacy_signature_unknown):
                 status=prior; code=current['error_code']
-                if old is None:
+                if old is None or legacy_signature_unknown or eligibility_only_change:
                     db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?)',('legacy-observed:'+job['session_id'],json.dumps({
-                        'previous_input_revision':'unknown','current_observed_input_revision':signature,
+                        'previous_input_revision':old or 'unknown','current_observed_input_revision':signature,
+                        'basis':'eligibility_only_signature_change' if eligibility_only_change else 'legacy_incomparable_baseline',
                         'observed_at':_utc(time.time()),'prior_status':prior,'prior_error_code':code,'prior_attempts':current['attempts']})))
-                    db.execute('UPDATE jobs SET input_revision=? WHERE session_id=?',(signature,job['session_id']))
+                    baseline={**qualify_summary_input(source),'input_revision':signature}
+                    db.execute('UPDATE jobs SET input_revision=?,input_qualification=? WHERE session_id=?',
+                        (signature,json.dumps(baseline),job['session_id']))
                 db.execute('UPDATE jobs SET status=?,source_check_pending=0,prior_status=NULL,token=NULL,lease_until=0 WHERE session_id=?',(status,job['session_id']))
-                return {'status':status,'error_code':code,'unchanged_source':old==signature,
-                    'legacy_source_revision_unknown':old is None,'provider_calls':0,'restore_terminal':True,
-                    'next_action':'source-backed recovery or independent accepted summary required; current observation is only a future comparison baseline' if old is None else None}
+                return {'status':status,'error_code':code,'unchanged_source':unchanged_budget,
+                    'legacy_source_revision_unknown':old is None or legacy_signature_unknown,'provider_calls':0,'restore_terminal':True,
+                    'next_action':'source-backed recovery or independent accepted summary required; current observation is only a future comparison baseline' if old is None or legacy_signature_unknown else None}
             if reuse:
                 attempts=current['attempts'] if current['source_check_pending'] else max(0,current['attempts']-1)
-            elif old is not None and old!=signature:
+            elif old is not None and not unchanged_budget and not legacy_signature_unknown:
                 _record_job_evidence(db, current, 'semantic_source_budget_transition', qualify_summary_input(source))
                 attempts=1
             elif current['source_check_pending']: attempts=current['attempts']+1
             else: attempts=current['attempts']
             if not reuse and attempts>3:
-                db.execute("UPDATE jobs SET status='failed',source_check_pending=0,prior_status=NULL,token=NULL,lease_until=0 WHERE session_id=?",(job['session_id'],))
-                return {'status':'failed','error_code':current['error_code'],'unchanged_source':True,'provider_calls':0,'restore_terminal':True}
+                code=current['error_code']
+                if code in SOURCE_WAIT_ERRORS:code='scenario_model_attempt_budget_exhausted'
+                db.execute("UPDATE jobs SET status='failed',error_code=?,source_check_pending=0,prior_status=NULL,token=NULL,lease_until=0 WHERE session_id=?",(code,job['session_id']))
+                return {'status':'failed','error_code':code,'unchanged_source':True,'provider_calls':0,'restore_terminal':True}
             qualification = {**qualify_summary_input(source), 'input_revision': signature}
             db.execute('UPDATE jobs SET input_revision=?,input_qualification=?,attempts=?,source_check_pending=0,prior_status=NULL WHERE session_id=?',
                 (signature,json.dumps(qualification),attempts,job['session_id']))
@@ -617,20 +784,98 @@ class ContextIncremental:
                 _record_job_evidence(db, current, 'summary_job_' + status, qualification)
             changed = db.execute('UPDATE jobs SET status=?,due=?,lease_until=0,token=NULL,error_code=? WHERE session_id=? AND revision=? AND token=?',
                 (status, now + min(300, 30 * 2 ** job['attempts']), code, job['session_id'], job['revision'], job['token'])).rowcount
-            if changed and qualification is not None:
+            if changed and qualification is not None and qualification.get('status')=='waiting_source':
+                # An unavailable/ambiguous source is not a new semantic input.
+                # Preserve the last comparable baseline and its spent budget.
+                db.execute('UPDATE jobs SET source_check_pending=0,prior_status=NULL WHERE session_id=?',(job['session_id'],))
+            elif changed and qualification is not None:
                 db.execute('UPDATE jobs SET input_revision=?,input_qualification=?,source_check_pending=0,prior_status=NULL WHERE session_id=?',
                     (qualification['input_revision'], json.dumps(qualification), job['session_id']))
         if changed and status in {'failed','protected','waiting_source','source_not_applicable'}:
             def mark(index):
                 for row in index['sessions']:
                     if row.get('session_id') == job['session_id'] and row.get('source_stat_revision') == job['revision']:
-                        row.update(status='raw_available_summary_'+status, error_code=code)
+                        row.update(status='raw_available_summary_'+status, error_code=code, updated_at=_utc(now))
                         if qualification is not None: row['input_qualification'] = qualification
+                        row.pop('summary_failure_detail', None)
                         if failure_detail is not None: row['summary_failure_detail']=failure_detail
                 return index
             update_context_index(self.index, mark)
         self.progress()
         return status
+
+    @_serialized
+    def acquire_coverage_parent_lease(self,session_id,revision,*,now=None):
+        now=time.time() if now is None else now
+        if not summary_runtime_permission(self.root.parent)['allowed']:raise ValueError('source_or_permission_changed')
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM jobs WHERE session_id=?',(session_id,)).fetchone()
+            if row is None or row['revision']!=revision:raise ValueError('parent_job_changed')
+            if db.execute('SELECT 1 FROM coverage_parent_leases WHERE session_id=? AND expires_at>?',(session_id,now)).fetchone():raise ValueError('parent_job_busy')
+            if row['attempts']>=3:raise ValueError('parent_attempts_exhausted')
+            if row['status'] not in {'complete','waiting_source','failed'}:raise ValueError('parent_job_busy')
+            token=uuid.uuid4().hex;attempts=row['attempts']+1
+            _record_job_evidence(db,row,'coverage_model_trial_shared_parent_attempt')
+            db.execute('UPDATE jobs SET attempts=? WHERE session_id=?',(attempts,session_id))
+            db.execute('INSERT OR REPLACE INTO coverage_parent_leases VALUES(?,?,?,?,?,?)',
+                (session_id,token,now+self.lease_seconds,revision,attempts,row['status']))
+        return {'session_id':session_id,'token':token,'revision':revision,'attempts':attempts,
+            'expires_at':now+self.lease_seconds,'original_status':row['status']}
+
+    def coverage_parent_lease_valid(self,lease,*,now=None):
+        now=time.time() if now is None else now
+        with self.db() as db:
+            row=db.execute('SELECT * FROM coverage_parent_leases WHERE session_id=? AND token=? AND expires_at>?',
+                (lease['session_id'],lease['token'],now)).fetchone()
+            parent=db.execute('SELECT * FROM jobs WHERE session_id=?',(lease['session_id'],)).fetchone()
+        return bool(row and parent and parent['revision']==lease['revision'] and parent['attempts']==lease['attempts']
+            and parent['status']==lease['original_status'])
+
+    @_serialized
+    def release_coverage_parent_lease(self,lease):
+        with self.db() as db:db.execute('DELETE FROM coverage_parent_leases WHERE session_id=? AND token=?',(lease['session_id'],lease['token']))
+
+    def process_coverage(self,session_id,settings,*,provider=None,max_leases=64):
+        """Exact source work: shadow is free; a paid pilot shares one parent attempt."""
+        from .scenario_coverage_incremental import process_coverage_job
+        sid=str(uuid.UUID(str(session_id)))
+        with self.db() as db:
+            current=db.execute('SELECT * FROM jobs WHERE session_id=?',(sid,)).fetchone()
+        row=next((r for r in read_context_index(self.index)['sessions'] if r.get('session_id')==sid),None)
+        permission=summary_runtime_permission(self.root.parent)
+        def current_permission():
+            from .scenario_coverage_contract import coverage_permission
+            return coverage_permission(self.root.parent)
+        if current is None or row is None or not permission['allowed'] or (self.bank_id and row.get('bank_id')!=self.bank_id):
+            return {'session_id':sid,'status':'unavailable','reason':'scope_or_permission_unverified','model_calls':0,'published':False}
+        job={**dict(current),'bank_id':row.get('bank_id'),'project_key':row.get('project_key'),'permission':current_permission()}
+        def current_scope():
+            latest=next((r for r in read_context_index(self.index)['sessions'] if r.get('session_id')==sid),{})
+            return {'session_id':sid,'bank_id':latest.get('bank_id'),'project_key':latest.get('project_key'),
+                'identity_kind':'session_scoped_workspace_navigation_only'}
+        lease=None
+        def authorize():
+            nonlocal lease
+            if lease is None:lease=self.acquire_coverage_parent_lease(sid,current['revision'])
+            elif not self.coverage_parent_lease_valid(lease):raise ValueError('parent_lease_expired')
+        def lease_valid():return lease is None or self.coverage_parent_lease_valid(lease)
+        try:
+            result=process_coverage_job(job,self.session_root,settings,store_root=self.root/'coverage',provider=provider,
+                max_leases=max_leases,permission_getter=current_permission,scope_getter=current_scope,
+                authorize_request=authorize,parent_lease_valid=lease_valid)
+            if lease is not None:
+                result.update(attempts=lease['attempts'],parent_attempt_consumed=True)
+                from .scenario_coverage_budget import CoverageBudget
+                budget_path=self.root/'coverage/requests.sqlite3'
+                if budget_path.is_file():
+                    with sqlite3.connect(budget_path) as db:db.execute('UPDATE parents SET attempts=MAX(attempts,?) WHERE job=?',(lease['attempts'],sid))
+                    if 'budget' in result:result['budget']['attempts']=lease['attempts']
+                from .scenario_coverage_incremental import _write
+                _write(self.root/'coverage/status'/f'{sid}.json',result)
+            return result
+        finally:
+            if lease is not None:self.release_coverage_parent_lease(lease)
 
     def run_once(self, config, *, now=None, processor=process_summary):
         job = self.claim(now=now)
@@ -705,7 +950,10 @@ class ContextIncremental:
                 'source_path':item.get('source_path'), 'raw_line_sha256':item.get('raw_line_sha256')}} for item in source['messages']]
             if any(not turn['write_policy']['knowledge_allowed'] for turn in retention_turns(messages)):
                 return {'status': self.fail(job, 'scenario_knowledge_write_prohibited', now=now, terminal=True, protected=True)}
-            published = processor(source, row, self.session_root, config)
+            processor_config = config
+            if processor is process_summary:
+                processor_config = {**config, '_scenario_checkpoint_root': self.root / 'summary-checkpoints'}
+            published = processor(source, row, self.session_root, processor_config)
             if published.get('status') not in {'model_reviewed', 'episode_directory_ready'}:
                 raise ValueError('scenario_model_review_not_accepted')
             published={**published,'context_metadata_exclusions':source.get('context_metadata_exclusions') or [],
@@ -724,11 +972,12 @@ class ContextIncremental:
                 'scenario_state_phase_invalid','scenario_summary_budget_or_empty','scenario_episode_model_response_invalid',
                 'scenario_review_invalid','scenario_episode_review_invalid','scenario_model_review_not_accepted',
                 'automated_source_coverage_incomplete'}
-            from .memory_recovery_scenario import CoverageError
+            from .memory_recovery_scenario import CoverageError,MandatorySourceBudgetError
             from .scenario_state_v3 import StateValidationError
             detail=error.safe_detail() if isinstance(error,(CoverageError,StateValidationError)) else None
             return {'status':self.fail(job,code,now=now,terminal=not retryable,failure_detail=detail),
-                    'error_code':code,'session_id':job['session_id'],**({'failure_detail':detail} if detail is not None else {})}
+                    'error_code':code,'session_id':job['session_id'],**({'failure_detail':detail} if detail is not None else {}),
+                    **({'provider_calls':0,'raw_fallback_available':error.raw_available} if isinstance(error,MandatorySourceBudgetError) else {})}
         except Exception:
             return {'status': self.fail(job, 'scenario_provider_unavailable', now=now)}
 

@@ -16,6 +16,8 @@ export type FlowPrompt = {
   at: string;
   user_prompt: string;
   source?: string;
+  origin_kind?: string;
+  origin_status?: string;
   system_probe?: { actor?: string; state?: string; calls?: number; returned_count?: number; text_returned_count?:number;locator_returned_count?:number;candidate_count?: number | null; context_tokens?: number; max_tokens?: number; token_counter?: string; reason?: string; error_type?: string; delivery_stage?: string; admission?: { mode?: string; admitted_count?: number; rejected_count?: number; focus_terms?: string[]; reason?: string } } | null;
   history_plan?: { recommended_route?: string; history_dependency?: string; minimum_action?: string; reason?: string; required_slots?: string[]; context_source?: string; boundary?: string; fallback_route?: string | null; fallback_trigger?: string | null; candidate_policy?: string } | null;
   task_state?: { current_objective?:string; current_message?:string; continuation?:boolean; continuation_context?:string|null; source?:string; authority?:string } | null;

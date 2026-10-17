@@ -34,6 +34,16 @@ git status --short
 
 `release-preflight.py` 会检查产品版本在 VERSION、README、NOTICE、CHANGELOG 和链路页标识中是否一致，并打印当前分支、远端和提交作者快照。`verify-package.sh` 再检查结构、秘密/个人数据模式及核心 Python 语法。它们**不能**证明前端功能、Bank 迁移、MCP 宿主送达或 GitHub Release 已完成。
 
+部署前后还需用既有唯一真相源审计器核对完整生产 Python 代码目录：
+
+```bash
+python3 host-adapter/source_of_truth_audit.py \
+  --code-source /path/to/approved-source \
+  --code-runtime /path/to/installed-runtime --json
+```
+
+两处路径必须是独立的已批准部署源码与实际安装目录，不能拿个人运行目录和脱敏模板直接比较，也不能把运行目录与自身比较。默认覆盖 Host Adapter、Guidance、Controller、Status 的全部生产 Python 文件，包括未被入口直接导入的残留文件；退出码 0 表示磁盘代码一致，1 表示差异，2 表示无法完整核验。测试/缓存、第三方依赖、配置与记忆数据不在此检查范围；目录不可读、非普通文件或不受核验的链接不能冒称一致。代码一致也不证明已运行的 Python/MCP 进程已加载新模块，仍需检查实际进程回执。差异需逐项审查，旧文件优先可恢复隔离，不得整目录覆盖私人运行配置或清空原始记忆。
+
 按本次改动的组件补跑对应全套测试和生产构建，例如 Host Adapter 的 `unittest discover`、Console 的 `npm test`、`tsc --noEmit` 和 `npm run build`；API/Controller/Status 的测试也应在变更到它们时执行。Web 交互改动还要在桌面和手机视口检查截图、点击、滚动、空态和浏览器错误。记录测试命令、数量、时间、失败/跳过范围，不把开发仓库的通过结果代替发行仓库的验收。
 
 ## 发布后的回读

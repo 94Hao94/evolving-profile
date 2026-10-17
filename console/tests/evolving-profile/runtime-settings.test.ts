@@ -17,6 +17,18 @@ beforeEach(async () => {
 afterEach(async () => { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); });
 
 describe("runtime recall policy settings", () => {
+  it("persists bounded coverage settings without enabling a model pilot implicitly",async()=>{
+    const response=await route.POST(request({scenario_coverage:{mode:"source_shadow",limits:{output_bytes:4096},model_trial:false}}));
+    expect(response.status).toBe(200);
+    const result=await response.json();expect(result.scenario_coverage).toEqual({mode:"source_shadow",limits:{output_bytes:4096},model_trial:false,review_protocol:"segment_coverage.v1"});
+    for(const value of [{mode:"assisted",model_trial:"true"},{mode:"assisted",limits:{model_requests:999}},{mode:"source_shadow",limits:{output_bytes:0}}]){
+      expect((await route.POST(request({scenario_coverage:value}))).status).toBe(400);
+    }
+    const saved=JSON.parse(await readFile(path.join(root,"config/runtime-settings.json"),"utf8"));
+    expect(saved.scenario_coverage.model_trial).toBe(false);
+    expect(saved.scenario_coverage.limits.output_bytes).toBe(4096);
+    expect(saved.providers).toBeUndefined();
+  });
   it("normalizes legacy settings and exposes independent effective RAG policy without enabling it", async () => {
     const value = await (await route.GET()).json();
     expect(value.recall_policy).toEqual({ default_min_relevance: "weak", user_memory: "inherit", agent_memory: "inherit", advanced: { allow_transferable_methods: true, allow_background: true, historical_mode: "reference_only", scope_unknown_mode: "keep_navigation", adaptive_enabled: true } });

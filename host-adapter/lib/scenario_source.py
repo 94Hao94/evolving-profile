@@ -9,9 +9,34 @@ import uuid
 from pathlib import Path
 
 from .content import extract_user_request, read_transcript
+from .session_paths import session_paths
 
 
 NORMALIZATION_VERSION = "scenario-source-v2"
+
+
+def _paired_skill_context(text, previous, turn_id):
+    """Recognize a complete native definition paired with its explicit invocation.
+
+    This is structural reference classification, not proof of authorship.
+    Unpaired, quoted, mixed and unknown formats remain semantic source text.
+    """
+    if not previous or previous.get('role') != 'user' or not turn_id or previous.get('turn_id') != turn_id:
+        return False
+    if len(re.findall(r'</?skill\b',text,re.I))!=2:return False
+    match=re.fullmatch(r'\s*<skill>\s*<name>([^<>\r\n]+)</name>\s*<path>([^<>\r\n]+)</path>\s*'
+                      r'---\r?\n(.*?)\r?\n---\r?\n([\s\S]+?)\s*</skill>\s*',text,re.S)
+    if not match:return False
+    name,path,frontmatter,_=match.groups()
+    frontmatter=frontmatter.replace('\r\n','\n')
+    if not name.strip() or not path.endswith(('/SKILL.md','\\SKILL.md')):return False
+    names=re.findall(r'^name:\s*([^\r\n]+)$',frontmatter,re.M)
+    descriptions=re.findall(r'^description:\s*([^\r\n]+)$',frontmatter,re.M)
+    if names!=[name] or len(descriptions)!=1 or not descriptions[0].strip():return False
+    invocation=f'[${name}]({path})'
+    # Require the actual invocation at the beginning, not an embedded quoted example.
+    authored=previous.get('text','').lstrip()
+    return authored.startswith(invocation) and (len(authored)==len(invocation) or authored[len(invocation)].isspace())
 
 
 def normalize_scenario_user(content):
@@ -51,15 +76,15 @@ def read_session_source(thread_id: str, session_root: str | Path, *, max_chars: 
     if type(max_chars) is not int or max_chars < 1:
         raise ValueError("max_chars_must_be_positive")
     root = Path(session_root).expanduser()
-    paths = sorted(root.rglob(f"rollout-*-{identity}.jsonl")) if root.is_dir() else []
+    located = session_paths(root,identity)
+    paths = located['paths']
     base = {"thread_id": identity, "source": "codex_thread_history", "source_files": [str(path) for path in paths],
             "coverage": "visible_user_and_final_assistant_messages_only_not_tool_outputs", "messages": []}
-    if not paths:
-        return {**base, "status": "source_missing", "total_chars": 0, "user_count": 0, "assistant_count": 0, "source_revision": None}
-    if len(paths) > 8:
-        return {**base, "status": "too_many_source_files", "total_chars": 0, "user_count": 0, "assistant_count": 0, "source_revision": None}
+    if located['status'] != 'ready':
+        return {**base, "status": located['status'], "total_chars": 0, "user_count": 0, "assistant_count": 0, "source_revision": None}
 
     messages = []
+    budget_messages = []
     context_metadata = []
     for path in paths:
         for item in read_transcript(str(path)):
@@ -78,10 +103,22 @@ def read_session_source(thread_id: str, session_root: str | Path, *, max_chars: 
                         'turn_id':source_record.get('turn_id'),'source_path':str(path),
                         'byte_offset':source_record.get('byte_offset'),'raw_line_sha256':raw_hash})
             if not text: continue
-            messages.append({"evidence_id": raw_hash[:16], "role": role, "text": text,
+            message={"evidence_id": raw_hash[:16], "role": role, "text": text,
                              "turn_id": source_record.get("turn_id"), "at": source_record.get("recorded_at"),
                              "source_path": str(path), "byte_offset": source_record.get("byte_offset"),
-                             "raw_line_sha256": raw_hash})
+                             "raw_line_sha256": raw_hash}
+            # Preserve the pre-classification budget input: normalizer upgrades
+            # must not manufacture a fresh provider retry allowance.
+            previous=budget_messages[-1] if budget_messages else None
+            budget_messages.append(message)
+            if role=='user' and _paired_skill_context(text,previous,message['turn_id']):
+                context_metadata.append({**{k:message[k] for k in ('evidence_id','turn_id','source_path','byte_offset','raw_line_sha256')},
+                    'metadata_kind':'native_paired_skill_definition','original_role':'user','fact_authority':'none',
+                    'excluded_from_semantic_input':True,'excluded_chars':len(text),
+                    'paired_user_evidence_id':previous['evidence_id'],
+                    'normalization_scope':'whole_structurally_paired_reference_not_authorship_proof'})
+                continue
+            messages.append(message)
     for position, item in enumerate(messages, start=1):
         item["model_ref"] = f"m{position}"
     total_chars = sum(len(item["text"]) for item in messages)
@@ -91,6 +128,7 @@ def read_session_source(thread_id: str, session_root: str | Path, *, max_chars: 
               'context_metadata_exclusions':context_metadata,'source_record_coverage':{
                   'semantic_message_count':len(messages),'excluded_context_metadata_count':len(context_metadata),
                   'review_scope':'semantic_messages_with_explicit_host_context_exclusions_not_fact_authority'}}
+    if len(budget_messages)!=len(messages):result['_budget_messages']=budget_messages
     if not messages:
         return {**result, "status": "source_empty"}
     if total_chars > max_chars:

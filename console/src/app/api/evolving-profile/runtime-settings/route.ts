@@ -8,6 +8,7 @@ import { access, stat } from "node:fs/promises";
 import { JEV_BASE_URL, JEV_MODEL, normalizeJevJudge } from "@/lib/jev-provider";
 import { effectiveRecallPolicy, normalizeRecallSettings, RECALL_POLICY_DEFAULTS, RAG_MINIMUM_RELEVANCE_DEFAULT, validateRecallSettingsInput } from "@/lib/recall-policy";
 import { maskRetrievalModels, restoreMaskedRetrievalKeys } from "@/lib/retrieval-model-identity";
+import {normalizeCoverageSettings,coverageRegistry} from "@/lib/scenario-coverage";
 
 const stateRoot = EP_STATE_ROOT;
 const settingsPath = path.join(stateRoot, "config/runtime-settings.json");
@@ -17,6 +18,7 @@ const agentProcessModuleNames = ["agent_process_trajectory", "agent_process_obse
 const moduleNames = ["facts", "experiences", "entities", "preferences", "scenario_summary", "mental_models", "source_readback", "background_reflection", "agent_process_memory", ...agentProcessModuleNames] as const;
 const defaults = {
   schema: "evolving-profile.runtime-settings.v1",
+  scenario_coverage: normalizeCoverageSettings(),
   recall_policy: { ...RECALL_POLICY_DEFAULTS },
   modules: Object.fromEntries(moduleNames.map((name) => [name, { ...actions }])) as Record<string, typeof actions>,
   routing: { mode: "auto", ep_enabled: true, external_rag_enabled: false, allow_parallel: false, conflict_policy: "show_both" },
@@ -58,6 +60,7 @@ async function readSettings() {
   validateRecallSettingsInput(stored);
   const value = normalizeRecallSettings(merge(base, stored));
   value.retrieval_models.judge = normalizeJevJudge(value.retrieval_models.judge);
+  value.scenario_coverage=normalizeCoverageSettings(value.scenario_coverage);
   return value;
 }
 
@@ -143,7 +146,7 @@ function embeddingSignature(model: any) {
 export async function GET() {
   try {
     const value = await readSettings();
-    return NextResponse.json({ ...mask(value), recall_policy_effective: effectiveRecallPolicy(value) });
+    return NextResponse.json({ ...mask(value), scenario_coverage_contract:coverageRegistry, recall_policy_effective: effectiveRecallPolicy(value) });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "runtime_settings_failed" }, { status: 400 }); }
 }
 
@@ -151,9 +154,22 @@ export async function POST(request: Request) {
   try {
     const current = await readSettings();
     const incoming = await request.json();
+    if(incoming?.scenario_coverage!==undefined)normalizeCoverageSettings(incoming.scenario_coverage);
+    if(incoming && !Array.isArray(incoming) && Object.keys(incoming).length===1 && incoming.scenario_coverage!==undefined){
+      let stored:Record<string,unknown>={};
+      try{stored=JSON.parse(await readFile(settingsPath,"utf8"));}catch(error){if(!(error instanceof Error && "code" in error && error.code==="ENOENT"))throw error;}
+      const normalized=normalizeCoverageSettings(incoming.scenario_coverage);
+      const persisted={...stored,scenario_coverage:normalized,updated_at:new Date().toISOString()};
+      await mkdir(path.dirname(settingsPath),{recursive:true});const temporary=`${settingsPath}.${randomUUID()}.tmp`;
+      try{await writeFile(temporary,JSON.stringify(persisted,null,2)+"\n",{mode:0o600,flag:"wx"});await rename(temporary,settingsPath);}
+      finally{await unlink(temporary).catch(()=>undefined);}
+      return NextResponse.json({...mask({...current,scenario_coverage:normalized}),applied:true});
+    }
     validateRecallSettingsInput(incoming);
     const value = normalizeRecallSettings(merge(current, incoming));
     delete value.recall_policy_effective;
+    delete value.scenario_coverage_contract;
+    value.scenario_coverage=normalizeCoverageSettings(value.scenario_coverage);
     value.retrieval_models.judge = normalizeJevJudge(value.retrieval_models.judge);
     value.rag.embedding_profile_id = value.rag.embedding_profile_id || value.retrieval_models.embedding.profile_id;
     value.rag.reranker_profile_id = value.rag.reranker_profile_id || value.retrieval_models.reranker.profile_id;

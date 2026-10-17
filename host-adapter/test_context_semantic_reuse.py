@@ -180,3 +180,63 @@ def test_completed_transport_append_with_lost_review_evidence_fails_closed(tmp_p
     result=p.run_once({},now=400,processor=lambda *_:(_ for _ in ()).throw(AssertionError('provider called')))
     assert result['error_code']=='scenario_accepted_summary_unavailable'
     assert result['provider_calls']==0
+
+
+def test_forty_two_excluded_context_appends_cannot_restart_failed_model_generation(tmp_path):
+    import uuid
+    sid=str(uuid.uuid4());root=tmp_path/'sessions';path=rollout(root,sid)
+    p=ContextIncremental(tmp_path/'state',root);p.discover(now=100);calls=[]
+    def invalid(*_):calls.append(1);raise ValueError('scenario_state_invalid')
+    for tick in (200,500,1000):p.run_once({},now=tick,processor=invalid)
+    for index in range(42):
+        tick=2000+index*1000
+        with path.open('a') as stream:
+            stream.write(json.dumps({'type':'response_item','payload':{'type':'message','role':'user',
+                'content':[{'type':'input_text','text':'<external_codex_apps_open_page>'+json.dumps({'page_id':str(index)})+'</external_codex_apps_open_page>'}]}})+'\n')
+        p.discover(now=tick)
+        result=p.run_once({},now=tick+100,processor=invalid)
+        assert result['status']=='failed' and result['unchanged_source'] is True
+    assert len(calls)==3
+    with p.db() as db:
+        assert db.execute('SELECT attempts FROM jobs').fetchone()[0]==3
+        events=[json.loads(r[0])['kind'] for r in db.execute('SELECT evidence FROM job_evidence')]
+    assert 'semantic_source_budget_transition' not in events
+
+
+def test_budget_signature_ignores_raw_locator_noise_but_keeps_roles_scope_and_permissions():
+    import copy
+    from lib.context_incremental import _input_revision
+    from lib.scenario_source import revision_for_messages
+    source={'thread_id':'session','status':'complete','source_files':['old-path'], 'messages':[
+        {'evidence_id':'u','role':'user','text':'Do not write to memory.','turn_id':'t',
+         'raw_line_sha256':'old-hash','byte_offset':10,'source_path':'old-path'}]}
+    source['source_revision']=revision_for_messages(source['messages'])
+    signature=_input_revision(source,'/project','bank')
+    changed=copy.deepcopy(source)
+    changed['source_files']=['new-path'];changed['context_metadata_exclusions']=[{'page_id':'metadata'}]
+    changed['messages'][0].update(raw_line_sha256='new-hash',byte_offset=50,source_path='new-path',evidence_id='new-id')
+    changed['source_revision']=revision_for_messages(changed['messages'],changed['context_metadata_exclusions'])
+    assert _input_revision(changed,'/project','bank')==signature
+    assert changed['source_revision']!=source['source_revision']  # Publication still binds raw source.
+    assert _input_revision(changed,'/different','bank')!=signature
+    assert _input_revision(changed,'/project','different-bank')!=signature
+    for field,value in [('role','assistant'),('text','You may write to memory.'),('turn_id','different-turn')]:
+        adverse=copy.deepcopy(changed);adverse['messages'][0][field]=value
+        assert _input_revision(adverse,'/project','bank')!=signature
+
+
+def test_legacy_raw_signature_migration_does_not_grant_a_failed_job_new_paid_budget(tmp_path):
+    import uuid
+    sid=str(uuid.uuid4());root=tmp_path/'sessions';path=rollout(root,sid)
+    p=ContextIncremental(tmp_path/'state',root);p.discover(now=100)
+    with p.db() as db:
+        db.execute("UPDATE jobs SET status='failed',attempts=3,error_code='scenario_state_invalid',input_revision=?",('0'*64,))
+    append_tool(path);p.discover(now=300)
+    def forbidden(*_):raise AssertionError('signature migration reached provider')
+    result=p.run_once({},now=400,processor=forbidden)
+    assert result['status']=='failed' and result['provider_calls']==0
+    assert result['legacy_source_revision_unknown'] is True
+    with p.db() as db:
+        assert db.execute('SELECT attempts FROM jobs').fetchone()[0]==3
+        witness=json.loads(db.execute('SELECT value FROM metadata WHERE key=?',('legacy-observed:'+sid,)).fetchone()[0])
+    assert witness['previous_input_revision']=='0'*64

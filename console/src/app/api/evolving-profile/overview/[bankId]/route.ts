@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { buildOperationalOverview, type DispatcherActivity, type LocalRetentionEvidence, type LlmEvidence, type OperationEvidence } from "@/lib/operational-overview";
 import { dataplaneBankUrl, getDataplaneHeaders } from "@/lib/evolving-client";
 import { GET as getRuntime } from "@/app/api/evolving-profile/runtime/route";
+import { readScenarioSnapshot } from "@/lib/scenario-data";
+import { scenarioOperationalEvidence } from "@/lib/scenario-operational";
 
 const ROOT = EP_STATE_ROOT;
 
@@ -157,7 +159,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
   const start = new Date(now - 24 * 60 * 60 * 1000).toISOString();
   const end = new Date(now + 1).toISOString();
   const failurePath = `/llm-requests?status=error&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`;
-  const [runtimeResponse, llmFailures, failureGroups, latestRequest, failedOps, recentRetain, stats, events, map, localRetention] = await Promise.all([
+  const [runtimeResponse, llmFailures, failureGroups, latestRequest, failedOps, recentRetain, stats, events, map, localRetention, scenario] = await Promise.all([
     getRuntime(),
     pages(bankId, failurePath, "items"),
     bankRows(bankId, `${failurePath}&group=true&count_only=true&limit=1`, "items"),
@@ -166,6 +168,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
     bankRows(bankId, "/operations?type=retain&status=completed&limit=1", "operations"),
     bankStats(bankId),
     backupEvents(), mapStatus(), localRetentionStatus(bankId, now),
+    readScenarioSnapshot(bankId).then(scenarioOperationalEvidence).catch(() => scenarioOperationalEvidence(null)),
   ]);
   const runtime = await runtimeResponse.json();
   const related = await relatedSuccesses(bankId, llmFailures.items, start, end);
@@ -174,7 +177,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ban
     relatedSuccessStatus: related.status, relatedTracesChecked: related.checked };
   const operations = { status: failedOps.status === "observed" && recentRetain.status === "observed" ? "observed" as const : "unavailable" as const,
     items: [...failedOps.items, ...recentRetain.items] as OperationEvidence[], total: failedOps.total, returned: failedOps.items.length };
-  const result = buildOperationalOverview({ now, runtime, backupEvents: events, llm, operations, bankStats: stats, map, localRetention });
+  const result = buildOperationalOverview({ now, runtime, backupEvents: events, llm, operations, bankStats: stats, map, localRetention, scenario });
   return NextResponse.json({ ...result, bankId },
     { headers: { "Cache-Control": "no-store" } });
 }

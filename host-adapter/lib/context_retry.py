@@ -12,7 +12,10 @@ SOURCE_WAIT_ERRORS = frozenset({
     'scenario_source_missing', 'scenario_source_empty', 'scenario_source_incomplete',
     'scenario_over_budget', 'scenario_too_many_source_files',
     'scenario_source_changed', 'automated_source_revision_changed',
+    'scenario_source_ambiguous', 'scenario_source_identity_mismatch',
     'automated_source_coverage_budget_exceeded', 'scenario_episode_first_message_not_user',
+    'scenario_source_compressed_unavailable', 'scenario_source_comparison_incomplete',
+    'scenario_source_scan_incomplete',
 })
 
 

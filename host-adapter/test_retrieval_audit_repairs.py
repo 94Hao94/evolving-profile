@@ -91,7 +91,9 @@ def test_partial_appended_line_does_not_lose_later_raw_evidence(tmp_path):
     path = root / f"rollout-test-{sid}.jsonl"
     raw = json.dumps({"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"text": "new evidence"}]}}).encode()
     path.write_bytes(raw[:15])
-    assert read_evidence(sid, root, cache_root=tmp_path / "cache")["status"] == "source_empty"
+    partial = read_evidence(sid, root, cache_root=tmp_path / "cache")
+    assert partial["status"] == "source_scan_incomplete"
+    assert partial['coverage']['scan_stop_reason'] == 'incomplete_append'
     with path.open("ab") as f: f.write(raw[15:] + b"\n")
     assert "new evidence" in read_evidence(sid, root, cache_root=tmp_path / "cache")["source"]["text"]
 

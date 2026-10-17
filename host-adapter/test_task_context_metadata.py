@@ -94,7 +94,7 @@ class TaskContextMetadataTest(unittest.TestCase):
 
     def test_actual_complete_environment_filesystem_schema_is_metadata_only(self):
         from lib.content import extract_task_user_request
-        text='<environment_context>\n<cwd>/Users/apple/Documents/Codex</cwd>\n<shell>zsh</shell>\n<current_date>2026-10-09</current_date>\n<timezone>Asia/Shanghai</timezone>\n<filesystem><workspace_roots><root>/project</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem>\n</environment_context>'
+        text='<environment_context>\n<cwd>/Users/example/Documents/Codex</cwd>\n<shell>zsh</shell>\n<current_date>2026-10-09</current_date>\n<timezone>Asia/Shanghai</timezone>\n<filesystem><workspace_roots><root>/project</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem>\n</environment_context>'
         self.assertEqual(extract_task_user_request(text),'')
         self.assertEqual(extract_task_user_request(text+'\nDo not deploy.'),'Do not deploy.')
 

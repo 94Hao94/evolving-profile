@@ -10,6 +10,8 @@ from selector import get_preference
 
 
 def refresh_runtime_guidance(repo, request: dict) -> dict:
+    from context_binding import bind_preference_request
+    request = bind_preference_request(request)
     event = request.get('runtime_event')
     if not isinstance(event, dict) or not str(event.get('failure') or '').strip():
         raise ValueError('runtime_event_required')

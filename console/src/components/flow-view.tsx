@@ -25,7 +25,7 @@ import {
 import { inlineUiText } from "@/lib/inline-i18n";
 import { ExecutionTopologyCanvas } from "@/components/execution-topology-canvas";
 import { SourceNavigationDetails } from "./source-navigation-details";
-import {PromptSourceSummary,type PromptSourceCounts} from "./prompt-source-summary";
+import {PromptSourceSummary,PromptSourceEmpty,PromptOriginBadge,type PromptSourceCounts} from "./prompt-source-summary";
 type NodeId = "entry" | "map" | "guidance" | "history" | "answer";
 type ToolStatus = "observed" | "window_observed" | "not_observed";
 type MemoryMapNode = {
@@ -759,7 +759,7 @@ export function FlowView() {
           <div className="border-b bg-muted/20 px-3 py-3">
             <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
-                {english ? copy.prompts : inlineUiText(copy.prompts)}
+                {promptSource==='natural' ? (english ? copy.prompts : inlineUiText(copy.prompts)) : 'Prompt'}
                 <ActionButton
                   variant="outline"
                   type="button"
@@ -772,7 +772,7 @@ export function FlowView() {
                   <RefreshCw className="h-3.5 w-3.5" />
                 </ActionButton>
               </span>
-              <span>{english ? `Total ${rows.length || "-"} items` : `共 ${rows.length || "-"} 条`}</span>
+              <span>{english ? `Total ${loading ? "—" : rows.length} items` : `共 ${loading ? "—" : rows.length} 条`}</span>
             </div>
             <input
               value={query}
@@ -788,7 +788,7 @@ export function FlowView() {
             {loading && <div className="p-3 text-sm text-muted-foreground">{inlineUiText("正在读取链路记录…")}</div>}
             {error && <div className="p-3 text-sm text-destructive">{error}</div>}
             {!loading && !error && rows.length === 0 && (
-              <div className="p-3 text-sm text-muted-foreground">{flowText(promptSource==="natural" ? "promptSourceEmptyNatural":"promptSourceEmptyFiltered")}</div>
+              <PromptSourceEmpty counts={sourceCounts} source={promptSource} onBrowse={()=>{setCursor(0);setPromptSource('all');}} />
             )}
             {!loading &&
               !error &&
@@ -805,7 +805,8 @@ export function FlowView() {
                     {new Date(row.at).toLocaleString(english ? "en-US" : locale)}
                   </div>
                   <div className="mt-1 line-clamp-3 leading-5">{row.user_prompt}</div>
-                  <div className="mt-2 flex gap-2 text-[11px] text-muted-foreground">
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                    <PromptOriginBadge kind={row.origin_kind} status={row.origin_status} />
                     <span>{entryStateLabel(row.routes?.entry_guidance)}</span>
                     <span>
                       {(row.prompt_id === currentRow?.prompt_id ? currentRow : row)?.memory_route_receipt?.tool_events?.length

@@ -2,6 +2,14 @@ import type { TopologyNode, TopologyNodeData } from "./topology-spec";
 import type { FlowReceipt } from "./flow-receipt";
 import { inlineUiText } from "./inline-i18n";
 
+export function topologySourceScope(events:Array<{source_type?:string;[key:string]:unknown}>,english:boolean,fallback:string){
+  if(!events.length)return fallback;
+  const host=events.filter(event=>event.source_type==='codex_host_tool_result').length;
+  if(host===events.length)return english?'Same Prompt / retained host tool results (does not imply answer adoption)':'同一 Prompt / 宿主原始工具结果回放（不代表回答采用）';
+  if(host)return english?'Same Prompt / mixed host results and EP invocation receipts (check delivery per item)':'同一 Prompt / 混合宿主结果与 EP 调用回执（逐条核对送达）';
+  return english?'Same Prompt / EP invocation receipts (host delivery unverified)':'同一 Prompt / EP 调用回执（宿主送达尚未核验）';
+}
+
 export function summarizeReceiptScopes(receipts:FlowReceipt[]) {
   const unique=[...new Map(receipts.map((receipt,index)=>[`${receipt.session_id || ""}:${receipt.turn_id || ""}:${receipt.trace_id || index}`,receipt])).values()];
   const sum=(group:FlowReceipt[],field:"returned_count"|"delivered_count")=>group.every(receipt=>typeof receipt[field]==="number") ? group.reduce((total,receipt)=>total+(receipt[field] as number),0) : null;
@@ -42,15 +50,3 @@ export function nodeMetric(id: string, data: TopologyNodeData, english = false):
 export function contextChildren(nodes: TopologyNode[], lane: string, root: string, packet: string) {
   return nodes.filter(n=>n.data.lane===lane && n.id!==root && n.id!==packet && n.data.kind!=="lane" && isContextBranch(n.id));
 }
-
-export type Anchor = {x:number;y:number;width:number;height:number};
-// Only five approved problem frames change. All other calibrated coordinates,
-// text overrides and deletions retain their v7 identities.
-export const LOCAL_LAYOUT: Record<string, Anchor> = {
-  "label-user-lane": {x:245/1672*100,y:259/941*100,width:200/1672*100,height:28/941*100},
-  "label-agent-lane": {x:245/1672*100,y:479/941*100,width:215/1672*100,height:28/941*100},
-  "label-rag-lane": {x:245/1672*100,y:755/941*100,width:200/1672*100,height:28/941*100},
-  "agent-process-memory-observe-trajectory": {x:330/1672*100,y:543/941*100,width:154/1672*100,height:72/941*100},
-  "rag-root": {x:330/1672*100,y:777/941*100,width:164/1672*100,height:72/941*100},
-};
-export function upgradeLocalLayout(saved: Record<string, Anchor>) { return {...saved,...LOCAL_LAYOUT}; }

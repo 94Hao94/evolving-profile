@@ -87,7 +87,7 @@ def validate_proposal(proposal: object) -> dict:
     scope = proposal["scope"]
     if not isinstance(scope, dict) or not isinstance(scope.get("user_id"), str) or not scope["user_id"]:
         return {"status": "rejected", "reason": "invalid_guidance_scope"}
-    if proposal["nature"] == "task_local" and not scope.get("task_ids"):
+    if proposal["nature"] == "task_local" and not scope.get("task_ids") and not scope.get("session_ids"):
         return {"status": "rejected", "reason": "task_local_requires_task_id"}
     if not proposal["evidence_refs"]:
         return {"status": "held", "reason": "missing_evidence"}

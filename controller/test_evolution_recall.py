@@ -571,7 +571,8 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         self.assertNotEqual(decision["decision"], "qualified")
 
     def test_shadow_replay_uses_only_explicit_safe_fixture_transcript(self):
-        fixture = "/Users/apple/Documents/Codex/2026-07-11/ag/hindsight-memory-os/tests/fixtures/hindsight-replay/followup.jsonl"
+        from recall import SHADOW_REPLAY_FIXTURE_ROOT
+        fixture = str(SHADOW_REPLAY_FIXTURE_ROOT / 'followup.jsonl')
         with patch.dict("os.environ", {"HINDSIGHT_EXECUTION_MODE": "shadow_replay"}, clear=False):
             self.assertFalse(allow_shadow_fixture_transcript(fixture))
         with patch.dict(
@@ -2032,16 +2033,16 @@ class EvolutionRecallPlanningTests(unittest.TestCase):
         when it names one numbered clip.
         """
         query = (
-            "基于已生成的25段视频文件（位于 /Users/apple/Projects/Codex/优优汽车队），"
+            "基于已生成的25段视频文件（位于 /Users/example/Projects/Codex/示例影片项目），"
             "执行最终剪辑合成任务：按V01–V25顺序拼接，添加片头片尾、背景音乐、字幕并输出MP4。"
         )
         relevant = {
             "type": "experience",
-            "text": "文件 /Users/apple/Projects/Codex/优优汽车队/15.mp4 已生成，可作为本次视频合成的第15段素材。",
+            "text": "文件 /Users/example/Projects/Codex/示例影片项目/15.mp4 已生成，可作为本次视频合成的第15段素材。",
         }
         unrelated_config = {
             "type": "experience",
-            "text": "Codex 配置文件位于 /Users/apple/.codex/config.toml，记录 MCP 服务器设置。",
+            "text": "Codex 配置文件位于 /Users/example/.codex/config.toml，记录 MCP 服务器设置。",
         }
         unrelated_storage = {
             "type": "world",

@@ -75,6 +75,51 @@ _USER_REQUEST_MARKER = re.compile(
 )
 
 
+def normalize_question_reply(content: str) -> str:
+    """Project a complete native answer envelope onto its authored text only.
+
+    Unknown schemas, duplicate keys, quoted examples and truncated payloads
+    remain intact: a tag name alone is not authority to discard user content.
+    """
+    value = str(content or "")
+    match = re.fullmatch(
+        r"\s*<send_user_message_question_reply>\s*(.*?)\s*</send_user_message_question_reply>\s*",
+        value, re.S,
+    )
+    if not match:
+        return value
+
+    def unique_keys(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate_question_reply_key")
+            result[key] = item
+        return result
+
+    try:
+        rows = json.loads(match.group(1), object_pairs_hook=unique_keys)
+        if not isinstance(rows, list) or not rows:
+            return value
+        parts = []
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != {"questionItemId", "question", "answer"}:
+                return value
+            if not all(isinstance(row[key], str) for key in row):
+                return value
+            identity = json.loads(row["questionItemId"])
+            if (not isinstance(identity, list) or len(identity) != 3
+                    or identity[0] != "request_user_input_async"
+                    or not isinstance(identity[1], str) or not identity[1].startswith("call_")
+                    or type(identity[2]) is not int or identity[2] < 0
+                    or not row["question"].strip()):
+                return value
+            parts.extend((row["question"], row["answer"]))
+        return "\n".join(parts).strip()
+    except (ValueError, TypeError):
+        return value
+
+
 def extract_user_request(content: str, *, structural_context_only: bool = False) -> str:
     """Return only the user-authored request from a Codex prompt envelope.
 
@@ -99,7 +144,7 @@ def extract_user_request(content: str, *, structural_context_only: bool = False)
         "",
         value,
     )
-    return value.strip()
+    return normalize_question_reply(value.strip())
 
 
 def _native_environment_shape(element) -> bool:

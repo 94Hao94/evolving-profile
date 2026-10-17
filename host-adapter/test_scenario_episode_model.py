@@ -61,7 +61,7 @@ class EpisodeModelTests(unittest.TestCase):
 
         def opener(request, timeout):
             payload = json.loads(request.data)
-            prompt = payload["messages"][0]["content"]
+            prompt = payload["messages"][-1]["content"]
             envelope = json.loads(prompt.rsplit("输入：", 1)[1])
             sent.append(envelope)
             if envelope.get("request_type") in {
@@ -126,9 +126,9 @@ class EpisodeModelTests(unittest.TestCase):
         calls = []
         def invalid_state_opener(request, timeout):
             payload = json.loads(request.data)
-            calls.append(payload["messages"][0]["content"])
-            if '"state":' in payload["messages"][0]["content"]:
-                raw=payload["messages"][0]["content"].rsplit("输入：", 1)[1].lstrip()
+            calls.append(payload["messages"][-1]["content"])
+            if '"state":' in payload["messages"][-1]["content"]:
+                raw=payload["messages"][-1]["content"].rsplit("输入：", 1)[1].lstrip()
                 envelope,_=json.JSONDecoder().raw_decode(raw)
                 revision=envelope["source_revision"]
                 return response({"source_revision": revision,
@@ -199,7 +199,7 @@ class EpisodeModelTests(unittest.TestCase):
 
         def invalid_opener(request, timeout):
             payload = json.loads(request.data)
-            envelope = json.loads(payload["messages"][0]["content"].rsplit("输入：", 1)[1])
+            envelope = json.loads(payload["messages"][-1]["content"].rsplit("输入：", 1)[1])
             if envelope.get("request_type") == "episode_boundary_classification":
                 return response({"source_revision": envelope["source_revision"],
                                  "decisions": [{"message_id": "unknown", "decision": "new_episode"}]})
@@ -244,7 +244,7 @@ class EpisodeModelTests(unittest.TestCase):
 
         def review_opener(request, timeout):
             payload = json.loads(request.data)
-            envelope = json.loads(payload["messages"][0]["content"].rsplit("输入：", 1)[1])
+            envelope = json.loads(payload["messages"][-1]["content"].rsplit("输入：", 1)[1])
             sent.append(envelope["source_revision"])
             return response({"source_revision": envelope["source_revision"],
                              "accept": True, "issues": []})
@@ -269,7 +269,7 @@ class EpisodeModelTests(unittest.TestCase):
             nonlocal calls
             calls += 1
             payload = json.loads(request.data)
-            envelope = json.loads(payload["messages"][0]["content"].rsplit("输入：", 1)[1])
+            envelope = json.loads(payload["messages"][-1]["content"].rsplit("输入：", 1)[1])
             issues = [] if calls == 1 else [{"tier": "evidence", "code": "missing_episode_scope",
                                               "detail": "该段没有保留一个用户约束"}]
             return response({"source_revision": envelope["source_revision"],

@@ -521,6 +521,7 @@ from .mental_model_refresh import (
     MentalModelRefreshScope,
     MentalModelRefreshTrace,
     MentalModelRefreshWindow,
+    MentalModelRefreshWork,
     MentalModelRetraction,
     MentalModelTraceToolCall,
     ModeFallbackReason,
@@ -3767,6 +3768,16 @@ class MemoryEngine(MemoryEngineInterface):
             # model row keeps only the latest one (#3274).
             outcome=reflect_response.get("outcome"),
         )
+        metadata = outcome.to_dict()
+        # The model row holds only its latest run. Preserve the compact work
+        # receipt per operation too, even when the verbose keep_trace is off.
+        # This describes observed reflect work, never proof that it was avoidable.
+        work = reflect_response.get("work")
+        if isinstance(work, dict):
+            try:
+                metadata["work"] = MentalModelRefreshWork.model_validate(work).model_dump(mode="json")
+            except ValueError:
+                logger.warning("Ignoring malformed refresh work receipt for %s", operation_id)
         try:
             backend = await self._get_backend()
             async with acquire_with_retry(backend) as conn:
@@ -3778,7 +3789,7 @@ class MemoryEngine(MemoryEngineInterface):
                     WHERE operation_id = $1
                     """,
                     uuid.UUID(operation_id),
-                    json.dumps(outcome.to_dict()),
+                    json.dumps(metadata),
                 )
         except Exception as e:
             # Best-effort, but log loudly: a missing write regresses clients to
@@ -14240,6 +14251,19 @@ class MemoryEngine(MemoryEngineInterface):
             outcome: RefreshOutcome,
         ) -> _MentalModelRefreshRun:
             """Close over everything the pipeline resolved before it branched."""
+            # Always retain a bounded cost projection without prompts, source
+            # text, or tool payloads. These counters cover reflect only: delta,
+            # retraction and structured-output calls have their own LLM receipts.
+            # An absent provider usage/trace is unknown, not a zero-cost run.
+            # Equal watermarks or unchanged output are not unchanged-input proof.
+            reflect_response_payload["work"] = MentalModelRefreshWork(
+                requested_mode=requested_mode,
+                effective_mode=effective_mode,
+                window=window,
+                facts=facts,
+                reflect_usage=reflect_result.usage,
+                reflect_llm_call_count=len(reflect_result.llm_trace) if reflect_result.llm_trace else None,
+            ).model_dump(mode="json")
             retraction_record = (
                 MentalModelRetraction(
                     fact_ids=sorted(retracted.ids),

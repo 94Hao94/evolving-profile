@@ -12,6 +12,7 @@ import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, CircleHelp, Refres
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AttemptGroup, LocalRetentionEvidence, OperationalIncident, OperationalLane, ScanCoverage } from "@/lib/operational-overview";
 import { dispatcherHealth } from "@/lib/operational-overview";
+import type { ScenarioOperationalEvidence } from "@/lib/scenario-operational";
 import { dismissOperationalDisplay, operationalDismissalStorageKey, parseOperationalDismissals, reconcileOperationalDismissals, visibleOperationalAttempts, visibleOperationalIncidents, type OperationalDismissals } from "@/lib/operational-overview";
 import { acknowledgeOperationalLane, isOperationalLaneAcknowledged, operationalAcknowledgementStorageKey, parseOperationalAcknowledgements, reconcileOperationalAcknowledgements, type OperationalAcknowledgements } from "@/lib/operational-overview";
 
@@ -24,9 +25,26 @@ type Overview = {
   incidents: OperationalIncident[];
   attemptHistory: AttemptGroup[];
   pipeline: { state: "healthy" | "warning" | "critical" | "unknown"; failedMemories: number | null; pendingMemories: number | null; processingOperations?: number | null; queuedOperations?: number | null;
-    failedBatches?: number | null; failedTaskRows?: number | null; localRetention?: LocalRetentionEvidence };
+    failedBatches?: number | null; failedTaskRows?: number | null; localRetention?: LocalRetentionEvidence; scenario?: ScenarioOperationalEvidence };
   scan: { llmFailures: ScanCoverage; llmFailureGroups: { total: number | null }; failedOperations: ScanCoverage; relatedSuccess: { coverage: string; returned?: number; total?: number } };
 };
+
+export function OperationalScenarioSummary({ evidence }: { evidence: ScenarioOperationalEvidence }) {
+  const t = useTranslations("operationalEvidence");
+  const locale = useLocale();
+  const values = Object.fromEntries(["total", "reviewed", "failed", "pending", "notApplicable", "protected", "waitingSource", "unknown"].map(key => [key, (evidence[key as keyof ScenarioOperationalEvidence] as number | null)?.toLocaleString(locale) ?? "—"]));
+  const reasons: Record<string, string> = { automated_source_coverage_incomplete: "coverage", scenario_model_response_incomplete: "draft", scenario_user_claim_not_verbatim: "quote", scenario_state_invalid: "state", scenario_review_source_mismatch: "source" };
+  return <div className="space-y-2 rounded border border-border p-3 text-xs" data-testid="scenario-operational-summary">
+    <h3 className="text-sm font-semibold">{t("scenarioTitle")}</h3>
+    {evidence.status !== "observed" ? <p>{t("scenarioUnavailable")}</p> : <>
+      <p>{t("scenarioTotals", values)}</p><p>{t("scenarioExcluded", values)}</p>
+      <p className="text-muted-foreground">{t("scenarioHelp")}</p>
+      {evidence.failures.length > 0 && <details><summary className="cursor-pointer font-medium">{t("scenarioDetails")}</summary>
+        <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">{evidence.failures.map(item => <li key={item.id} className="break-words"><span className="break-all font-mono">{item.id}</span><br />{t(`scenarioReasons.${reasons[item.code] ?? "unknown"}`)} <span className="text-muted-foreground">({item.code})</span></li>)}</ul>
+      </details>}
+    </>}
+  </div>;
+}
 
 export function OperationalEvidenceSummary({ scan, pipeline, showHistory=true, acknowledged=false }: Pick<Overview, "scan" | "pipeline"> & {showHistory?:boolean; acknowledged?:boolean}) {
   const t = useTranslations("operationalEvidence");
@@ -56,6 +74,7 @@ export function OperationalEvidenceSummary({ scan, pipeline, showHistory=true, a
         <dl className="mt-2 space-y-2">{local.quarantineBatches.map(batch => <div key={batch.operationId}><dt className="break-all font-mono">{batch.operationId}</dt><dd>{t("isolatedRecords", { count: count(batch.count) })}{batch.at ? ` · ${time(batch.at, locale)}` : ""}</dd></div>)}</dl>
       </details>}
     </div>}
+    {pipeline.scenario && <OperationalScenarioSummary evidence={pipeline.scenario} />}
     {showHistory && <div className="rounded border border-border p-3 text-xs">
       <h3 className="text-sm font-semibold">{t("historyTitle")}</h3>
       <p className="mt-1">{scan.llmFailures.total == null ? t("unknown") : t("attempts", { count: count(scan.llmFailures.total) })} · {t("inspected", { count: count(scan.llmFailures.returned) })} · {scan.llmFailureGroups.total == null ? t("unknown") : t("traceJobs", { count: count(scan.llmFailureGroups.total) })}</p>
@@ -105,8 +124,9 @@ function time(value: string | null | undefined, locale = "en") {
   return Number.isFinite(parsed) ? new Date(parsed).toLocaleString(locale.startsWith("zh") ? locale : "en-US", { hour12: false }) : inlineUiText("时间无效");
 }
 
-function operationalText(value: string | undefined, english: boolean): string {
-  if (!value) return "";
+function operationalText(value: unknown, english: boolean): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value !== "string" || !value) return "";
   if (!english) return value
     .replaceAll("Healthy", "正常")
     .replaceAll("healthy", "正常")
@@ -154,7 +174,7 @@ export function OperationalLaneCard({ lane, incident, pipeline, acknowledged, on
     : (english ? `Acknowledged · ${lane.incidentCount} items remain` : `已确认 · ${lane.incidentCount} 项仍待处理`);
   return <article data-testid={`operational-lane-${lane.id}`} data-alert-acknowledged={acknowledged} className={`min-h-36 rounded border-t-4 border-x border-b shadow-sm ${CARD_TONE[tone]}`}>
     <button type="button" onClick={onDetail} disabled={!incident} className="block w-full p-3 text-left disabled:cursor-default enabled:hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-primary">
-      <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground"><span>{t(`lanes.${lane.id}`)}</span><Icon className={`h-4 w-4 ${TONES[tone].split(" ")[0]}`} /></div>
+      <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground"><span>{t(lane.id === "scenario" ? "scenarioTitle" : `lanes.${lane.id}`)}</span><Icon className={`h-4 w-4 ${TONES[tone].split(" ")[0]}`} /></div>
       <div className={`mt-2 text-base font-bold ${TONES[tone].split(" ")[0]}`}>{acknowledged ? confirmedLabel : `${lane.summaryKey === "mapUpdating" ? t("updating") : english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" })[lane.state] : LABELS[lane.state]}${lane.incidentCount > 0 ? ` · ${lane.incidentCount}` : ""}`}</div>
       <div className="mt-1 text-xs font-medium leading-5 text-foreground">{incident ? incident.titleKey ? t(incident.titleKey, { count: incident.count ?? 0, operation: incident.operation ?? "" }) : operationalText(incident.title, english) : lane.summaryKey ? t(lane.summaryKey, { count: (lane.summaryCount ?? 0).toLocaleString(locale) }) : operationalText(lane.summary, english)}</div>
       <div className="mt-2 space-y-1.5 border-t border-current/15 pt-2">
@@ -264,7 +284,7 @@ export function OperationalOverview() {
   const openDetail = (incident: OperationalIncident) => setSelected(incident);
   const navigate = (incident: OperationalIncident) => {
     if (!bankId) return false;
-    const suffix = incident.action === "flow" ? "?view=flow" : incident.action === "llm-requests" ? "?view=profile&bankConfigTab=llm-requests" : incident.action === "operations" ? "?view=profile&bankConfigTab=general#bank-operations" : "?view=profile&bankConfigTab=configuration";
+    const suffix = incident.action === "scenario" ? "?view=data&subTab=context" : incident.action === "flow" ? "?view=flow" : incident.action === "llm-requests" ? "?view=profile&bankConfigTab=llm-requests" : incident.action === "operations" ? "?view=profile&bankConfigTab=general#bank-operations" : "?view=profile&bankConfigTab=configuration";
     setSelected(null);
     router.push(bankRoute(bankId, suffix));
   };
@@ -297,7 +317,7 @@ export function OperationalOverview() {
         <div className="min-w-0"><div className="text-sm font-semibold">{!data && error ? t("unavailable") : loading && !data ? t("loading") : allAlertsAcknowledged ? english ? "Alerts acknowledged; unresolved items remain" : "提醒已确认，仍有待处理项目" : overall === "healthy" ? inlineUiText("已核验的链路正常") : displayOverall === "critical" ? inlineUiText("有故障需要处理") : displayOverall === "warning" ? inlineUiText("有项目需要关注") : inlineUiText("有项目尚未核验")}</div>
           <div className="text-xs">{data ? (english ? `${data.incidents.length} issues or unverified items · ${data.lanes.filter((lane) => lane.state === "healthy").length}/${data.lanes.length} lanes verified healthy` : `${data.incidents.length} 条问题与未核验项 · ${data.lanes.filter((lane) => lane.state === "healthy").length}/${data.lanes.length} 条链路已核验正常`) : error ? t("unavailable") : loading ? t("loading") : t("unknown")}</div></div>
       </div>
-      {data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {data.lanes.map((lane) => {
           const incident = data.incidents.find((item) => item.category === lane.id);
           return <OperationalLaneCard key={lane.id} lane={lane} incident={incident} pipeline={data.pipeline} acknowledged={laneAcknowledged(lane)} onDetail={() => incident && openDetail(incident)} onToggleAcknowledgement={() => toggleAcknowledgement(lane)} disabled={error || acknowledgements?.bankId !== bankId} />;
