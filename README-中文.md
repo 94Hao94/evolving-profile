@@ -1,5 +1,11 @@
 # Evolving Profile
 
+> **5.1.2 RC1候选版：**[核验下载](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)
+> · [候选版完整中文介绍](https://github.com/ccygod/evolving-profile-2.2/blob/v5.1.2-rc.1/README-%E4%B8%AD%E6%96%87.md)
+> · [Agent日常操作协议](https://github.com/ccygod/evolving-profile-2.2/blob/v5.1.2-rc.1/docs/AGENT-USAGE-%E4%B8%AD%E6%96%87.md)。
+> 安装候选版请用精确RC标签/归档；本公告不改变当前检出分支的VERSION。
+> 新宿主及Windows原生验收仍待补齐，不表示全平台稳定认证。
+
 <div align="center">
 
 **把聊过的背景，变成懂你如何工作的记忆；把做过的任务，变成智能体可复用的经验。**

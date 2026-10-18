@@ -2,8 +2,27 @@
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
+## 2026-10-18：5.1.2 RC1个人预发布及上游贡献已读回
+
+- [个人预发布](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)：
+  已发布，`isPrerelease=true`、非草稿；标签`v5.1.2-rc.1`固定源码提交
+  `9ef624a51b7e30e25f19b747b65bd27b6d2fafd5`，来源分支`release/5.1.2-rc.1`。
+- [上游PR #6](https://github.com/94Hao94/evolving-profile/pull/6)：OPEN、未合并，
+  同一源码提交。上游主分支和上游Release未被本轮直接修改；旧PR5未关闭或合并。
+- 五个命名资产均匿名下载后与本地冻结字节一致；ZIP/tar中1803个Git源码文件逐项
+  匹配清单。较早本地候选的Next生成类型/tsbuildinfo不进入公开资产。
+- ZIP SHA256：`4ac4834874d1afa288c57abe837e14173f2e21e23fedc1997fbd4a0751161356`；
+  tar SHA256：`d25da36b573d43a5a2ddb142753ce74a66dc619b3ed98c95f9d605a5f2446aad`。
+- 本次发行Git树：Python2221通过、137子测试、3跳过；Console96文件/666通过，
+  TypeScript、SDK→Console生产构建、版本与源码文本扫描通过。跳过为2个外部旧回滚资产
+  和1个显式私人运行环境审计，未算通过。实际新宿主/Windows验收仍待完成。
+- 此默认分支仅增加候选入口和发布回执，不把旧代码贴成新版本。安装5.1.2 RC1应取
+  精确标签或命名核验归档；主README继续介绍完整产品，不在其中堆叠变更日志。
+
 **当前补丁：5.1.1**，以 [VERSION](../VERSION) 为产品版本权威。
-维护分支沿用 `release/5.1.0` 以续接同一个 PR，不代表安装补丁仍为5.1.0。
+维护分支沿用 `release/5.1.0`，不代表安装补丁仍为5.1.0。原 PR #4 已合并；
+2026-10-18 的送达修复通过新的 [PR #5](https://github.com/94Hao94/evolving-profile/pull/5)
+贡献，历史记录中的旧 PR 状态为当时快照，不覆盖当前核对结果。
 旧 RC 标签/下载资产没有更新；要获取此补丁请使用当前发行分支或下方精确提交。
 
 | 产品版本 | 已核实状态 | 证据 | 署名边界 |
@@ -12,6 +31,32 @@
 | 4.0.0 | 本地发行分支 `release/4.0.0` 已推送到 fork，已向上游提交 PR #2；尚未合并、打 Tag 或创建 GitHub Release。 | 本地提交 `9490f1b`；[PR #2](https://github.com/94Hao94/evolving-profile/pull/2)；预检通过；Host 295（含 2 个可选回滚测试跳过）、Controller 179、Guidance 73、Console 144、生产构建通过 | 继续沿用 NOTICE 的 CCY 发行署名；Git 提交身份仍不自动等于公开贡献署名。 |
 | 5.0.0 | 发行分支已推送到 fork，并已向上游提交 PR #3；尚未合并、打 Tag 或创建 GitHub Release。 | 当前分支 `release/5.0.0`；发布提交 `461ce97`，最新文档/审计提交 `e7600f8`；[PR #3](https://github.com/94Hao94/evolving-profile/pull/3)；发布说明 [`RELEASE-NOTES-5.0.0.md`](RELEASE-NOTES-5.0.0.md)；链路配图 [`assets/flow-topology-5.0.jpg`](assets/flow-topology-5.0.jpg)及 README 视觉资产；门禁：636 Python passed、2 skipped、35 subtests，Console 146 passed，API 10 passed，构建和脱敏扫描通过 | 继续沿用 NOTICE 的 CCY 发行署名；Agent Process Memory、链路观测和 5.0 文档是本次 EP 贡献，不将 Hindsight 或其他上游项目写成 EP 代码贡献者。 |
 | 5.1.0 | 2026-10-17 修复和产品文档已推送个人 `release/5.1.0`，现有上游 PR #4 已读回相同代码提交；PR 尚未合并。旧 `v5.1.0-rc.2` 仍是旧预发布产物，不包含本次分支更新；未创建新 Tag 或 Release。 | [个人发行分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.0)；[代码提交 24f6be4](https://github.com/ccygod/evolving-profile-2.2/commit/24f6be4cabfee3b066893c427200c68eb0a33fd5)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`DEPENDENCY-RISKS.md`](DEPENDENCY-RISKS.md)。本次证据见下方日期记录。 | 沿用 NOTICE 的 CCY 发行署名；native review 区分非 HTTP 来源与未知模型身份。生产分类依赖审计 0；完整工作区 36 条，0 critical。不是全部依赖或全部历史语义的零风险认证。 |
+
+### 2026-10-18：5.1.1 长会话送达回执修复
+
+代码提交 [2b63ada](https://github.com/ccygod/evolving-profile-2.2/commit/2b63ada74867d49919b771a29a8d3ee3a0a0df3f)
+及说明/构建标识提交 [9a175f7](https://github.com/ccygod/evolving-profile-2.2/commit/9a175f7)
+已非强制推送个人 `release/5.1.0` 分支；新建
+[上游 PR #5](https://github.com/94Hao94/evolving-profile/pull/5)，原 PR #4 已在
+上游主分支合并提交 `218f45d` 中落地。PR #5 本次核对为 OPEN、尚未合并。
+本页为后续发布证据补记，最终 head 以该分支及 PR 的实际读回为准。
+产品仍为 **5.1.1**，构建标识为 `ep511-cross-date-host-delivery`；没有移动旧
+RC 标签、创建 GitHub Release 或擅自合并主分支。
+
+- 修复跨日期/归档长会话来源定位，核对授权范围与原生会话身份；使用有界
+  尾部、流读取和选中轮次缓存，处理追加、部分来源与合法大行。缺失、歧义和
+  超预算来源保持未知，不把候选数推断为接收数。
+- Hook 已准备、真实返回和宿主接收分开统计；运行指导刷新偏好包进入对应节点。
+  无证据的计划占位不冲掉已有接收小计；工具接收仍不证明最终回答采用。
+- 本次发布前重新执行 Console：**94 文件 / 660 测试通过**、TypeScript、
+  分发 Console 生产/standalone 构建、8 项发布预检测试，以及发行包结构与源码文本
+  秘密/私人数据扫描。包内 **1741 个文件**在本地 Git 归档中逐项哈希一致。
+  未变更 Python 后端逻辑，未冒用旧后端回归数字作为本次新测试。
+- 前一修复验收已实际部署并点击旧 Prompt：中英文均确认一次指导调用返回5条、
+  宿主收到5条；仅 Hook 准备的另一例保持未确认。原始截图和对话保留在私人审计目录，
+  不上传公开。该观察不等于全部历史覆盖或回答收益基准。
+- 保留手动校准的布局、记忆、配置、密钥、提炼队列和召回策略；Hindsight 来源声明
+  与原许可保留。升级/回退及已知边界见 [补丁说明](RELEASE-NOTES-5.1.1.md)。
 
 ### 2026-10-17：5.1.1 部署与分宿主接入文档补丁
 
