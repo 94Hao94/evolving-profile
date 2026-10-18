@@ -7,6 +7,7 @@ Product authority is VERSION5.1.2; channel is candidate; intended tag isv5.1.2-r
 | --- | --- |
 | Guidance, Host Adapter, Status, Controller and release scripts |2221 passed,137 subtests,3 skipped |
 | Console full suite |96files/666 passed |
+| TypeScript |Passed |
 | SDK then Console production/standalone |Passed |
 | Release metadata/structure/source text scan |Passed |
 

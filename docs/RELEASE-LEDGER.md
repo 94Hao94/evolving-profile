@@ -16,6 +16,12 @@
   维护者可自行决定合入顺序；本轮不关闭旧PR或替上游合并主分支。
 - 已有本地验收和本轮发行树复核分别记账；新宿主/Windows真实验收仍未完成。
 
+候选构建前核实快照：源码提交`de3731b848ceff3c67bfc29f6c52f91b47bceaa8`已推送个人
+`release/5.1.2-rc.1`；新的[上游PR #6](https://github.com/94Hao94/evolving-profile/pull/6)
+已提交，OPEN、尚未合并。Tag与个人预发布会固定随后的发行文档提交；最终Tag对象、
+资产及发布状态以[RC1发布页](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)
+读回为准，不由本段构建快照推断上游已接受。旧PR5未关闭、未合并。
+
 **上一条已记录补丁：5.1.1**。
 维护分支沿用 `release/5.1.0`，不代表安装补丁仍为5.1.0。原 PR #4 已合并；
 2026-10-18 的送达修复通过新的 [PR #5](https://github.com/94Hao94/evolving-profile/pull/5)
