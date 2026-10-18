@@ -428,6 +428,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .reference-expanded-root .reference-unified-node span { font-size:9px; line-height:1.2; }
 .reference-unified-node strong { font-size:14px; line-height:1.15; }
 .reference-unified-node span { font-size:11px; line-height:1.15; }
+.reference-unified-node span.is-full-metric { white-space:pre-line; font-size:10px; line-height:1.05; }
+.reference-unified-node span.is-short-metric { font-size:9px; }
 .reference-unified-node.is-compact strong { font-size:13px; line-height:1.15; }
 .reference-unified-node:focus-visible { outline:3px solid #1467b8; outline-offset:-3px; background:rgb(255 255 255 / 72%); }
 /* SVG text lives in the same canonical units as its bitmap and anchors.

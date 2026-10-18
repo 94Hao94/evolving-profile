@@ -14,6 +14,19 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
+### Cross-date host receipt projection — local repair candidate, 2026-10-18
+
+- Resolve old and archived native sessions using their authorized recorded
+  path and session identity instead of the current Prompt date window.
+- Read bounded tail/streamed source intervals and cache selected turn ranges,
+  including running or partial turns; repeated refreshes do not reload a whole
+  long transcript into memory. Unknown and budget-limited coverage remain explicit.
+- Separate prepared Hook context, actual tool returns and host-received counts
+  through branch and aggregate nodes. Include runtime-guidance refresh packets;
+  inactive planned branches do not erase an observed subtotal.
+- This local candidate is not a new remote release until separately synchronized;
+  it preserves saved topology coordinates, memory records and retrieval policy.
+
 ### Runtime guidance argument boundary — 2026-10-18
 
 - Validate task objects before Prompt identity binding, so malformed Agent
