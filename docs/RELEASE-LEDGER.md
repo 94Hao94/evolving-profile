@@ -2,6 +2,23 @@
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
+## 2026-10-18：5.1.2 RC1个人预发布及上游贡献已读回
+
+- [个人预发布](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)：
+  已发布，`isPrerelease=true`、非草稿；标签`v5.1.2-rc.1`固定源码提交
+  `9ef624a51b7e30e25f19b747b65bd27b6d2fafd5`，来源分支`release/5.1.2-rc.1`。
+- [上游PR #6](https://github.com/94Hao94/evolving-profile/pull/6)：OPEN、未合并，
+  同一源码提交。上游主分支和上游Release未被本轮直接修改；旧PR5未关闭或合并。
+- 五个命名资产均匿名下载后与本地冻结字节一致；ZIP/tar中1803个Git源码文件逐项
+  匹配清单。较早本地候选的Next生成类型/tsbuildinfo不进入公开资产。
+- ZIP SHA256：`4ac4834874d1afa288c57abe837e14173f2e21e23fedc1997fbd4a0751161356`；
+  tar SHA256：`d25da36b573d43a5a2ddb142753ce74a66dc619b3ed98c95f9d605a5f2446aad`。
+- 本次发行Git树：Python2221通过、137子测试、3跳过；Console96文件/666通过，
+  TypeScript、SDK→Console生产构建、版本与源码文本扫描通过。跳过为2个外部旧回滚资产
+  和1个显式私人运行环境审计，未算通过。实际新宿主/Windows验收仍待完成。
+- 此默认分支仅增加候选入口和发布回执，不把旧代码贴成新版本。安装5.1.2 RC1应取
+  精确标签或命名核验归档；主README继续介绍完整产品，不在其中堆叠变更日志。
+
 **当前补丁：5.1.1**，以 [VERSION](../VERSION) 为产品版本权威。
 维护分支沿用 `release/5.1.0`，不代表安装补丁仍为5.1.0。原 PR #4 已合并；
 2026-10-18 的送达修复通过新的 [PR #5](https://github.com/94Hao94/evolving-profile/pull/5)

@@ -1,5 +1,11 @@
 # Evolving Profile
 
+> **5.1.2 RC1 candidate:** [verified downloads](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)
+> · [current candidate README](https://github.com/ccygod/evolving-profile-2.2/blob/v5.1.2-rc.1/README.md)
+> · [Agent operating guide](https://github.com/ccygod/evolving-profile-2.2/blob/v5.1.2-rc.1/docs/AGENT-USAGE.md).
+> Use the exact RC tag/archive for the candidate; this announcement does not change the
+> checked-out branch's VERSION. Native new-host/Windows acceptance remains pending.
+
 <div align="center">
 
 **Turn past conversations into personal context—and past work into reusable agent experience.**
