@@ -14,7 +14,7 @@ receipts, native source review, and source-to-state coverage.
 
 ## Main changes
 
-### Cross-date host receipt projection — local repair candidate, 2026-10-18
+### Cross-date host receipt projection — 5.1.1 contribution patch, 2026-10-18
 
 - Resolve old and archived native sessions using their authorized recorded
   path and session identity instead of the current Prompt date window.
@@ -24,8 +24,14 @@ receipts, native source review, and source-to-state coverage.
 - Separate prepared Hook context, actual tool returns and host-received counts
   through branch and aggregate nodes. Include runtime-guidance refresh packets;
   inactive planned branches do not erase an observed subtotal.
-- This local candidate is not a new remote release until separately synchronized;
-  it preserves saved topology coordinates, memory records and retrieval policy.
+- Preserves saved topology coordinates, memory records and retrieval policy.
+  Branch publication, upstream PR acceptance and tagged releases remain separate;
+  see the release ledger for actual synchronization evidence.
+
+中文：修复长期会话跨日期后找不到原生工具回执的问题；使用经身份核对的来源路径和
+有界读取，不把整份大文件反复载入内存。链路分别显示候选、Hook 准备、实际返回和
+宿主接收，刷新指导返回的真实偏好包也进入统计。未知仍是未知，不补造送达或回答采用。
+不改已保存的手动布局、记忆内容和召回策略；发布渠道状态见发布记录。
 
 ### Runtime guidance argument boundary — 2026-10-18
 
