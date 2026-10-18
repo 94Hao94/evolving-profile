@@ -4,9 +4,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+import pytest
 
 
-def test_invalid_guidance_arguments_have_structured_errors_and_retry_succeeds(tmp_path):
+@pytest.mark.parametrize('governed',[False,True])
+def test_invalid_guidance_arguments_have_structured_errors_and_retry_succeeds(tmp_path,governed):
     root = Path(__file__).resolve().parents[1]
     runner = '''import runpy,sys,json
 from pathlib import Path
@@ -45,6 +47,7 @@ Path(sys.argv[3]).write_text(json.dumps(binding_calls))
                EVOLVING_PROFILE_STATE_ROOT=str(tmp_path / '.evolving-profile'),
                EVOLVING_PROFILE_GUIDANCE_SRC=str(root / 'guidance'),
                EVOLVING_PROFILE_GUIDANCE_CONFIG=str(config))
+    if governed:env.update(EVOLVING_PROFILE_HOST_ID='workbuddy',EVOLVING_PROFILE_ACCESS_MODE='read-only')
     run = subprocess.run([sys.executable, '-c', runner, str(tmp_path),
                           str(root / 'host-adapter/evolving_profile_controller_mcp.py'),
                           str(tmp_path / 'binding-calls.json')],

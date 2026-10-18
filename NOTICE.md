@@ -3,6 +3,10 @@
 Evolving Profile 5.1 is developed on top of Hindsight:
 https://github.com/vectorize-io/hindsight
 
+The 5.1.2 RC1 candidate continues this same attribution and license line.
+Read VERSION for the product patch and the release ledger for publication state;
+a personal pre-release does not imply upstream acceptance or stable certification.
+
 Hindsight provides the upstream memory foundation. Credit for that upstream
 work belongs to the Hindsight project and its contributors. EP adds its
 independently governed control plane, host adapters, user/agent memory

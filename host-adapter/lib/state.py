@@ -9,11 +9,7 @@ import os
 import re
 import sys
 
-# fcntl is Unix-only; import conditionally so the module loads on Windows
-if sys.platform != "win32":
-    import fcntl
-else:
-    fcntl = None
+from . import platform_lock as fcntl
 
 
 def _state_dir() -> str:
@@ -79,35 +75,15 @@ def get_turn_count(session_id: str) -> int:
 def increment_turn_count(session_id: str) -> int:
     """Increment and return the turn count for a session.
 
-    Uses flock on Unix to prevent race conditions. On Windows, proceeds
-    without a lock — minor races here are harmless.
+    Serializes the full read/modify/write transaction on every platform.
     """
     lock_path = _state_file("turns.lock")
-    if fcntl is not None:
-        try:
-            lock_fd = open(lock_path, "w")
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-            try:
-                turns = read_state("turns.json", {})
-                turns[session_id] = turns.get(session_id, 0) + 1
-                if len(turns) > 10000:
-                    sorted_keys = sorted(turns.keys())
-                    for k in sorted_keys[: len(sorted_keys) // 2]:
-                        del turns[k]
-                write_state("turns.json", turns)
-                return turns[session_id]
-            finally:
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                lock_fd.close()
-        except OSError:
-            pass
-
-    # Fallback: proceed without lock
-    turns = read_state("turns.json", {})
-    turns[session_id] = turns.get(session_id, 0) + 1
-    if len(turns) > 10000:
-        sorted_keys = sorted(turns.keys())
-        for k in sorted_keys[: len(sorted_keys) // 2]:
-            del turns[k]
-    write_state("turns.json", turns)
-    return turns[session_id]
+    with fcntl.file_lock(lock_path,timeout_seconds=None):
+        turns = read_state("turns.json", {})
+        turns[session_id] = turns.get(session_id, 0) + 1
+        if len(turns) > 10000:
+            sorted_keys = sorted(turns.keys())
+            for k in sorted_keys[: len(sorted_keys) // 2]:
+                del turns[k]
+        write_state("turns.json", turns)
+        return turns[session_id]

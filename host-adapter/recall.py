@@ -2583,6 +2583,8 @@ def prefer_explicit_current_constraint(query: str, results: list[dict]) -> tuple
 
 
 def main():
+    from lib.host_integration.guidance import route_external_hook
+    if route_external_hook():return
     if sys.platform == "win32":
         sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')

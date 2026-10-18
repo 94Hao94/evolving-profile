@@ -14,6 +14,7 @@ import { AgentMemoryView } from "@/components/agent-memory-view";
 import { SearchDebugView } from "@/components/search-debug-view";
 import { BankProfileView } from "@/components/bank-profile-view";
 import { RuntimeSectionsView } from "@/components/runtime-sections-view";
+import { HostIntegrationSettings } from "@/components/host-integration-settings";
 import { OperationalOverview } from "@/components/operational-overview";
 import { MemoryDefenseSection } from "@/components/memory-defense-section";
 import { BankStatsView } from "@/components/bank-stats-view";
@@ -74,6 +75,7 @@ type BankConfigTab =
   | "models"
   | "rag"
   | "providers"
+  | "host-integrations"
   | "scenario"
   | "backup"
   | "audit-logs"
@@ -88,6 +90,7 @@ export default function BankPage() {
   setInlineLocale(locale);
   const tCommon = useTranslations("common");
   const tAction = useTranslations("actionFeedback");
+  const tHosts = useTranslations("hostIntegrations");
   const { features } = useFeatures();
   const { currentBank: bankId, setCurrentBank, loadBanks } = useBank();
 
@@ -411,6 +414,12 @@ export default function BankPage() {
                         : "Providers and fallback"}
                     </button>
                     <button
+                      onClick={() => handleBankConfigTabChange("host-integrations")}
+                      className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "host-integrations" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {tHosts("title")}
+                    </button>
+                    <button
                       onClick={() => handleBankConfigTabChange("scenario")}
                       className={`relative whitespace-nowrap px-3 py-3 text-sm font-semibold ${bankConfigTab === "scenario" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                     >
@@ -489,6 +498,7 @@ export default function BankPage() {
                   {bankConfigTab === "models" && <RuntimeSectionsView section="models" />}
                   {bankConfigTab === "rag" && <RuntimeSectionsView section="rag" />}
                   {bankConfigTab === "providers" && <RuntimeSectionsView section="providers" />}
+                  {bankConfigTab === "host-integrations" && <HostIntegrationSettings />}
                   {bankConfigTab === "scenario" && <RuntimeSectionsView section="scenario" />}
                   {bankConfigTab === "backup" && <RuntimeSectionsView section="backup" />}
                   {bankConfigTab === "audit-logs" &&

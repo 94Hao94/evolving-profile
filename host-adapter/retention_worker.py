@@ -6,7 +6,7 @@ batch size and tail age. One operation at a time. Completion (not acceptance)
 is the only condition that removes raw queue records.
 """
 import argparse
-import fcntl
+from lib import platform_lock as fcntl
 import hashlib
 import json
 import os

@@ -1,0 +1,26 @@
+{
+  "schema": "ep.agent-usage.v1",
+  "authority": "advisory_only_current_user_and_trusted_host_policy_win",
+  "documents": {"en": "docs/AGENT-USAGE.md", "zh-CN": "docs/AGENT-USAGE-中文.md"},
+  "discover": "Use the actual host MCP catalog and input schemas, not guessed aliases.",
+  "routes": {
+    "conditional_preferences": ["user_preference", "read_preference_unit"],
+    "user_history_point": ["user_recall"],
+    "user_history_broad": ["user_research", "read_research"],
+    "agent_execution_point": ["agent_recall", "read_agent_process_memory"],
+    "agent_execution_patterns": ["agent_research"],
+    "scenario_navigation": ["search_scenario_summary", "read_scenario_summary", "scenario_gate"],
+    "original_evidence": ["find_sources", "read_source"],
+    "external_documents": ["rag_search"],
+    "execution_failure_guidance": ["refresh_runtime_guidance"]
+  },
+  "identity": {"invent_ids": false, "borrow_other_host_or_turn": false,
+    "adapter_assigned_id_is_trusted_hook_binding": false,
+    "unbound_reads": "Only when the actual schema and policy permit; otherwise report unavailable."},
+  "evidence": {"candidate_is_fact": false, "tool_return_proves_host_receive": false,
+    "host_receive_proves_answer_adoption": false, "summary_tier_is_original_session": false},
+  "new_host_capture_default": false,
+  "write_authorization": "Requires an exposed permitted tool, genuine scope and explicit user authority.",
+  "hookless_trigger": "best_effort_not_every_turn_guarantee",
+  "readiness": "Prepare, configure, EP protocol, native host receive and answer adoption are separate."
+}

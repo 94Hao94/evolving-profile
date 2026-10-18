@@ -10,7 +10,7 @@
     "backup_configuration": {"path": "~/.evolving-profile/config/backup-settings.json", "role": "备份周期、位置、保留和校验策略"},
     "user_memory": {"path": "Evolving Profile API PostgreSQL memory_units", "role": "事实、经历、实体关系和观察的持久事实源"},
     "agent_process_memory": {"path": "~/.evolving-profile/process-memory/records.json", "role": "Agent 过程轨迹、失败、模式、能力观测和策略候选"},
-    "raw_context": {"path": "~/.codex/sessions", "role": "原始 Session/Conversation 证据；任何摘要只能派生于此"},
+    "raw_context": {"path": "~/.codex/sessions", "role": "当前已接入Codex路线的原始Session证据；不是其他宿主的通用来源。其他宿主必须使用自身经授权、身份核对的原生来源，当前捕获/来源验收未通过时保持未知，不能借用Codex记录。"},
     "external_rag": {"path": "runtime-settings.rag.root_path", "role": "外部资料原文；索引和向量均为可重建派生物"}
   },
   "projections": {

@@ -36,8 +36,9 @@ Codex MCP 通常存于 `~/.codex/config.toml`，项目层和受管策略也可�
 
 核对工具中有 `memory_check`、`user_preference`、`user_recall`、`user_research`、
 `agent_recall`、`agent_research`、`search_scenario_summary`、`read_scenario_summary`、`read_source`。
-需要新绑定时为当前原始 Prompt 调用 `memory_check`，只在该 Prompt 使用返回的 check ID；
-不编造、不沿用上轮 ID。新库返回空可以正常，不能编出命中证明安装成功。
+优先使用宿主/Hook提供的真实本轮绑定；导航式`memory_check`返回的适配器ID不是
+可信Hook登记，不能据此让严格绑定调用有效。不编造、不沿用旧ID，按
+[Agent日常协议](AGENT-USAGE-中文.md)处理无绑定读取与原文核对。新库返回空合法，不能编造命中。
 
 ## 2. Codex 自动记录：单独配置和信任 Hook
 

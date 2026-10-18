@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Iterable
 import re
 import hashlib
-import fcntl
+from . import platform_lock as fcntl
 import threading
 from contextlib import contextmanager
 from functools import wraps

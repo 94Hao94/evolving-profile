@@ -1,8 +1,8 @@
 {
   "product": "Evolving Profile",
-  "product_version": "5.1.1",
-  "release_channel": "contribution",
-  "build_id": "ep511-cross-date-host-delivery",
+  "product_version": "5.1.2",
+  "release_channel": "candidate",
+  "build_id": "ep512-host-preparation-rc1",
   "schema_versions": {
     "runtime_settings": "1",
     "backup_settings": "1",

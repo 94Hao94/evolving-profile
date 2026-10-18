@@ -226,6 +226,8 @@ def capture_native_process_on_stop(hook_input, config, bank_id, source_turns):
 
 
 def main():
+    from lib.host_integration.guidance import route_external_hook
+    if route_external_hook():return
     if sys.platform == "win32":
         sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")

@@ -381,7 +381,7 @@ def refresh_hierarchy(catalog_path, output, bank_id, *, force=False, workers=3):
 
 
 def main():
-    import fcntl
+    import ep_platform_lock as fcntl
     parser=argparse.ArgumentParser();parser.add_argument('--catalog',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--bank-id',required=True);parser.add_argument('--force',action='store_true');parser.add_argument('--workers',type=int,default=3)
     args=parser.parse_args();args.output.parent.mkdir(parents=True,exist_ok=True)

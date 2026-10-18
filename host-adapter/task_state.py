@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
-import fcntl
+from lib import platform_lock as fcntl
 import hashlib
 import json
 import os

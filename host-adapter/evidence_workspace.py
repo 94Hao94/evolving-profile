@@ -6,7 +6,7 @@ Each read fetches current source state, so a withdrawal cannot leak via a page.
 """
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
-import fcntl
+from lib import platform_lock as fcntl
 import json
 import os
 import re

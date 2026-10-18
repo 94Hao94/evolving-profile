@@ -1,4 +1,4 @@
-# Evolving Profile 5.1.1
+# Evolving Profile 5.1.2
 
 > English release notes first. 中文更新说明见本文后半部分。
 
@@ -13,6 +13,28 @@ those planes meet: long sessions, incomplete provider drafts, nested host
 receipts, native source review, and source-to-state coverage.
 
 ## Main changes
+
+### 5.1.2 RC1 — cross-host preparation and agent operating guidance
+
+- One capability registry drives8 host profiles, environment discovery, safe configuration
+  previews, revision-checked apply/restore, CLI/PowerShell preparation, UI and generated matrices.
+- Added a peer Host integrations configuration tab, bilingual feedback, readable/scrollable
+  dialogs and explicit separation of installation candidates, EP protocol checks and native use.
+- Governed new-host stdio and optional authenticated HTTP use the existing core, default read-only,
+  qualified host/owner/installation identities and bounded diagnostics. Capture remains off.
+- Prepared POSIX/Windows lock and path/UTF-8 handling without claiming actual Windows execution.
+- Added Agent-use instructions beyond installation: routes, binding, scenario/source expansion,
+  evidence accounting, failure recovery and per-host no-Hook limitations.
+- Packaged static policy resources explicitly; fixed the Console launcher losing the colocated
+  host script root when it enters standalone, while preserving explicit operator overrides.
+- Prior local macOS feature/deployment evidence is separated from this candidate's clean-package
+  results and from pending real-host/Windows acceptance. Release, contribution and merge status
+  remain separately tracked; a personal pre-release is not an upstream stable release.
+
+中文：本候选新增8类宿主准备与管理，区分识别、配置、协议、宿主接收和回答采用。
+补齐跨平台基础、受控配置和只读协议；新增Agent日常使用说明，而不止安装命令。
+修复打包静态依赖遗漏和Console切换工作目录后找不到配套脚本的问题。
+Windows及新宿主的真实生命周期仍待实测；新版本只在本地准备，不代表远端已发布。
 
 ### Cross-date host receipt projection — 5.1.1 contribution patch, 2026-10-18
 
