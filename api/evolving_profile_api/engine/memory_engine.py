@@ -521,6 +521,7 @@ from .mental_model_refresh import (
     MentalModelRefreshScope,
     MentalModelRefreshTrace,
     MentalModelRefreshWindow,
+    MentalModelRefreshWork,
     MentalModelRetraction,
     MentalModelTraceToolCall,
     ModeFallbackReason,
@@ -3767,6 +3768,16 @@ class MemoryEngine(MemoryEngineInterface):
             # model row keeps only the latest one (#3274).
             outcome=reflect_response.get("outcome"),
         )
+        metadata = outcome.to_dict()
+        # The model row holds only its latest run. Preserve the compact work
+        # receipt per operation too, even when the verbose keep_trace is off.
+        # This describes observed reflect work, never proof that it was avoidable.
+        work = reflect_response.get("work")
+        if isinstance(work, dict):
+            try:
+                metadata["work"] = MentalModelRefreshWork.model_validate(work).model_dump(mode="json")
+            except ValueError:
+                logger.warning("Ignoring malformed refresh work receipt for %s", operation_id)
         try:
             backend = await self._get_backend()
             async with acquire_with_retry(backend) as conn:
@@ -3778,7 +3789,7 @@ class MemoryEngine(MemoryEngineInterface):
                     WHERE operation_id = $1
                     """,
                     uuid.UUID(operation_id),
-                    json.dumps(outcome.to_dict()),
+                    json.dumps(metadata),
                 )
         except Exception as e:
             # Best-effort, but log loudly: a missing write regresses clients to
@@ -11078,6 +11089,8 @@ class MemoryEngine(MemoryEngineInterface):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         group: bool = False,
+        include_content: bool = True,
+        count_only: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> LLMRequestListResponse | None:
@@ -11146,6 +11159,9 @@ class MemoryEngine(MemoryEngineInterface):
         where_sql = " AND ".join(where_clauses)
         table = fq_table("llm_requests")
         cols = self._LLM_REQUEST_COLUMNS
+        if not include_content:
+            cols = ", ".join("NULL AS " + col if col in {"input", "output"} else col
+                             for col in (part.strip() for part in cols.split(",")))
 
         backend = await self._get_backend()
         async with acquire_with_retry(backend) as conn:
@@ -11157,6 +11173,8 @@ class MemoryEngine(MemoryEngineInterface):
                     *params,
                 )
                 total = count_row["total"] if count_row else 0
+                if count_only:
+                    return LLMRequestListResponse(bank_id=bank_id, total=total, limit=limit, offset=offset, items=[])
                 # Page of runs, most-recently-active first.
                 key_rows = await conn.fetch(
                     f"""
@@ -11185,6 +11203,8 @@ class MemoryEngine(MemoryEngineInterface):
             else:
                 count_row = await conn.fetchrow(f"SELECT COUNT(*) AS total FROM {table} WHERE {where_sql}", *params)
                 total = count_row["total"] if count_row else 0
+                if count_only:
+                    return LLMRequestListResponse(bank_id=bank_id, total=total, limit=limit, offset=offset, items=[])
                 rows = await conn.fetch(
                     f"""
                     SELECT {cols} FROM {table}
@@ -14231,6 +14251,19 @@ class MemoryEngine(MemoryEngineInterface):
             outcome: RefreshOutcome,
         ) -> _MentalModelRefreshRun:
             """Close over everything the pipeline resolved before it branched."""
+            # Always retain a bounded cost projection without prompts, source
+            # text, or tool payloads. These counters cover reflect only: delta,
+            # retraction and structured-output calls have their own LLM receipts.
+            # An absent provider usage/trace is unknown, not a zero-cost run.
+            # Equal watermarks or unchanged output are not unchanged-input proof.
+            reflect_response_payload["work"] = MentalModelRefreshWork(
+                requested_mode=requested_mode,
+                effective_mode=effective_mode,
+                window=window,
+                facts=facts,
+                reflect_usage=reflect_result.usage,
+                reflect_llm_call_count=len(reflect_result.llm_trace) if reflect_result.llm_trace else None,
+            ).model_dump(mode="json")
             retraction_record = (
                 MentalModelRetraction(
                     fact_ids=sorted(retracted.ids),
@@ -16914,6 +16947,7 @@ class MemoryEngine(MemoryEngineInterface):
                     {
                         "id": str(row["operation_id"]),
                         "task_type": row["operation_type"],
+                        "parent_operation_id": result_metadata.get("parent_operation_id"),
                         "items_count": result_metadata.get("items_count", 0),
                         "document_id": result_metadata.get("document_id"),
                         "filename": result_metadata.get("original_filename"),

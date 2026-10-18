@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+from pathlib import Path
 
 VERSION='recall-first.v2-20260922'
 DEFAULT_CANDIDATE_LIMIT = 6
@@ -138,9 +139,12 @@ def runtime_event_text(task):
 
 def scoped_out(unit,task):
     scope=unit.get('scope') or {}
-    for scope_key,task_key in (('project_ids','project_ids'),('task_ids','task_ids'),('agent_roles','agent_roles')):
+    for scope_key,task_key in (('project_ids','project_ids'),('task_ids','task_ids'),('session_ids','session_ids'),('agent_roles','agent_roles')):
         required=set(scope.get(scope_key) or [])
-        if required and not required.intersection(task.get(task_key) or []):return True
+        actual=set(task.get(task_key) or [])
+        single = {'project_ids':'project_id', 'task_ids':'task_id', 'session_ids':'session_id'}.get(task_key)
+        if single and task.get(single): actual.add(task[single])
+        if required and not required.intersection(actual):return True
     return False
 
 def rank(units,task):
@@ -284,7 +288,7 @@ def select(repo,request,char_budget=None):
             if start<0:raise ValueError()
         except Exception:result.update(coverage='cursor_invalidated',errors=['cursor_scope_or_revision_changed']);return result
     loaded={(r.get('id'),r.get('revision'),r.get('content_sha256')) for r in request.get('loaded',[]) if isinstance(r,dict)}
-    active_units=repo.active_units()
+    active_units=[unit for unit in repo.active_units() if not scoped_out(unit,task)]
     from profile_projection import stable_profile
     result['stable_profile']=stable_profile(active_units)
     ranked=rank(active_units,task)
@@ -295,7 +299,7 @@ def select(repo,request,char_budget=None):
         from semantic_recall import LocalGuidanceEmbeddingClient, SemanticRecallService
         base=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_API_BASE','http://127.0.0.1:12088')
         bank=os.getenv('EVOLVING_PROFILE_GUIDANCE_BANK_ID','personal-memory')
-        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE',os.path.expanduser('~/.evolving-profile/guidance-v1/semantic-vectors.json'))
+        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE',str(Path.home()/'.evolving-profile/guidance-v1/semantic-vectors.json'))
         semantic_service=SemanticRecallService(
             LocalGuidanceEmbeddingClient(f'{base.rstrip("/")}/v1/default/banks/{bank}/internal/guidance-embeddings'),cache
         )
@@ -340,7 +344,7 @@ def select(repo,request,char_budget=None):
             result['deferred'].append({'id':u['id'],'revision':u['revision'],'text':u.get('text',''),'applies_when':u.get('applies_when',[]),'exceptions':u.get('exceptions',[]),'effect_on_action':u.get('effect_on_action',''),'reason':'budget_requires_next_page','requires_read_before_dependent_action':True})
     refs={(u['id'],u['revision']) for u in result['included']+result['already_loaded_valid']}
     result['preference_candidates']=[{**item,'status':'candidate_requires_agent_judgment'} for item in result['included']]
-    allowed={(u['id'],u['revision']) for u in repo.active_units() if (u.get('preference_audit') or {}).get('state') in {'approved','restricted'}}
+    allowed={(u['id'],u['revision']) for u in active_units if (u.get('preference_audit') or {}).get('state') in {'approved','restricted'}}
     for m in repo.active_models():
         for section in m.get('sections',[]):
             sr={(r.get('id'),r.get('revision')) for r in section.get('guidance_refs',[])}

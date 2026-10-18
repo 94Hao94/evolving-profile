@@ -256,6 +256,9 @@ def legacy_get_task_guidance(repo: GuidanceRepository, request: dict, char_budge
     term_weights = _term_weights(request)
     query_text = " ".join([task.get("objective", ""), task.get("current_user_message", ""), task.get("context_summary", ""), *task.get("previous_user_messages", []), *task.get("current_constraints", [])])
     for unit in repo.active_units():
+        from recall_first import scoped_out
+        if scoped_out(unit, task):
+            continue
         audit=(unit.get("preference_audit") or {}).get("state","not_reviewed")
         if audit in {"needs_review","superseded","stale"}:
             continue

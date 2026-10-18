@@ -26,7 +26,7 @@ GUIDANCE_INSTRUCTIONS = f"[{INSTRUCTION_VERSION} sha256={instruction_sha256()}]\
 
 
 PREFERENCE_TOOL = {
-    "name": "get_preference",
+    "name": "user_preference",
     "description": "多维度偏好（Multi-dimensional Preference）路线。遇到实质任务时根据启动说明优先调用；传入用户原始消息、必要前文、任务阶段和约束，读取正式active偏好及其五维归类、融合定位层中的已有心智模型章节。只读；前台模型调用为0，不生成长期模型。返回完整条件、例外、来源、already_loaded_valid、deferred和分页游标。",
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
         "context_ref": {"type": "string"},
@@ -67,8 +67,9 @@ PREFERENCE_TOOL["inputSchema"]["required"] = list(dict.fromkeys(
 ))
 RUNTIME_GUIDANCE_TOOL = {
     "name": "refresh_runtime_guidance",
-    "description": "当前任务执行中出现关键工具失败、超时或能力不可用时，携带已观察到的失败事实补查一次相关指导。只影响当前任务，不写入长期偏好，也不把替代验证冒充为原能力通过。",
+    "description": "当前任务执行中出现关键工具失败、超时或能力不可用时，携带已观察到的失败事实补查一次相关指导。task 必须为含 objective 的对象，不是字符串；runtime_event 为含 failure 的单个对象，不使用 runtime_events 数组或 event/details 字段。只影响当前任务，不写入长期偏好，也不把替代验证冒充为原能力通过。",
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+        "check_id": {"type": "string", "description": "当前 UserPromptSubmit check_id；缺失时只返回无任务身份限制的指导。"},
         "task": {"type": "object", "additionalProperties": True, "properties": {
             "objective": {"type": "string", "minLength": 1},
             "current_user_message": {"type": "string"},
@@ -99,6 +100,8 @@ def load_repository(config_path: str | Path) -> GuidanceRepository:
 
 
 def get_preference_response(repo: GuidanceRepository, request: dict, *, record: bool = True) -> dict:
+    from context_binding import bind_preference_request
+    request = bind_preference_request(request)
     runtime = load_runtime_settings()
     if not module_enabled(runtime, "preferences", "retrieve"):
         return {

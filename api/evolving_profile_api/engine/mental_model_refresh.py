@@ -175,6 +175,22 @@ class MentalModelFactCounts(BaseModel):
     )
 
 
+class MentalModelRefreshWork(BaseModel):
+    """Compact observed work, not an unchanged-input proof or total billed cost.
+
+    Reflect metrics exclude the separate delta, retraction and structured-output
+    stages. Null usage/call counts mean the provider or trace did not report them.
+    """
+
+    coverage: Literal["reflect_only"] = "reflect_only"
+    requested_mode: RefreshMode
+    effective_mode: RefreshMode
+    window: MentalModelRefreshWindow
+    facts: MentalModelFactCounts
+    reflect_usage: TokenUsage | None = None
+    reflect_llm_call_count: int | None = None
+
+
 class MentalModelDeltaOperations(BaseModel):
     """Structured operations a delta refresh emitted against the existing document."""
 

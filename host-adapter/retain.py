@@ -41,7 +41,7 @@ from lib.handoff import save_handoff
 from lib.midtask import acknowledge_journal, clear_checkpoint, snapshot_journal
 from lib.journal_audit import archive_tool_journal
 from lib.retention_queue import RetentionQueue, estimate_tokens
-from lib.retention_policy import retention_exclusion, allowed_retention_batches
+from lib.retention_policy import retention_exclusion, allowed_retention_batches, retention_turns, submission_metadata
 from lib.state import read_state, write_state
 
 
@@ -202,6 +202,29 @@ def _resolve_template(value: str, template_vars: dict) -> str:
     return value
 
 
+def capture_native_process_on_stop(hook_input, config, bank_id, source_turns):
+    """Use the existing process store without treating task prose as verification."""
+    from lib.process_context import capture_native_process
+    from lib.process_memory import ProcessMemoryStore
+    guidance_root = str(Path(__file__).resolve().parent.parent / 'guidance')
+    if guidance_root not in sys.path: sys.path.insert(0, guidance_root)
+    from runtime_settings import load_runtime_settings, module_enabled, route_policy
+    root = Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT', '~/.evolving-profile')).expanduser()
+    settings = load_runtime_settings(root / 'config/runtime-settings.json')
+    if 'ep' not in route_policy(settings, 'ep')['sources'] or not all(
+            module_enabled(settings, module, 'record') for module in ('agent_process_memory', 'agent_process_trajectory')):
+        return {'reason': 'disabled_by_runtime_settings'}
+    allowed, denied = set(), set()
+    for turn in source_turns:
+        target = allowed if turn['write_policy']['knowledge_allowed'] else denied
+        target.update(str((m.get('source_record') or {}).get('turn_id')) for m in turn['messages']
+                      if (m.get('source_record') or {}).get('turn_id'))
+    return capture_native_process(hook_input.get('transcript_path') or '',
+        ProcessMemoryStore(config.get('processMemoryPath') or root / 'process-memory/records.json'),
+        session_id=hook_input.get('session_id'), bank_id=bank_id, project=hook_input.get('cwd'),
+        allowed_turn_ids=allowed - denied)
+
+
 def main():
     if sys.platform == "win32":
         sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
@@ -228,6 +251,15 @@ def main():
             if observed.get('errors'):print('[Evolving Profile] native delegation observation incomplete: '+str(observed['errors']),file=sys.stderr)
         except Exception as error:
             print('[Evolving Profile] native delegation observation unavailable: '+type(error).__name__,file=sys.stderr)
+    if config.get('scenarioCompletionGateEnabled', True):
+        try:
+            from memory_turn_check import scenario_completion_gate
+            decision = scenario_completion_gate(hook_input, enabled=True)
+            if decision:
+                json.dump(decision, sys.stdout, ensure_ascii=False); sys.stdout.flush()
+                return  # One bounded continuation; do not retain a premature answer.
+        except Exception as error:
+            print('[Evolving Profile] scenario completion check unavailable: '+type(error).__name__, file=sys.stderr)
     if hook_input.get('session_id') in config.get('memoryCompletionGateSessions',[]):
         try:
             from memory_turn_check import completion_gate
@@ -250,6 +282,9 @@ def main():
 
     include_tool_calls = config.get("retainToolCalls", False)
     all_messages = read_transcript(transcript_path, include_tool_calls=include_tool_calls)
+    source_turns = retention_turns(all_messages)
+    allowed_source_messages = [message for turn in source_turns if turn['write_policy']['knowledge_allowed']
+                               for message in turn['messages']]
     if config.get("assistantSelectiveRetentionShadow", True):
         try:
             from lib.assistant_retention_shadow import record_final_answer_shadow
@@ -266,17 +301,21 @@ def main():
     # Close the retrieval -> injection -> answer loop before any retention
     # threshold early return.  This writes one small local audit event and makes
     # no model or memory-retrieval request.
-    if not native_delegation:
-        submit_answer_feedback(session_id, all_messages, config)
     exclusion = retention_exclusion(project, [session_id], config)
     if exclusion:
         debug_log(config, f"Retention held by {exclusion}; local evidence preserved")
         return
+    try:
+        process_capture = capture_native_process_on_stop(hook_input, config, bank_id, source_turns)
+        debug_log(config, 'Native process capture:', process_capture)
+    except Exception as error:
+        debug_log(config, 'Native process capture unavailable:', type(error).__name__)
     # Close the 10-30 minute token-batch freshness gap with a deterministic,
     # local-only task receipt. This performs no model or Hindsight request.
     if config.get("taskHandoffEnabled", True):
         try:
-            save_handoff(session_id, project, all_messages, transcript_path, bank_id)
+            if source_turns and source_turns[-1]['write_policy']['knowledge_allowed']:
+                save_handoff(session_id, project, allowed_source_messages, transcript_path, bank_id)
         except Exception as error:
             debug_log(config, f"Deterministic handoff save skipped: {error}")
     journal_snapshot = snapshot_journal(session_id)
@@ -304,8 +343,6 @@ def main():
     if cursor > len(all_messages):
         cursor = 0
     new_messages = all_messages[cursor:]
-    record_provisional_timeline_events(new_messages, config)
-    record_semantic_lifecycle_events(new_messages, config)
     transcript, message_count = prepare_retention_transcript(
         new_messages,
         config.get("retainRoles", ["user", "assistant"]),
@@ -314,25 +351,46 @@ def main():
     )
     # Only real transcript messages enter the knowledge queue. A journal is
     # already captured above, without borrowing the authority of nearby users.
-    captured = queue.capture(
-        session_id=session_id,
-        message_count=len(all_messages),
-        bank_id=bank_id,
-        project=project,
-        content=transcript or "",
-        metadata={
-            "source": "codex-hook-token-batch",
-            "session_id": session_id,
-            "project": project,
-            "priority_tail": str(_priority_short_task(transcript, config)).lower(),
-        },
-    )
+    captured = False
+    allowed_new_messages = []
+    # Derive from the full source window so a continuation inherits the prior
+    # human prohibition even after the previous Stop advanced the cursor.
+    for turn in source_turns:
+        if turn['end'] <= cursor:
+            continue
+        if turn['write_policy']['knowledge_allowed']:
+            allowed_new_messages.extend(all_messages[max(cursor,turn['start']):turn['end']])
+        turn_transcript, _ = prepare_retention_transcript(
+            all_messages[max(cursor, turn['start']):turn['end']],
+            config.get('retainRoles', ['user', 'assistant']), True,
+            include_tool_calls=include_tool_calls)
+        structured_transcript, _ = prepare_retention_transcript(
+            all_messages[max(cursor,turn['start']):turn['end']],
+            config.get('retainRoles',['user','assistant']),True,include_tool_calls=True)
+        captured = queue.capture(
+            session_id=session_id, message_count=turn['end'], bank_id=bank_id,
+            project=project, content=turn_transcript or '',
+            write_policy=turn['write_policy'],
+            messages=json.loads(structured_transcript) if structured_transcript else [],
+            metadata={'source':'codex-hook-token-batch', 'session_id':session_id,
+                      'project':project, 'priority_tail':str(_priority_short_task(turn_transcript, config)).lower()},
+        ) or captured
     if captured:
         debug_log(config, f"Persisted {message_count} new messages to the local token queue")
         if journal_audit.get('durable'):
             clear_checkpoint(session_id)
 
-    ready_batches = [batch for batch in queue.ready_batches(force_tail=False) if batch["bank_id"] == bank_id]
+    # Durable capture precedes optional network/model-dependent follow-ups.
+    # A feedback/provider outage must not lose this completed turn's raw input.
+    if not native_delegation:
+        submit_answer_feedback(session_id, all_messages, config)
+    record_provisional_timeline_events(allowed_new_messages, config)
+    record_semantic_lifecycle_events(allowed_new_messages, config)
+    if config.get('backgroundRetainWorkerEnabled', False):
+        debug_log(config, 'Raw turn captured; background worker owns submission/reconciliation')
+        return
+
+    ready_batches = [batch for batch in queue.ready_batches(force_tail=False, config=config) if batch["bank_id"] == bank_id]
     pending_operations = queue.pending_operations()
     if not ready_batches and not pending_operations:
         debug_log(config, f"Token queue below threshold ({threshold}); no model request")
@@ -356,7 +414,7 @@ def main():
             debug_log(config, f"Operation status unavailable for {operation_id}: {error}")
     if statuses:
         queue.reconcile(statuses)
-        ready_batches = [batch for batch in queue.ready_batches(force_tail=False) if batch["bank_id"] == bank_id]
+        ready_batches = [batch for batch in queue.ready_batches(force_tail=False, config=config) if batch["bank_id"] == bank_id]
 
     # A different project/session may already own the single async worker. Keep
     # newly captured work durable in the local queue, but never enqueue another
@@ -393,6 +451,7 @@ def main():
         }
         for key, value in config.get("retainMetadata", {}).items():
             metadata[key] = _resolve_template(str(value), template_vars)
+        metadata.update(submission_metadata(batch))
 
         document_id = f"codex-batch-{batch['batch_id']}"
         debug_log(config, f"Submitting {document_id} ({batch['estimated_tokens']} estimated tokens)")

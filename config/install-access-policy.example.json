@@ -1,0 +1,8 @@
+{
+  "sharedBank": "personal-memory",
+  "roles": {
+    "default": {"allowedLevels": ["core", "facts", "events"], "initialLevels": ["core"]},
+    "codex": {"allowedLevels": ["core", "facts", "events"], "initialLevels": ["core"]},
+    "claude-code": {"allowedLevels": ["core", "facts", "events"], "initialLevels": ["core"]}
+  }
+}

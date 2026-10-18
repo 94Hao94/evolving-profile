@@ -1,0 +1,242 @@
+{
+  "agent-packet": {
+    "height": 7.658806,
+    "width": 10.01712,
+    "x": 79.016557,
+    "y": 57.673435
+  },
+  "agent-process-memory-agent-research": {
+    "height": 4,
+    "width": 11.4,
+    "x": 31.4,
+    "y": 71.8
+  },
+  "agent-process-memory-agent-scenario-summary": {
+    "height": 13.753734,
+    "width": 9.64438,
+    "x": 43.674875,
+    "y": 60.307771
+  },
+  "agent-process-memory-capability-observation": {
+    "height": 4,
+    "width": 11.4,
+    "x": 31.4,
+    "y": 48.8
+  },
+  "agent-process-memory-compatibility-gate": {
+    "height": 12.501786,
+    "width": 8.241183,
+    "x": 53.518682,
+    "y": 60.746882
+  },
+  "agent-process-memory-failure-events": {
+    "height": 4,
+    "width": 11.4,
+    "x": 31.4,
+    "y": 53.4
+  },
+  "agent-process-memory-guidance-guard": {
+    "height": 4.945083,
+    "width": 10.71819,
+    "x": 64.59144,
+    "y": 70.083282
+  },
+  "agent-process-memory-guidance-hint": {
+    "height": 4.66567,
+    "width": 10.718197,
+    "x": 64.539034,
+    "y": 53.406865
+  },
+  "agent-process-memory-guidance-recommend": {
+    "height": 4.758806,
+    "width": 10.822993,
+    "x": 64.381803,
+    "y": 58.7794
+  },
+  "agent-process-memory-guidance-scaffold": {
+    "height": 4.945076,
+    "width": 10.613371,
+    "x": 64.486622,
+    "y": 64.245076
+  },
+  "agent-process-memory-migration-revalidation": {
+    "height": 4.479406,
+    "width": 10.770595,
+    "x": 64.486622,
+    "y": 48.313729
+  },
+  "agent-process-memory-observe-trajectory": {
+    "height": 7.651435,
+    "width": 9.210526,
+    "x": 19.736842,
+    "y": 57.70457
+  },
+  "agent-process-memory-process-retrieval": {
+    "height": 4.3991,
+    "width": 11.462031,
+    "x": 31.362031,
+    "y": 66.80061
+  },
+  "agent-process-memory-repair-mode": {
+    "height": 4,
+    "width": 11.4,
+    "x": 31.4,
+    "y": 58
+  },
+  "agent-process-memory-reusable-process-strategy": {
+    "height": 4,
+    "width": 11.4,
+    "x": 31.4,
+    "y": 62.6
+  },
+  "binding": {
+    "height": 8.093135,
+    "width": 12.6615,
+    "x": 19,
+    "y": 8.7
+  },
+  "context": {
+    "height": 8.093135,
+    "width": 13.798938,
+    "x": 69.413347,
+    "y": 8.606865
+  },
+  "contract": {
+    "height": 8,
+    "width": 12.451875,
+    "x": 34.5,
+    "y": 8.7
+  },
+  "execution": {
+    "height": 8.093129,
+    "width": 12.851343,
+    "x": 85.524063,
+    "y": 8.513733
+  },
+  "external-rag-fusion-rrf": {
+    "height": 7.658812,
+    "width": 8.490381,
+    "x": 45.560966,
+    "y": 82.382099
+  },
+  "external-rag-jev-review": {
+    "height": 7.472535,
+    "width": 8.976461,
+    "x": 66.794127,
+    "y": 82.661498
+  },
+  "external-rag-lexical": {
+    "height": 6.220594,
+    "width": 9.9,
+    "x": 32.384497,
+    "y": 79.472245
+  },
+  "external-rag-rerank": {
+    "height": 7.565683,
+    "width": 8.737965,
+    "x": 55.951343,
+    "y": 82.754634
+  },
+  "external-rag-vector": {
+    "height": 6.568653,
+    "width": 9.637969,
+    "x": 32.489312,
+    "y": 86.872245
+  },
+  "fork": {
+    "height": 10,
+    "width": 8,
+    "x": 51.882341,
+    "y": 8.151939
+  },
+  "label-agent-lane": {
+    "height": 2.975558,
+    "width": 12.858852,
+    "x": 14.65311,
+    "y": 50.903294
+  },
+  "label-fork": {
+    "height": 3.5,
+    "width": 6,
+    "x": 49.5,
+    "y": 16.5
+  },
+  "label-rag-lane": {
+    "height": 2.975558,
+    "width": 11.961722,
+    "x": 14.65311,
+    "y": 80.233794
+  },
+  "label-serial": {
+    "height": 3.2,
+    "width": 32,
+    "x": 1.34119,
+    "y": 1.70985
+  },
+  "label-user-lane": {
+    "height": 2.975558,
+    "width": 11.961722,
+    "x": 14.65311,
+    "y": 27.523911
+  },
+  "prompt": {
+    "height": 8,
+    "width": 13.762031,
+    "x": 2.304814,
+    "y": 8.7
+  },
+  "rag-packet": {
+    "height": 7.472541,
+    "width": 11.043838,
+    "x": 77.880225,
+    "y": 82.661498
+  },
+  "rag-root": {
+    "height": 7.651435,
+    "width": 9.808612,
+    "x": 19.736842,
+    "y": 82.571732
+  },
+  "user-memory-preference": {
+    "height": 6.1,
+    "width": 13.4,
+    "x": 35.560438,
+    "y": 27.075521
+  },
+  "user-memory-read-source": {
+    "height": 6.006858,
+    "width": 14.948133,
+    "x": 52.74171,
+    "y": 37.687164
+  },
+  "user-memory-recall": {
+    "height": 5.634326,
+    "width": 13.662035,
+    "x": 35.560435,
+    "y": 33.682385
+  },
+  "user-memory-research": {
+    "height": 5.7,
+    "width": 13.4,
+    "x": 35.612844,
+    "y": 39.630451
+  },
+  "user-memory-scenario-summary": {
+    "height": 6.472535,
+    "width": 15.891447,
+    "x": 52.165242,
+    "y": 29.403882
+  },
+  "user-packet": {
+    "height": 7.686271,
+    "width": 15.514964,
+    "x": 72.942252,
+    "y": 32.627465
+  },
+  "user-root": {
+    "height": 7.406871,
+    "width": 9.746531,
+    "x": 21.268976,
+    "y": 32.627465
+  }
+}

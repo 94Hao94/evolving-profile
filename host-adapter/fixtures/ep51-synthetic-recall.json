@@ -1,0 +1,19 @@
+{
+  "schema": "ep51-synthetic-recall-regression.v1",
+  "provenance": "synthetic derived; structure and failure modes only; no original user identities, messages, paths or locators",
+  "query": "为改进lecture skill寻找并阅读了哪些青岚整场演讲实录？现在要看那几篇原文。核对场次、标题、保存文本的位置和全文状态，不查青岚一般资料。",
+  "candidates": [
+    {
+      "id": "synthetic-version",
+      "text": "核对用户实际打开的版本，对齐源码、构建产物与运行页面，再保存截图；文档交付需检查最终渲染文件。"
+    },
+    {
+      "id": "synthetic-config",
+      "text": "核对配置语义和状态闭环，检查开关依赖、空值、加载、保存、恢复和重新读取。"
+    },
+    {
+      "id": "synthetic-tts",
+      "text": "local_tts 的 spoken_text 测试未清理 Markdown 标题、资料链接和 code，随后定位字符串清理错误。"
+    }
+  ]
+}

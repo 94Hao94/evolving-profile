@@ -8,11 +8,11 @@ import re
 
 
 DOMAIN_CATEGORY = {
-    "liuzhongyang-cognition-learning": "learning",
-    "liuzhongyang-business-architecture": "reasoning",
-    "liuzhongyang-collaboration-delivery": "delivery",
-    "liuzhongyang-work-project-architecture": "collaboration",
-    "liuzhongyang-ai-operating-system": "collaboration",
+    "ep-user-cognition-learning": "learning",
+    "ep-user-business-architecture": "reasoning",
+    "ep-user-collaboration-delivery": "delivery",
+    "ep-user-work-project-architecture": "collaboration",
+    "ep-user-ai-operating-system": "collaboration",
     "unclassified": "communication",
 }
 OBSERVATION_DISPOSITIONS = {"guidance_candidate", "knowledge_observation", "downgrade_world", "downgrade_experience", "held_insufficient_evidence", "reject_polluted"}
@@ -34,7 +34,7 @@ def build_direct_policy_proposal(policy: dict, memory: dict, chunk: dict, bank_i
         "nature": "explicit_requirement", "primary_category": DOMAIN_CATEGORY.get(policy.get("model_domain"), "communication"), "related_categories": [],
         "text": policy["policy"], "applies_when": [policy.get("scope") or "原始要求适用的同类任务"],
         "exceptions": [policy.get("boundary") or "当前 Prompt 或更具体要求优先"], "effect_on_action": "在匹配范围内约束执行方式，不扩大本轮授权",
-        "scope": {"user_id": "liuzhongyang", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
+        "scope": {"user_id": "ep-user", "agent_roles": [], "project_ids": [], "task_ids": [], "domains": [], "media": []},
         "evidence_refs": [{"bank_id": bank_id, "memory_id": memory["id"], "document_id": memory["document_id"], "chunk_id": memory.get("chunk_id"),
                            "source_revision": memory.get("updated_at") or memory.get("mentioned_at") or review["source_sha256"], "source_sha256": review["source_sha256"],
                            "span_start": start, "span_end": start + len(quote), "quote": quote, "stored_role": "user", "origin": "user_direct",

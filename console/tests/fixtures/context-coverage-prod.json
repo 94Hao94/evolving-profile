@@ -1,0 +1,390 @@
+[
+  {
+    "context_id": "session:df976554-7fe6-59e1-a73e-0c96cc83c6aa",
+    "session_id": "df976554-7fe6-59e1-a73e-0c96cc83c6aa",
+    "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be",
+    "status": "model_reviewed",
+    "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
+    "source_message_count": 8,
+    "automated_source_coverage": {
+      "accept": true,
+      "whole_source_topics_covered": true,
+      "corrections_preserved": true,
+      "assistant_claims_labeled": true,
+      "partition_exact": true,
+      "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be",
+      "reviewed_message_ids": [
+        "90d0d297ea6e96f3",
+        "cc05756c3ba66815",
+        "336d744306c9d6cf",
+        "871db4cebad239ba",
+        "819edf5c25453223",
+        "4e6bace0b73ba1a1",
+        "605ecf311e114e90",
+        "912492146f56dad8"
+      ],
+      "reviewed_episode_ids": [
+        "episode:df976554-7fe6-59e1-a73e-0c96cc83c6aa:90d0d297ea6e96f3"
+      ],
+      "coverage_protocol": "per_user_source_to_state_and_summary.v2",
+      "no_human_confirmation_claim": true,
+      "fact_verification": false,
+      "model_review_receipt": {
+        "host_validation_version": "source-coverage-primary-context.v3",
+        "input_clipped": false,
+        "source_revision": "5a757095b939e7ff7ded8129f2f518c2dd4f91c65c46ec4b95ab4e03381ea5be"
+      }
+    },
+    "episodes": [],
+    "source_ids": [
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T13-06-16-df976554-7fe6-59e1-a73e-0c96cc83c6aa.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
+  },
+  {
+    "context_id": "session:37d374e2-7066-5122-a932-b5db57911c1a",
+    "session_id": "37d374e2-7066-5122-a932-b5db57911c1a",
+    "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd",
+    "status": "model_reviewed",
+    "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
+    "source_message_count": 2,
+    "automated_source_coverage": {
+      "accept": true,
+      "whole_source_topics_covered": true,
+      "corrections_preserved": true,
+      "assistant_claims_labeled": true,
+      "partition_exact": true,
+      "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd",
+      "reviewed_message_ids": [
+        "976ff15214d5c45a",
+        "933f0f1ba09b2cd8"
+      ],
+      "reviewed_episode_ids": [
+        "episode:37d374e2-7066-5122-a932-b5db57911c1a:976ff15214d5c45a"
+      ],
+      "coverage_protocol": "per_user_source_to_state_and_summary.v2",
+      "no_human_confirmation_claim": true,
+      "fact_verification": false,
+      "model_review_receipt": {
+        "host_validation_version": "source-coverage-primary-context.v3",
+        "input_clipped": false,
+        "source_revision": "6abcd4fe6572905e26273a0cfdc22704ba7445ddcd52eef2bcfe80ffd90f92dd"
+      }
+    },
+    "episodes": [],
+    "source_ids": [
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T15-52-52-37d374e2-7066-5122-a932-b5db57911c1a.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
+  },
+  {
+    "context_id": "session:7c439e84-cb9d-5f26-b141-88e3e4ed74b7",
+    "session_id": "7c439e84-cb9d-5f26-b141-88e3e4ed74b7",
+    "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0",
+    "status": "episode_directory_ready",
+    "review_scope": "automated_full_source_coverage_and_episode_model_review_not_external_fact_verification",
+    "source_message_count": 30,
+    "automated_source_coverage": {
+      "accept": true,
+      "whole_source_topics_covered": true,
+      "corrections_preserved": true,
+      "assistant_claims_labeled": true,
+      "partition_exact": true,
+      "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0",
+      "reviewed_message_ids": [
+        "a5248eed43343688",
+        "792b3b00bd831a97",
+        "4c6c46378b8c88f1",
+        "ff648cd4501a78f6",
+        "fdf5f167719d1b1e",
+        "65f337ddf8a544c2",
+        "3a4808351fc2903e",
+        "0028e653ae07a6e7",
+        "67301d6a48796342",
+        "6d7c49d2f9dd2491",
+        "7db0375a79e99053",
+        "fc5d46ae107ccf22",
+        "70dce8b2916f786c",
+        "93ecd41b8bc0d820",
+        "891ab2434fb61937",
+        "435d6f4d10905c04",
+        "e000dab78a03a4d4",
+        "73c3565756cfd27f",
+        "fce58943ae443d83",
+        "006c24e90c8d3026",
+        "1bf345165f03c760",
+        "811fceb741367a34",
+        "5b928d280dff66e4",
+        "f72bc9ba4137ed45",
+        "550e19edbbfb098a",
+        "6426c4cca5b6405d",
+        "bce181c39ab050e3",
+        "5f1c8514668aa4ed",
+        "e1c381f447cc0a9f",
+        "52bbe3586dda51d7"
+      ],
+      "reviewed_episode_ids": [
+        "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:a5248eed43343688",
+        "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:fce58943ae443d83"
+      ],
+      "coverage_protocol": "per_user_source_to_state_and_summary.v2",
+      "no_human_confirmation_claim": true,
+      "fact_verification": false,
+      "model_review_receipt": {
+        "host_validation_version": "source-coverage-primary-context.v3",
+        "input_clipped": false,
+        "source_revision": "9fff6c983eac633e5b6c0a236e080919baca3ed855a85306b2bee682f84157e0"
+      }
+    },
+    "episodes": [
+      {
+        "episode_id": "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:a5248eed43343688",
+        "title": "Episode 1",
+        "title_authority": "navigation_label_not_verified_fact",
+        "status": "model_reviewed",
+        "source_message_count": 18,
+        "review_scope": "automated_exact_source_span_not_external_fact_verification",
+        "summary_budget": {
+          "compact": {
+            "context_type": "session",
+            "tier": "compact",
+            "max_chars": 500,
+            "max_tokens": 400,
+            "chars": 206,
+            "estimated_tokens": 103,
+            "truncated": false
+          },
+          "standard": {
+            "context_type": "session",
+            "tier": "standard",
+            "max_chars": 1200,
+            "max_tokens": 900,
+            "chars": 256,
+            "estimated_tokens": 128,
+            "truncated": false
+          },
+          "full": {
+            "context_type": "session",
+            "tier": "full",
+            "max_chars": 4000,
+            "max_tokens": 3000,
+            "chars": 1284,
+            "estimated_tokens": 642,
+            "truncated": false
+          }
+        },
+        "summary": {
+          "compact": "Fixture episode 1 compact",
+          "standard": "Fixture episode 1 standard",
+          "full": "Fixture episode 1 full"
+        },
+        "source_file_ids": [
+          "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
+        ],
+        "source_offsets": [
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 212024,
+            "message_id": "a5248eed43343688"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 230333,
+            "message_id": "792b3b00bd831a97"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 238107,
+            "message_id": "4c6c46378b8c88f1"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 432152,
+            "message_id": "ff648cd4501a78f6"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 443377,
+            "message_id": "fdf5f167719d1b1e"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 481744,
+            "message_id": "65f337ddf8a544c2"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 494275,
+            "message_id": "3a4808351fc2903e"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 507567,
+            "message_id": "0028e653ae07a6e7"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 516223,
+            "message_id": "67301d6a48796342"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 529641,
+            "message_id": "6d7c49d2f9dd2491"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 667598,
+            "message_id": "7db0375a79e99053"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 783517,
+            "message_id": "fc5d46ae107ccf22"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 794582,
+            "message_id": "70dce8b2916f786c"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 831173,
+            "message_id": "93ecd41b8bc0d820"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 843957,
+            "message_id": "891ab2434fb61937"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 857615,
+            "message_id": "435d6f4d10905c04"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 866369,
+            "message_id": "e000dab78a03a4d4"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 1978013,
+            "message_id": "73c3565756cfd27f"
+          }
+        ]
+      },
+      {
+        "episode_id": "episode:7c439e84-cb9d-5f26-b141-88e3e4ed74b7:fce58943ae443d83",
+        "title": "Episode 2",
+        "title_authority": "navigation_label_not_verified_fact",
+        "status": "model_reviewed",
+        "source_message_count": 12,
+        "review_scope": "automated_exact_source_span_not_external_fact_verification",
+        "summary_budget": {
+          "compact": {
+            "context_type": "session",
+            "tier": "compact",
+            "max_chars": 500,
+            "max_tokens": 400,
+            "chars": 221,
+            "estimated_tokens": 111,
+            "truncated": false
+          },
+          "standard": {
+            "context_type": "session",
+            "tier": "standard",
+            "max_chars": 1200,
+            "max_tokens": 900,
+            "chars": 449,
+            "estimated_tokens": 225,
+            "truncated": false
+          },
+          "full": {
+            "context_type": "session",
+            "tier": "full",
+            "max_chars": 4000,
+            "max_tokens": 3000,
+            "chars": 1368,
+            "estimated_tokens": 684,
+            "truncated": false
+          }
+        },
+        "summary": {
+          "compact": "Fixture episode 2 compact",
+          "standard": "Fixture episode 2 standard",
+          "full": "Fixture episode 2 full"
+        },
+        "source_file_ids": [
+          "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
+        ],
+        "source_offsets": [
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2134926,
+            "message_id": "fce58943ae443d83"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2349396,
+            "message_id": "006c24e90c8d3026"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2357904,
+            "message_id": "1bf345165f03c760"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2376662,
+            "message_id": "811fceb741367a34"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2389752,
+            "message_id": "5b928d280dff66e4"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2405006,
+            "message_id": "f72bc9ba4137ed45"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2417488,
+            "message_id": "550e19edbbfb098a"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2471629,
+            "message_id": "6426c4cca5b6405d"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2483568,
+            "message_id": "bce181c39ab050e3"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2498140,
+            "message_id": "5f1c8514668aa4ed"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 2509459,
+            "message_id": "e1c381f447cc0a9f"
+          },
+          {
+            "source_path": "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl",
+            "byte_offset": 3332245,
+            "message_id": "52bbe3586dda51d7"
+          }
+        ]
+      }
+    ],
+    "source_ids": [
+      "/Users/example/.codex/sessions/2026/10/08/rollout-2026-10-08T10-07-41-7c439e84-cb9d-5f26-b141-88e3e4ed74b7.jsonl"
+    ],
+    "fixture_authority": "synthetic_projection_test_only_not_production_receipt"
+  }
+]

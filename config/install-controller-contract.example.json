@@ -1,0 +1,8 @@
+{
+  "schema": 5,
+  "queryController": {
+    "globalReadLimit": 4,
+    "fastRecall": {"enabled": false}
+  },
+  "memoryOS": {"enabled": false}
+}

@@ -15,7 +15,7 @@ from typing import Any, Iterable
 
 # Bump whenever admission semantics change.  Controller-side cached decisions
 # from an older policy must never silently cross the Hook boundary.
-POLICY = "v15_guidance_source_isolation"
+POLICY = "v18_structural_reply_and_task_scope"
 
 WEAK_TERMS = {
     "这个", "那个", "这些", "问题", "什么", "怎么", "如何", "为什么", "是不是",
@@ -1225,7 +1225,7 @@ def concrete_artifact_scope_alignment(query: str, text: str) -> dict[str, Any]:
 
 
 _PATH_SCOPE_GENERIC_COMPONENTS = {
-    "users", "user", "apple", "ep-test-user", "home", "documents", "downloads", "desktop",
+    "users", "user", "home", "documents", "downloads", "desktop",
     "projects", "project", "codex", "tmp", "var", "private", "work", "ag",
     "outputs", "output", "files", "file", "data", "src", "dist", "main",
 }
@@ -1246,13 +1246,16 @@ def _path_scope_components(value: str) -> list[str]:
     """Extract non-generic components from absolute/local paths."""
     raw = str(value or "")
     matches = re.findall(
-        r"(?:/(?:Users|Volumes|tmp|var|private|opt|etc)/[^\s`'\"，。；;!?！？]+|~/[^\s`'\"，。；;!?！？]+)",
+        r"(?:/(?:Users|home|Volumes|tmp|var|private|opt|etc)/[^\s`'\"，。；;!?！？]+|~/[^\s`'\"，。；;!?！？]+)",
         raw,
         re.I,
     )
     components: list[str] = []
     for path in matches:
         path = path.rstrip(".,;:!?！？)]}>")
+        # The account segment is a container shared by unrelated projects.
+        # Ignore its position structurally, never by one author's login name.
+        path = re.sub(r"^/(?:Users|home)/[^/]+(?:/|$)", "/", path, flags=re.I)
         for component in path.split("/"):
             component = component.strip("`'\"()[]{}")
             if not component:
@@ -1292,7 +1295,7 @@ def _path_scope_anchor_hit(anchor: str, candidate: str) -> bool:
 def path_artifact_scope_alignment(query: str, text: str) -> dict[str, Any]:
     """Keep absolute-path work attached to its named task/artifact scope.
 
-    A path such as ``.../优优汽车队`` is more specific than the parent
+    A path such as ``.../示例影片项目`` is more specific than the parent
     ``Codex`` directory.  Without this guard, broad semantic rescue admitted
     unrelated configuration, game and storage memories into a video-editing
     packet merely because all lived under Codex.  The fallback is intentionally
@@ -1658,6 +1661,14 @@ def _independent_hits(query: str, text: str) -> tuple[list[str], list[str]]:
         if block.size < 4:
             continue
         value = q[block.a:block.a + block.size]
+        if re.fullmatch(r'[a-z0-9_.-]+', value) and any(
+            re.search(r'[a-z0-9_]', surrounding)
+            for full, start in ((q, block.a), (t, block.b))
+            for surrounding in (full[max(0, start - 1):start], full[start + block.size:start + block.size + 1])
+        ):
+            # ``lect`` in Lecture/Collecting and ``ture`` in fixture are
+            # character overlap, not shared subjects or identifier aliases.
+            continue
         if (
             not value
             or value in WEAK_TERMS
@@ -2978,6 +2989,9 @@ def admission_decision(
     deep: bool = False,
     preserve_controller_decision: bool = False,
 ) -> dict[str, Any]:
+    from .content import normalize_question_reply
+    from .recall_relevance import task_scope_alignment
+    query = normalize_question_reply(query)
     from .guidance_provenance import guidance_source_decision
     source_review=guidance_source_decision(item)
     if not source_review['allowed'] and not explicit_user_source_request(query):
@@ -2985,6 +2999,7 @@ def admission_decision(
                 'source_class':source_class(item),'guidance_source_review':source_review,'fixed_item_limit':False,
                 'hits':[],'strong_hits':[],'weak_hits':[],'matched_concepts':[],'semantic_relevance_score':None}
     text = str(item.get("text") or item.get("content") or "")
+    task_scope = task_scope_alignment(query, text)
     strong_hits, weak_hits = _independent_hits(query, text)
     query_concepts = _concept_labels(intent_text(query))
     candidate_concepts = _concept_labels(text)
@@ -3612,6 +3627,89 @@ def admission_decision(
 
     if direct:
         reason += " 直接原话只证明来源真实性，不会绕过主题相关性检查。"
+    # Recall-first policy: preserve a weakly related candidate when it has at
+    # least one independent topic/relation signal (or a modest semantic score)
+    # so missing a useful memory costs more than carrying background context.
+    # This does not bypass hard source, scope, provenance, diagnostic, or
+    # explicit-conflict gates below; completely unrelated candidates remain
+    # rejected.  The strength is recorded for the UI/agent to treat as
+    # background rather than as a fact.
+    weak_related = False
+    weak_signal = bool(
+        # The subject alignment can contain grammatical common fragments
+        # rejected by _meaningful_current_anchor. Scores rank a relation;
+        # they cannot manufacture one after a structural boundary failed.
+        topical_hits or matched_concepts or alignment["relation_support"]
+        or task_scope['subject_hits'] or task_scope['transferable_source_method']
+    )
+    # A named endpoint occurring only in an explicit exclusion clause is
+    # evidence of non-membership, not a weaker positive membership claim.
+    # Reuse the current named-system projection and ordinary clause scope;
+    # no query/entity list is introduced into the fallback.
+    boundary_subjects = set(comparison_alignment.get("shared_systems") or []) | set(taxonomy_alignment.get("shared_systems") or [])
+    positive_scope_text = compact(" ".join(
+        clause for clause in re.split(r"[，,。！？!?；;\n]+", text)
+        if not re.search(r"未涉及|不涉及|不属于|未包含|不包含|无关|不相关", clause)
+    ))
+    excluded_named_subject = bool(
+        boundary_subjects
+        and (comparison_alignment["requested"] or taxonomy_alignment["requested"] or entity_fact_alignment["requested"])
+        and not any(compact(subject) in positive_scope_text for subject in boundary_subjects)
+    )
+    preference_scope_missing = bool(
+        preference_alignment["requested"] and preference_alignment["research_scoped"]
+        and len(preference_alignment["shared_anchors"]) < preference_alignment["minimum_shared_anchors"]
+        and not alignment["relation_support"]
+    )
+    if preference_scope_missing:
+        qualified = False
+        reason = "当前要求带选择边界的研究或实现路径；候选只重复单个模型/工具名，未建立方向、论文或实现关系，不能作为弱相关背景恢复。"
+    denied_structural_boundary = bool(
+        (operational_audit and cls != "raw_evidence" and not operational_alignment["qualified"])
+        or (audit_alignment["required"] and not audit_alignment["qualified"])
+        # Reuse the existing clause-aware positive/negated named anchors.
+        # An excluded endpoint or parent-name substring is not ownership.
+        or (entity_fact_alignment["requested"] and not entity_fact_alignment["shared_anchors"])
+        or excluded_named_subject
+        or preference_scope_missing
+    )
+    hard_block = bool(
+        task_scope['blocked'] or denied_structural_boundary
+        or legacy_candidate_wrapper or diagnostic_artifact or named_target_missing or component_only_candidate
+        or (document_change_alignment["required"] and not document_change_alignment["passes"])
+        or (artifact_scope_alignment["requested"] and not artifact_scope_alignment["qualified"])
+        or (path_scope_alignment["requested"] and not path_scope_alignment["qualified"])
+        or (current_operation_alignment["requested"] and not current_operation_alignment["qualified"])
+        or (procurement_alignment["requested"] and not procurement_alignment["qualified"])
+        or (provenance_alignment["requested"] and cls != "raw_evidence" and not provenance_alignment["passes"] and not operational_audit)
+    )
+    if not qualified and not weak_signal and not hard_block and all(
+        re.search(r'先.{2,100}再|\bfirst\b.{2,100}\bthen\b', value, re.I)
+        for value in (query, text)
+    ):
+        # Ordered procedures can share independent two-Han object words
+        # without a four-character literal span. Reuse the content classifier
+        # rather than treating every short substring as a new topic anchor.
+        from .recall_relevance import classify_candidate
+        procedure_relation = classify_candidate(query, {'text': text})
+        weak_signal = bool(
+            procedure_relation['reasons'] == ['meaningful_short_subject_or_independent_cjk_anchors']
+            and len(procedure_relation['match_signals'].get('independent_short_cjk_anchors', [])) >= 2
+        )
+    if task_scope['blocked']:
+        qualified = False
+        reason = '候选未建立所请求来源的主体，或属于另一个明确工作流的硬性规则；通用操作词及语义分不能越过该范围。'
+    if task_scope['source_task_requested']:
+        # Owner extraction is an audit hint only. Evaluate actual body/task
+        # relation instead of treating a missing owner template as mismatch.
+        weak_signal = task_scope['source_content_relation']
+        if not weak_signal:
+            qualified = False
+            reason = '来源任务没有实质内容关系；核对、保存、标题或状态等通用词不能单独支撑准入。'
+    if not qualified and weak_signal and not hard_block:
+        qualified = True
+        weak_related = True
+        reason = "召回优先策略：存在部分主题、关系或语义信号，作为弱相关背景候选保留；不作为已核实事实。"
     decision = "qualified" if qualified else "rejected"
     if not qualified and document_change_alignment["required"] and not document_change_alignment["passes"]:
         decision = "rejected_document_change_scope_mismatch"
@@ -3662,6 +3760,9 @@ def admission_decision(
         "query_concepts": sorted(query_concepts),
         "candidate_concepts": sorted(candidate_concepts),
         "matched_concepts": matched_concepts,
+        "task_scope_alignment": task_scope,
+        "relevance_strength": "weak" if weak_related else ("direct" if qualified else "none"),
+        "recall_first_policy": True,
         "proposition_alignment": alignment,
         "real_dialogue_alignment": real_dialogue,
         "recent_activity_alignment": recent_activity,
