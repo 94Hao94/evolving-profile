@@ -8,6 +8,13 @@ The product version is [VERSION](../VERSION). The existing contribution branch
 is still named `release/5.1.0`; its name is not the installed patch version.
 No private Bank, provider account, transcript or model weights are bundled.
 
+For this candidate use the exact `v5.1.2-rc.1` tag or named verified archive; see
+[candidate setup](CANDIDATE-SETUP.md). Older branch/tag assets are not this candidate.
+After setup, the Agent also needs [daily operating guidance](AGENT-USAGE.md).
+After verifying the actual running candidate directory, complete the explicit
+[runtime version projection](CANDIDATE-SETUP.md#project-verified-version-metadata-into-the-selected-runtime);
+build-only setup does not overwrite an existing installation's release metadata.
+
 ## Choose the level you need
 
 | Level | What is running | What it does not establish |
@@ -29,8 +36,7 @@ subscription's chat key may not support embeddings. CPU/local models require
 their own dependencies, memory and load tests; they are not downloaded here.
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
-cd evolving-profile-2.2
+cd /path/to/extracted-evolving-profile
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 

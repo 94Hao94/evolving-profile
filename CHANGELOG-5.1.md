@@ -1,4 +1,4 @@
-# Evolving Profile 5.1.1
+# Evolving Profile 5.1.2
 
 > English release notes first. 中文更新说明见本文后半部分。
 
@@ -13,6 +13,47 @@ those planes meet: long sessions, incomplete provider drafts, nested host
 receipts, native source review, and source-to-state coverage.
 
 ## Main changes
+
+### 5.1.2 RC1 — cross-host preparation and agent operating guidance
+
+- One capability registry drives8 host profiles, environment discovery, safe configuration
+  previews, revision-checked apply/restore, CLI/PowerShell preparation, UI and generated matrices.
+- Added a peer Host integrations configuration tab, bilingual feedback, readable/scrollable
+  dialogs and explicit separation of installation candidates, EP protocol checks and native use.
+- Governed new-host stdio and optional authenticated HTTP use the existing core, default read-only,
+  qualified host/owner/installation identities and bounded diagnostics. Capture remains off.
+- Prepared POSIX/Windows lock and path/UTF-8 handling without claiming actual Windows execution.
+- Added Agent-use instructions beyond installation: routes, binding, scenario/source expansion,
+  evidence accounting, failure recovery and per-host no-Hook limitations.
+- Packaged static policy resources explicitly; fixed the Console launcher losing the colocated
+  host script root when it enters standalone, while preserving explicit operator overrides.
+- Prior local macOS feature/deployment evidence is separated from this candidate's clean-package
+  results and from pending real-host/Windows acceptance. Release, contribution and merge status
+  remain separately tracked; a personal pre-release is not an upstream stable release.
+
+中文：本候选新增8类宿主准备与管理，区分识别、配置、协议、宿主接收和回答采用。
+补齐跨平台基础、受控配置和只读协议；新增Agent日常使用说明，而不止安装命令。
+修复打包静态依赖遗漏和Console切换工作目录后找不到配套脚本的问题。
+Windows及新宿主的真实生命周期仍待实测；新版本只在本地准备，不代表远端已发布。
+
+### Cross-date host receipt projection — 5.1.1 contribution patch, 2026-10-18
+
+- Resolve old and archived native sessions using their authorized recorded
+  path and session identity instead of the current Prompt date window.
+- Read bounded tail/streamed source intervals and cache selected turn ranges,
+  including running or partial turns; repeated refreshes do not reload a whole
+  long transcript into memory. Unknown and budget-limited coverage remain explicit.
+- Separate prepared Hook context, actual tool returns and host-received counts
+  through branch and aggregate nodes. Include runtime-guidance refresh packets;
+  inactive planned branches do not erase an observed subtotal.
+- Preserves saved topology coordinates, memory records and retrieval policy.
+  Branch publication, upstream PR acceptance and tagged releases remain separate;
+  see the release ledger for actual synchronization evidence.
+
+中文：修复长期会话跨日期后找不到原生工具回执的问题；使用经身份核对的来源路径和
+有界读取，不把整份大文件反复载入内存。链路分别显示候选、Hook 准备、实际返回和
+宿主接收，刷新指导返回的真实偏好包也进入统计。未知仍是未知，不补造送达或回答采用。
+不改已保存的手动布局、记忆内容和召回策略；发布渠道状态见发布记录。
 
 ### Runtime guidance argument boundary — 2026-10-18
 

@@ -15,7 +15,7 @@ import sys
 import uuid
 import datetime
 import tempfile
-import fcntl
+from lib import platform_lock as fcntl
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -956,14 +956,20 @@ def _tool_stage(tool):
     if tool.startswith('write_agent_'): return 'associate'
     return 'retrieve'
 
-def _route_receipt_path(root, check_id):
+def _route_receipt_path(root, check_id, binding=None):
     """Use the existing ingress SHA256 identity for every route outcome."""
     identity = str(check_id or '').strip()
     if not identity: raise ValueError('route_receipt_check_id_required')
+    host=(binding or {}).get('host_id') or os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')
+    if host!='codex':
+        scope={key:(binding or {}).get(key) or os.environ.get(env) for key,env in
+               (('owner_id','EVOLVING_PROFILE_OWNER_ID'),('installation_id','EVOLVING_PROFILE_INSTALLATION_ID'))}
+        if not all(scope.values()):raise ValueError('unattested_route_scope')
+        identity=json.dumps({'host_id':host,**scope,'check_id':identity},sort_keys=True)
     return Path(root)/(hashlib.sha256(identity.encode()).hexdigest()+'.json')
 
 def _route_receipt_for_binding(root, check_id, binding):
-    target = _route_receipt_path(root, check_id)
+    target = _route_receipt_path(root, check_id, binding)
     identity = str(check_id or '').strip()
     try: receipt = json.loads(target.read_text(encoding='utf-8'))
     except (OSError,ValueError,TypeError):
@@ -971,12 +977,13 @@ def _route_receipt_for_binding(root, check_id, binding):
     if not isinstance(receipt,dict) or receipt.get('check_id') not in (None,identity):
         raise ValueError('route_receipt_binding_mismatch')
     old_binding = receipt.get('prompt_binding') or {}
-    if not isinstance(old_binding,dict) or any(old_binding.get(key) not in (None,'',binding.get(key))
-            for key in ('session_id','turn_id','hook_invocation_id')):
+    fields=('session_id','turn_id','hook_invocation_id')
+    if binding.get('host_id') not in (None,'codex'):fields+=('owner_id','host_id','installation_id')
+    if not isinstance(old_binding,dict) or any(old_binding.get(key) not in (None,'',binding.get(key)) for key in fields):
         raise ValueError('route_receipt_binding_mismatch')
     if binding.get('state') != 'prompt_bound' or binding.get('hook_invocation_id') != identity:
         raise ValueError('route_receipt_binding_mismatch')
-    receipt.update(check_id=identity,prompt_binding={key:binding.get(key) for key in ('session_id','turn_id','hook_invocation_id')})
+    receipt.update(check_id=identity,prompt_binding={key:binding.get(key) for key in fields})
     return target,receipt
 
 def _route_receipt_counts(receipt):
@@ -1182,6 +1189,8 @@ def _query_scope_audit(check_id, query, binding, home=None):
             except (ValueError,TypeError):
                 continue
             if isinstance(candidate,dict) and candidate.get('hook_invocation_id') == check_id:
+                from context_binding import same_prompt_scope
+                if not same_prompt_scope(candidate,binding):continue
                 row = candidate
                 break
     except (OSError,ValueError,TypeError):
@@ -1440,6 +1449,12 @@ def memory_check_route(args):
     except Exception:
         value={'schema':'evolving-profile.memory-check.v1','query':prompt,'decision':'unknown','recommended_route':'unknown','reason':'目录探针不可用；需要由Codex根据说明和当前证据决定。','matched_nodes':[],'confidence':0.0,'requires_receipt':True}
     value.update({'tool':'memory_check','bank_detail_read':False,'history_receipt_required':True,'adapter_version':VERSION,'check_id':str(args.get('check_id') or uuid.uuid4().hex)})
+    if os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')!='codex':
+        binding=_prompt_binding_for_check_id(args.get('check_id'),datetime.datetime.now(datetime.timezone.utc).isoformat())
+        value['prompt_binding']=binding
+        value['identity_origin']='host' if binding.get('state')=='prompt_bound' else 'adapter_assigned'
+        # A route hint is not a Hook registration. Never load Codex receipt state.
+        return value
     route_root=Path(os.environ.get('EVOLVING_PROFILE_ROUTE_RECEIPT_ROOT',str(Path.home()/'.evolving-profile/audit/memory-route-receipts')))
     previous={}
     if args.get('check_id'):
@@ -1486,6 +1501,8 @@ def memory_check_declaration(args):
             if isinstance(row, dict): rows.append(row)
         except (ValueError, TypeError): pass
     if binding.get('state') != 'prompt_bound':
+        if os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')!='codex':
+            raise ValueError('new_host_requires_verified_current_binding')
         # A modern unknown may be a real legacy registration, never a new ID.
         import sqlite3
         root = Path(os.environ.get('HINDSIGHT_TURN_CHECK_ROOT', str(Path.home()/'.evolving-profile/memory-os/turn-checks')))
@@ -1527,8 +1544,8 @@ def memory_check_declaration(args):
         return value
     if any(caller.get(key) and caller[key] != binding.get(key) for key in ('session_id','turn_id')):
         raise ValueError('memory_check caller identity does not match Hook binding')
-    source = next((row for row in reversed(rows) if row.get('hook_invocation_id') == check_id
-        and row.get('session_id') == binding.get('session_id') and row.get('turn_id') == binding.get('turn_id')), None)
+    from context_binding import same_prompt_scope
+    source = next((row for row in reversed(rows) if same_prompt_scope(row,binding)), None)
     if not source or not isinstance(source.get('prompt_preview'), str) or not source['prompt_preview'].strip():
         raise ValueError('memory_check trusted Hook prompt unavailable')
     from memory_turn_check import process_memory_route_hint, POLICY_VERSION
@@ -2326,9 +2343,21 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            reply(message_id, {"tools": [TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,JEV_RISK_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_RECALL_TOOL,AGENT_RESEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_WORKSPACE_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])})
+            tools=[TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,JEV_RISK_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_RECALL_TOOL,AGENT_RESEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_WORKSPACE_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])
+            from lib.host_integration.policy import governed_mode,filter_tools
+            reply(message_id, {'tools':filter_tools(tools) if governed_mode() else tools})
         elif method == "tools/call":
             params = request.get("params") or {}
+            from lib.host_integration.policy import governed_mode,authorize_tool_call
+            if governed_mode():
+                try:authorize_tool_call(params.get('name'),params.get('arguments',{}),{})
+                except PermissionError:
+                    CURRENT_TOOL_CALL=_begin_tool_call({'name':params.get('name')},message_id,bind_prompt=False)
+                    reply(message_id,error={'code':-32001,'message':'tool_not_authorized'})
+                    continue
+                except ValueError:
+                    CURRENT_TOOL_CALL=_begin_tool_call({'name':params.get('name')},message_id,bind_prompt=False)
+                    raise GuidanceInputError('arguments','an object')
             if params.get('name') in {'refresh_runtime_guidance', 'user_preference', 'get_preference', 'get_task_guidance'}:
                 try:
                     original_args = params.get('arguments', {})

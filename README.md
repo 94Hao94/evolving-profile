@@ -64,6 +64,28 @@ empty result, an excluded candidate and unknown host visibility are different st
 These capabilities provide structured evidence and reusable context; they do not
 guarantee that every old memory is correct or every future task will improve.
 
+## Maturity at a glance
+
+**5.1.2 RC1 is a release candidate, not an all-platform stable certification.**
+Product version comes from [VERSION](VERSION); channel/build metadata comes from
+the checked [release manifest](config/release-manifest.json). Use the exact
+[RC tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1).
+Publication and contribution status are separate; older branches/assets are not this candidate.
+
+| Area | Current evidence | Still needs validation |
+| --- | --- | --- |
+| User/agent memory, five-dimensional preferences, scenario/source navigation and observable topology | Existing implementation; macOS/Codex is the main exercised integration | Whole-history accuracy, universal answer benefit and every model/task combination |
+| Host integrations management page | Implemented; real local Console clicks, Chinese/English, scroll and responsive checks | Native target-client acceptance is separate from this page |
+| Governed stdio and optional authenticated HTTP | Isolated EP-side protocol/policy tests; new profiles default to read-only | Actual client receipt/use, remote/TLS operation and every lazy tool dependency branch |
+| Claude CLI, local desktop Code and ordinary desktop Chat | Separate recipes and preparation profiles | Each actual surface's lifecycle, source capture, binding and end-to-end calls |
+| Hermes, WorkBuddy and Doubao Work | Capability profiles, discovery, previews, guidance and diagnostics prepared | Native task/session evidence; no equal-validation claim with Codex |
+| Windows native / WSL / remote | Separate modes, Unicode/UTF-8/path/lock preparation and manual CI definition | Actual Windows/PowerShell execution; WSL success is not native-Windows certification |
+| External RAG / JEV / local models | Existing optional modules and configuration | Operator's actual files, keys, models, index compatibility and measured benefit |
+
+“Detected”, “configured”, “EP protocol verified”, “host received” and “answer
+adopted” are different claims. Missing evidence stays unknown, not zero or success.
+See [candidate scope and acceptance](docs/RELEASE-NOTES-5.1.2.md).
+
 ## Personalization beyond a list of likes
 
 EP extracts preferences across **five dimensions**, so personalization can affect
@@ -206,6 +228,9 @@ statuses are not erased merely to make a dashboard green.
 
 **Start here:** [complete backend/web deployment](docs/DEPLOYMENT.md) →
 [choose your host](docs/HOST-SETUP.md) → [copy its Agent request](docs/AGENT-SETUP.md).
+**Installing this candidate?** Start with [candidate setup](docs/CANDIDATE-SETUP.md).
+**Agent reading this repository:** installation alone is not usage; read
+[the Agent operating guide](docs/AGENT-USAGE.md) before choosing memory tools.
 The existing contribution branch is named `release/5.1.0`; the current product
 patch is read from [VERSION](VERSION). Branch names and old RC assets are not
 automatic version indicators.
@@ -223,10 +248,13 @@ automatic version indicators.
 ### 1. Install and build
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch v5.1.2-rc.1 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
+
+The installer filename is retained for the 5.1 release line; it reads `VERSION`.
+Use the exact RC tag or named verified archive, not an older contribution branch.
 
 This runs preflight and a release text-source scan, installs base dependencies,
 builds the SDK **before** the Console and writes a local launch manifest.
@@ -282,16 +310,24 @@ your own credentials are still required.
 
 | Agent surface | One-sentence installation request |
 | --- | --- |
-| **Codex desktop / CLI** | Install the current EP branch following `docs/DEPLOYMENT.md` and the Codex section of `docs/HOST-SETUP.md`; start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
+| **Codex desktop / CLI** | Use my supplied EP candidate, read its deployment and Agent-use guides, start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
 | **Claude Code CLI** | Follow EP's deployment and Claude CLI guides, start my local backend/UI, register its stdio MCP with `claude mcp add` and verify a real read without claiming untested automatic recording. |
 | **Claude Code desktop, local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
 | **Claude Desktop, ordinary Chat** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
+| **Hermes** | Inspect this Hermes installation's real MCP/API capabilities, use the supplied candidate and operating guide, and verify explicit reads before claiming automatic lifecycle. |
+| **WorkBuddy** | Prepare host-specific configuration first; register only if the installed client and my authorization are present, then follow the Agent operating guide. |
+| **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
-Repository for each request:
-`https://github.com/ccygod/evolving-profile-2.2`, branch `release/5.1.0`.
+Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
+Use the exact `v5.1.2-rc.1` tag or its named verified archive, not the old remote branch.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
 effective configuration, optional features and safe stopping/rollback.
+
+For day-to-day use after connection, give the Agent [AGENT-USAGE.md](docs/AGENT-USAGE.md).
+It covers tool routing, current-prompt binding, source readback, failure recovery,
+no-Hook behavior and host-specific limits. The machine-readable companion is
+[agent-usage.v1.json](config/agent-usage.v1.json); it is advisory, not a permission grant.
 
 ## Host compatibility
 
@@ -303,9 +339,11 @@ effective configuration, optional features and safe stopping/rollback.
 | **Claude Desktop — Chat** | Separate local MCP JSON recipe | A bundled `.mcpb` installer, Code hooks or automatic Chat history capture |
 | **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
 
-Dedicated Claude Code/Hermes onboarding and adaptation remain improvement work
-for a subsequent version. Recipes are now explicit; full native lifecycle
-certification is not implied. No equal-validation claim is made.
+The new [host-preparation profiles and management tools](docs/host-integrations/README.md)
+also cover WorkBuddy, Doubao Work and generic MCP clients. Profiles are implemented,
+not merely a future roadmap; full target-host lifecycle certification is still pending.
+See the [generated capability matrix](docs/host-integrations/MATRIX.md). It records
+documented capabilities, not a native acceptance score. No equal-validation claim is made.
 
 For recommended modules, relevance, Provider/fallback, model/index matching,
 RAG/JEV and backup settings, read [web configuration guidance](docs/DEPLOYMENT.md#5-configuration-recommendations-in-the-web-ui).
@@ -321,9 +359,11 @@ the same configuration.** Verify the effective profile before claiming changes a
   diagnostics and user-authored source text are not guaranteed fully translated.
 - Source-text scanning is not a binary-asset audit or dependency-risk guarantee.
 - All-history semantic accuracy and answer benefit are not globally certified.
+- Always use the documented `--hostname 127.0.0.1`; the legacy bare Console CLI still defaults
+  to all interfaces. This candidate does not silently change that default or authorize public exposure.
 
 Product version: [`VERSION`](VERSION). Current release status, actual checks,
-dependency risks and known limits belong in the [release notes](docs/RELEASE-NOTES-5.1.1.md)
+dependency risks and known limits belong in the [candidate notes](docs/RELEASE-NOTES-5.1.2.md)
 and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
 See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
 production-classified and full-workspace audit results and retained RC risks.
@@ -332,7 +372,7 @@ production-classified and full-workspace audit results and retained RC risks.
 
 EP distribution author/maintainer: **CCY**. The
 [personal distribution](https://github.com/ccygod/evolving-profile-2.2) and
-[upstream contribution](https://github.com/94Hao94/evolving-profile/pull/4) are
+[upstream contribution channel](https://github.com/94Hao94/evolving-profile) are
 two channels for the same release line, not unrelated implementations.
 Preserve [NOTICE](NOTICE.md) and the applicable upstream licenses. Repository
 ownership, Git commit identity and upstream acknowledgment remain distinct.
@@ -340,7 +380,8 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 - [中文介绍](README-中文.md)
 - [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
 - [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
-- [Changelog](CHANGELOG-5.1.md) · [Current patch notes](docs/RELEASE-NOTES-5.1.1.md)
+- [Agent operating guide](docs/AGENT-USAGE.md) · [Candidate setup](docs/CANDIDATE-SETUP.md)
+- [Changelog](CHANGELOG-5.1.md) · [Current candidate notes](docs/RELEASE-NOTES-5.1.2.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)
 
 ## Built on Hindsight

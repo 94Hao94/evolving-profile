@@ -96,6 +96,20 @@ def test_invalid_mode_fails_before_changing_package(tmp_path):
     assert result.returncode==2 and snapshot(root)==before
 
 
+def test_repeated_setup_keeps_operator_env_and_recoverable_previous_build(tmp_path):
+    root,env=package(tmp_path)
+    first=install(root,env)
+    assert first.returncode==0,first.stderr
+    (root/'.env').write_text('EP_BANK_ID=operator-selected-after-first-setup\n')
+    second=install(root,env)
+    assert second.returncode==0,second.stderr
+    assert (root/'.env').read_text()=='EP_BANK_ID=operator-selected-after-first-setup\n'
+    receipt=json.loads((root/'output/ep51-local-launch.json').read_text())
+    backup=Path(receipt['previous_build_backup'])
+    assert (backup/'standalone/build-marker').read_text()=='new-build'
+    assert receipt['services_started'] is False
+
+
 def test_backup_move_failure_does_not_move_unbacked_old_tree_out_of_place(tmp_path):
     root,env=package(tmp_path)
     for name in ('.next','standalone'):

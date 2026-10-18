@@ -1,0 +1,6 @@
+# Isolated preparation-test environment, not new global runtime version floors.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+fastmcp==4.0.4
+httpx==0.28.1
+pydantic==2.13.5
