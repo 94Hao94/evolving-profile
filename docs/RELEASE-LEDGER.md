@@ -2,8 +2,37 @@
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
-**当前补丁：5.1.1**，以 [VERSION](../VERSION) 为产品版本权威。
-维护分支沿用 `release/5.1.0` 以续接同一个 PR，不代表安装补丁仍为5.1.0。
+**本目录：5.1.3（在5.1.2 RC1候选线上增加 Claude 宿主接入）。**以[VERSION](../VERSION)为产品版本权威，
+新候选通道见发行清单；当前远端旧分支/下载包不代表它。新包验收见
+[候选验收](CANDIDATE-ACCEPTANCE.md)，变化见[5.1.3说明](RELEASE-NOTES-5.1.3.md)和[5.1.2说明](RELEASE-NOTES-5.1.2.md)。
+下文5.1.1及更早的PR/提交均为历史发布证据，不是本候选已发布的证明。
+
+### 2026-10-24：5.1.3 Claude Desktop／Claude CLI 宿主接入
+
+- 本地准备：完成；预检、包校验、秘密扫描、套件测试结果见[5.1.3说明](RELEASE-NOTES-5.1.3.md)的验证表。
+- 分支：个人 fork `ccygod/evolving-profile-2.2` 的 `release/5.1.3`，基于 `release/5.1.2-rc.1`（后者的上游 PR #6 仍为 OPEN）。最终 head 以远端读回为准。
+- 上游 PR：**未创建**。Tag：**未创建**。GitHub Release：**未发布**。旧 RC 标签不移动。
+- 证据边界：一台 macOS 上的 Claude Desktop 3P 端到端运行；CLI 仅以模拟宿主标记经真实桥接脚本验证；Windows/Linux 未测；不含收益或召回率结论。
+
+### 2026-10-18：5.1.2 RC1候选发布跟踪
+
+- 本轮已获得个人预发布和上游贡献发布授权，发行分支为`release/5.1.2-rc.1`，
+  标签定位`v5.1.2-rc.1`。具体已发生状态在后续核实记录中补记，不以计划当结果。
+- 个人候选入口：[RC1发布页](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)。
+- 上游使用新的候选贡献PR，不覆盖或合并旧PR5。候选包含PR5尚未合并的5.1.1修复，
+  维护者可自行决定合入顺序；本轮不关闭旧PR或替上游合并主分支。
+- 已有本地验收和本轮发行树复核分别记账；新宿主/Windows真实验收仍未完成。
+
+候选构建前核实快照：源码提交`de3731b848ceff3c67bfc29f6c52f91b47bceaa8`已推送个人
+`release/5.1.2-rc.1`；新的[上游PR #6](https://github.com/94Hao94/evolving-profile/pull/6)
+已提交，OPEN、尚未合并。Tag与个人预发布会固定随后的发行文档提交；最终Tag对象、
+资产及发布状态以[RC1发布页](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)
+读回为准，不由本段构建快照推断上游已接受。旧PR5未关闭、未合并。
+
+**上一条已记录补丁：5.1.1**。
+维护分支沿用 `release/5.1.0`，不代表安装补丁仍为5.1.0。原 PR #4 已合并；
+2026-10-18 的送达修复通过新的 [PR #5](https://github.com/94Hao94/evolving-profile/pull/5)
+贡献，历史记录中的旧 PR 状态为当时快照，不覆盖当前核对结果。
 旧 RC 标签/下载资产没有更新；要获取此补丁请使用当前发行分支或下方精确提交。
 
 | 产品版本 | 已核实状态 | 证据 | 署名边界 |
@@ -12,6 +41,32 @@
 | 4.0.0 | 本地发行分支 `release/4.0.0` 已推送到 fork，已向上游提交 PR #2；尚未合并、打 Tag 或创建 GitHub Release。 | 本地提交 `9490f1b`；[PR #2](https://github.com/94Hao94/evolving-profile/pull/2)；预检通过；Host 295（含 2 个可选回滚测试跳过）、Controller 179、Guidance 73、Console 144、生产构建通过 | 继续沿用 NOTICE 的 CCY 发行署名；Git 提交身份仍不自动等于公开贡献署名。 |
 | 5.0.0 | 发行分支已推送到 fork，并已向上游提交 PR #3；尚未合并、打 Tag 或创建 GitHub Release。 | 当前分支 `release/5.0.0`；发布提交 `461ce97`，最新文档/审计提交 `e7600f8`；[PR #3](https://github.com/94Hao94/evolving-profile/pull/3)；发布说明 [`RELEASE-NOTES-5.0.0.md`](RELEASE-NOTES-5.0.0.md)；链路配图 [`assets/flow-topology-5.0.jpg`](assets/flow-topology-5.0.jpg)及 README 视觉资产；门禁：636 Python passed、2 skipped、35 subtests，Console 146 passed，API 10 passed，构建和脱敏扫描通过 | 继续沿用 NOTICE 的 CCY 发行署名；Agent Process Memory、链路观测和 5.0 文档是本次 EP 贡献，不将 Hindsight 或其他上游项目写成 EP 代码贡献者。 |
 | 5.1.0 | 2026-10-17 修复和产品文档已推送个人 `release/5.1.0`，现有上游 PR #4 已读回相同代码提交；PR 尚未合并。旧 `v5.1.0-rc.2` 仍是旧预发布产物，不包含本次分支更新；未创建新 Tag 或 Release。 | [个人发行分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.0)；[代码提交 24f6be4](https://github.com/ccygod/evolving-profile-2.2/commit/24f6be4cabfee3b066893c427200c68eb0a33fd5)；[上游 PR #4](https://github.com/94Hao94/evolving-profile/pull/4)；[`CHANGELOG-5.1.md`](../CHANGELOG-5.1.md)；[`RELEASE-NOTES-5.1.0.md`](RELEASE-NOTES-5.1.0.md)；[`DEPENDENCY-RISKS.md`](DEPENDENCY-RISKS.md)。本次证据见下方日期记录。 | 沿用 NOTICE 的 CCY 发行署名；native review 区分非 HTTP 来源与未知模型身份。生产分类依赖审计 0；完整工作区 36 条，0 critical。不是全部依赖或全部历史语义的零风险认证。 |
+
+### 2026-10-18：5.1.1 长会话送达回执修复
+
+代码提交 [2b63ada](https://github.com/ccygod/evolving-profile-2.2/commit/2b63ada74867d49919b771a29a8d3ee3a0a0df3f)
+及说明/构建标识提交 [9a175f7](https://github.com/ccygod/evolving-profile-2.2/commit/9a175f7)
+已非强制推送个人 `release/5.1.0` 分支；新建
+[上游 PR #5](https://github.com/94Hao94/evolving-profile/pull/5)，原 PR #4 已在
+上游主分支合并提交 `218f45d` 中落地。PR #5 本次核对为 OPEN、尚未合并。
+本页为后续发布证据补记，最终 head 以该分支及 PR 的实际读回为准。
+产品仍为 **5.1.1**，构建标识为 `ep511-cross-date-host-delivery`；没有移动旧
+RC 标签、创建 GitHub Release 或擅自合并主分支。
+
+- 修复跨日期/归档长会话来源定位，核对授权范围与原生会话身份；使用有界
+  尾部、流读取和选中轮次缓存，处理追加、部分来源与合法大行。缺失、歧义和
+  超预算来源保持未知，不把候选数推断为接收数。
+- Hook 已准备、真实返回和宿主接收分开统计；运行指导刷新偏好包进入对应节点。
+  无证据的计划占位不冲掉已有接收小计；工具接收仍不证明最终回答采用。
+- 本次发布前重新执行 Console：**94 文件 / 660 测试通过**、TypeScript、
+  分发 Console 生产/standalone 构建、8 项发布预检测试，以及发行包结构与源码文本
+  秘密/私人数据扫描。包内 **1741 个文件**在本地 Git 归档中逐项哈希一致。
+  未变更 Python 后端逻辑，未冒用旧后端回归数字作为本次新测试。
+- 前一修复验收已实际部署并点击旧 Prompt：中英文均确认一次指导调用返回5条、
+  宿主收到5条；仅 Hook 准备的另一例保持未确认。原始截图和对话保留在私人审计目录，
+  不上传公开。该观察不等于全部历史覆盖或回答收益基准。
+- 保留手动校准的布局、记忆、配置、密钥、提炼队列和召回策略；Hindsight 来源声明
+  与原许可保留。升级/回退及已知边界见 [补丁说明](RELEASE-NOTES-5.1.1.md)。
 
 ### 2026-10-17：5.1.1 部署与分宿主接入文档补丁
 

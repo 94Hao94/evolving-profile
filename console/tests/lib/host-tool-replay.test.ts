@@ -2,6 +2,14 @@ import { expect, it } from "vitest";
 import { projectHostToolRows, projectHostTurnReplay } from "@/lib/host-tool-replay";
 import { mergeToolReceipts } from "@/lib/tool-receipt";
 import { navigation } from "../fixtures/source-navigation";
+import { projectToolBranches } from "@/lib/topology-mapping";
+it("counts a runtime guidance refresh as the actual returned preference packet",()=>{
+ const row=structuredClone(rows[0]);row.payload.item.tool="refresh_runtime_guidance";
+ row.payload.item.result.content[0].text=JSON.stringify({mode:"runtime_guidance_refresh",included:[{id:"p",text:"task preference"}],stable_profile:[{id:"s",text:"stable reference"}],persistence:"none_current_turn_only"});
+ const events=projectHostToolRows([row],{session_id:"s",turn_id:"t"});
+ expect(events[0]).toMatchObject({returned_count:2,delivered_count:2});
+ expect(projectToolBranches(events,false).get("user-memory-preference")?.counts.returned).toBe(2);
+});
 
 it("projects actual host navigation-only and mixed returns without answer adoption or body double counting",()=>{
  for(const memories of [[],[{id:"body",text:"actual returned body"}]]) {

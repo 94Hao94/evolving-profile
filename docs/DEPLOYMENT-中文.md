@@ -6,6 +6,11 @@
 产品版本读 [VERSION](../VERSION)。为续接现有贡献 PR，分支仍叫 `release/5.1.0`，
 分支名称不等于当前补丁版本。发行包不带作者的记忆、账号、密钥、对话或模型权重。
 
+本候选使用精确`v5.1.2-rc.1`标签或对应命名核验归档，见[候选安装入口](CANDIDATE-SETUP.md)，
+不能用旧分支或旧Tag替代。安装后继续让Agent阅读[日常操作协议](AGENT-USAGE-中文.md)。
+确认当前进程实际加载候选后，按[运行版本投影步骤](CANDIDATE-SETUP.md#project-verified-version-metadata-into-the-selected-runtime)
+显式更新所选state root；只构建不能自动覆盖已有安装的版本清单。
+
 ## 先选需要达到的程度
 
 | 程度 | 实际组成 | 还不能据此认定 |
@@ -25,8 +30,7 @@ Claude Code CLI、桌面 **Code** 页、普通 Claude Desktop **Chat** 必须分
 本地模型要另装对应依赖、检查内存并实测加载，不由安装器自动下载。
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
-cd evolving-profile-2.2
+cd /path/to/extracted-evolving-profile
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 

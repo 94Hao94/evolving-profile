@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import deque
 import datetime
 import json
+import os
 from pathlib import Path
 
 
@@ -37,6 +38,12 @@ def validate_preference_request(request):
 
 def resolve_prompt_binding(check_id, event_at, home=None):
     check_id = str(check_id or '').strip()
+    host_id=os.environ.get('EVOLVING_PROFILE_HOST_ID')
+    installation_id=os.environ.get('EVOLVING_PROFILE_INSTALLATION_ID')
+    owner_id=os.environ.get('EVOLVING_PROFILE_OWNER_ID')
+    namespaced=bool(host_id and host_id!='codex')
+    if namespaced and (not installation_id or not owner_id):
+        return {'state':'unattested_host_binding','host_id':host_id,'check_id':check_id}
     if not check_id: return {'state': 'unbound_missing_check_id'}
     home = Path(home) if home is not None else Path.home()
     rows = []
@@ -51,6 +58,10 @@ def resolve_prompt_binding(check_id, event_at, home=None):
             except (ValueError, TypeError): continue
     except OSError:
         return {'state': 'unknown_prompt_ingress', 'check_id': check_id}
+    if namespaced:
+        rows=[row for row in rows if row.get('host_id')==host_id and row.get('installation_id')==installation_id and row.get('owner_id')==owner_id]
+    else:
+        rows=[row for row in rows if row.get('host_id',row.get('host','codex')) in (None,'codex')]
     matches = [row for row in rows if str(row.get('hook_invocation_id') or '') == check_id]
     tasks = {str(row['task_id']) for row in matches if row.get('task_id')}
     if len({(str(row.get('session_id') or ''), str(row.get('turn_id') or '')) for row in matches}) > 1 or len(tasks) > 1:
@@ -75,7 +86,7 @@ def resolve_prompt_binding(check_id, event_at, home=None):
             latest = row; latest_time = row_time
     value = {'state': 'prompt_bound', 'check_id': check_id, 'session_id': session_id,
         'turn_id': bound.get('turn_id'), 'hook_invocation_id': bound.get('hook_invocation_id')}
-    for key in ('project_id', 'project_key', 'cwd', 'transcript_path', 'model', 'model_provider', 'host', 'host_id'):
+    for key in ('project_id', 'project_key', 'cwd', 'transcript_path', 'model', 'model_provider', 'host', 'host_id','owner_id','installation_id'):
         if bound.get(key): value[key] = bound[key]
     # This value belongs to the exact ingress occurrence, never to a caller's
     # guessed task or to the latest unrelated turn in the same Session.
@@ -84,6 +95,13 @@ def resolve_prompt_binding(check_id, event_at, home=None):
         value.update(state='stale_prompt_binding', latest_turn_id=latest.get('turn_id'),
             latest_hook_invocation_id=latest.get('hook_invocation_id'))
     return value
+
+
+def same_prompt_scope(row,binding):
+    if any(row.get(key)!=binding.get(key) for key in ('session_id','turn_id','hook_invocation_id')):return False
+    if binding.get('host_id') not in (None,'codex'):
+        return all(binding.get(key) and row.get(key)==binding[key] for key in ('host_id','installation_id','owner_id'))
+    return row.get('host_id',row.get('host','codex')) in (None,'codex')
 
 
 def bind_preference_request(request, *, home=None, event_at=None):

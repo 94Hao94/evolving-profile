@@ -59,6 +59,26 @@
 这些能力提供的是结构化证据和可复用上下文，不代表所有旧记忆都正确，
 也不承诺每项任务都会自动提升效果。
 
+## 哪些较成熟，哪些还需验证
+
+**本版为5.1.2 RC1发布候选，不是全平台稳定认证版。**
+产品版本以 [VERSION](VERSION) 为唯一权威，候选通道和构建信息见
+[发行清单](config/release-manifest.json)。使用[精确RC标签与资产](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)；
+实际发布/贡献状态见发布记录，旧远端分支或下载资产不代表本候选版本。
+
+| 能力 | 当前成熟度与证据 | 仍需验证 |
+| --- | --- | --- |
+| 用户/智能体记忆、五维偏好、情景及原文导航、可观察链路 | 已有实现；macOS/Codex 是主要实际验证路线 | 全历史准确性、普遍回答收益及所有模型和任务组合 |
+| 宿主接入管理页 | 已实现；本机正式页面的中英文、点击、滚动和响应式已检查 | 页面正常不等于目标客户端实际接入通过 |
+| 受治理 stdio、可选认证 HTTP | EP 侧隔离协议及权限测试已做；新宿主档案默认只读 | 真实客户端接收/使用、远程 TLS、每个工具延迟执行分支 |
+| Claude CLI、桌面本地 Code、普通 Chat | 分入口配方与准备档案已完成 | 各入口的真实生命周期、来源捕获、绑定和端到端调用 |
+| Hermes、WorkBuddy、豆包工作 | 能力档案、识别、预览、指导和诊断已准备 | 原生任务及会话证据；不宣称与 Codex 同等验证 |
+| Windows 原生、WSL、远端 | 已分模式，准备路径/中文/UTF-8/文件锁和手动 CI | Windows、PowerShell 实际执行；WSL 通过不能冒充原生通过 |
+| 外部 RAG、JEV、本地模型 | 已有可选模块与配置 | 你自己的文件、密钥、模型、索引兼容和实际收益 |
+
+“发现安装”“配置存在”“EP 协议通过”“宿主接收”“回答采用”不是一回事。
+没有证据就保留未知，不补成零或成功。详见[本候选版边界与验收](docs/RELEASE-NOTES-5.1.2.md)。
+
 ## 个性化，不止于记住“喜欢什么”
 
 EP 围绕**五个维度**提炼偏好，让个人上下文能够影响任务的理解、沟通、执行与验收。
@@ -174,6 +194,8 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 
 **第一次安装看这里：**[后端与网页完整部署](docs/DEPLOYMENT-中文.md) →
 [选择具体宿主](docs/HOST-SETUP-中文.md) → [复制对应 Agent 提示词](docs/AGENT-SETUP-中文.md)。
+**安装本候选包：**先看[候选版安装入口](docs/CANDIDATE-SETUP.md)。
+**给 Agent 读：**接入不等于会使用，继续阅读[Agent 日常操作协议](docs/AGENT-USAGE-中文.md)。
 现有贡献分支仍叫 `release/5.1.0`，当前补丁版本读 [VERSION](VERSION)，
 不能根据分支名或旧 RC 下载包判断最新版。
 
@@ -187,10 +209,13 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 ### 1. 一键安装构建
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch v5.1.2-rc.1 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
+
+脚本文件名沿用5.1发行线，实际版本读取VERSION。不能克隆旧贡献分支后，
+把得到的旧版本当成本候选包；也可解压命名的核验归档后进入根目录。
 
 脚本执行预检与来源文本扫描，安装基础依赖，**先构建 SDK 再构建 Console**，
 并生成本地启动清单；只在 `.env` 不存在时创建模板。
@@ -241,27 +266,54 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 
 | Agent 入口 | 一句话安装要求 |
 | --- | --- |
-| **Codex 桌面端 / CLI** | 按 EP 的 `docs/DEPLOYMENT-中文.md` 和 `docs/HOST-SETUP-中文.md` 的 Codex 部分安装当前发行分支，拉起后端与网页，只注册一个 EP，并实际验证记忆查询与允许记录任务的自动捕获。 |
+| **Codex 桌面端 / CLI** | 使用我提供的 EP 候选包，阅读部署与 Agent 日常操作指南，拉起后端与网页，只注册一个 EP，并实际验证记忆查询与允许记录任务的自动捕获。 |
 | **Claude Code CLI** | 按 EP 部署及 Claude CLI 指南拉起本机后端与网页，用 `claude mcp add` 注册 stdio 工具并做真实读取，不把未经验证的自动记录说成完成。 |
 | **Claude Code 桌面端，本地 Code 页** | 按 EP 桌面 Code 指南安装，复用正确的 MCP 且不重复注册，拉起后端与网页，在这次桌面会话内验证实际工具。 |
 | **Claude Desktop 普通 Chat** | 按 EP 本地 MCP 指南连接已运行的后端；没有终端/浏览器工具就给出独立 CLI/Code 后端安装要求，不声称 Chat 已部署系统服务。 |
+| **Hermes** | 核对当前安装实际MCP/API能力，使用提供的候选包和日常协议，先验证显式读取，不把自动生命周期写成通过。 |
+| **WorkBuddy** | 先生成专用配置预览，客户端已安装且我授权后才注册，随后按Agent日常协议选工具。 |
+| **豆包工作** | 审阅实际插件配置，为当前任务启用并阅读日常协议；Skill不保证每轮自动调用。 |
 
-各提示词的源码地址均为 `https://github.com/ccygod/evolving-profile-2.2`，分支 `release/5.1.0`。
+源码来源为 `https://github.com/ccygod/evolving-profile-2.2`；使用精确
+`v5.1.2-rc.1`标签或对应命名核验归档，不能用旧远端分支替代。
 **[完整分宿主提示词（含 Hermes）直接复制](docs/AGENT-SETUP-中文.md)。**
 长版包括备份合并、绝对路径、健康检查、网页点击、工具/捕获验收、配置生效、可选项和停止回退。
+
+接入后，把[日常操作协议](docs/AGENT-USAGE-中文.md)交给智能体，明确不同任务怎么选工具、
+本轮绑定如何处理、何时回读原文、故障怎么降级，以及不同宿主没有Hook时的边界。
+[机器可读辅助协议](config/agent-usage.v1.json)只是参考，不授予操作权限。
 
 ## 宿主兼容性
 
 | 宿主 | 当前定位 | 不应直接推断 |
 | --- | --- | --- |
 | **Codex** | 当前实际验证较充分的 MCP/Hook、记忆路由、情景与回执路线 | 所有黑盒回答都提供了答案采用回执 |
-| **Claude Code CLI** | 已有明确 stdio 注册步骤，目标宿主需实际验证查询 | 看到 MCP 就代表自动 transcript/Hook 捕获已认证 |
+| **Claude Code CLI** | 已有明确 stdio 注册步骤；**5.1.3 起另有按宿主自适应的 Hook 桥**（捕获 + 每轮召回上下文），已用模拟宿主标记经真实桥接脚本运行 | 已做过真实 CLI 会话验收，或看到 MCP 就代表已认证 |
+| **Claude Desktop（Cowork／本地智能体会话）** | **5.1.3：Hook 插件 + 桥接，桌面对话以 `origin_agent=claude-desktop` 入库，桌面对话有情景摘要，附健康检查**——在一台 macOS 上端到端运行过 | Windows/Linux、其他 Desktop 版本，或每条回答都用到了注入的上下文 |
 | **Claude Code 桌面 Code 页** | 本地会话可复用受支持的 CLI 配置，另有专项步骤 | CLI 工具列表证明桌面/云端/SSH 也已完成 |
 | **Claude Desktop 普通 Chat** | 独立的本地 MCP JSON 接法 | 已有 `.mcpb` 一键包、Code Hook 或自动抓取全部聊天 |
 | **Hermes** | 可复用共享记忆服务及兼容的 MCP/API 契约 | 能力探针、回执与安装流程已经完全相同 |
 
-专项步骤已补全，但 Claude Code、Hermes 的原生生命周期增强和完整验收仍是后续方向，
-不因文档有命令就宣称与 Codex 同等程度的完整适配。
+### Claude Desktop 与 Claude CLI（5.1.3 新增）
+
+同一个 EP Bank 现在可以被 **Codex、Claude Desktop、Claude CLI 同时写入和读取**，接入层会自己判断是谁在调用。
+完整说明：**[docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md](docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md)**（[English](docs/host-integrations/CLAUDE-DESKTOP-CLI.md)）。
+
+- **按宿主自适应的桥接脚本**（`claude-code/hook_bridge_desktop.py`）：SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、PreCompact、Stop 共用一个入口。
+  自动识别 Claude Desktop／Claude CLI／通用 Claude Code（也可用环境变量 `EP_HOST` 指定），给每条捕获记录打上 `origin_agent`，并且绝不阻塞 Claude（始终退出 0）。
+- **只保留人能看到的对话。** 工具结果、思考、图片、子链路和系统提醒都会丢弃，修掉了旧行为里“文件转储被当成*你*说过的话”的问题。
+- **桌面对话进入情景摘要**：经过静置期后，把 Codex 格式的 rollout 写入 EP 自己的 `claude-code/rollouts/`（绝不写 `~/.codex`），避免后台摘要器处理到一半被打断。
+- **事实提炼的引文修复**：对“几乎逐字”的 `source_quote` 做确定性、失败即拒绝的修复，减少批次被隔离，同时保留“必须是所述作者原消息精确子串”的保证。关闭开关 `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`。
+- **一条命令安装，一条命令检查**：`zsh claude-code/install.sh [--desktop-plugin]`（支持 dry-run、备份、卸载）和 `python3 claude-code/compat/ep_desktop_health.py`（只读，对链路每一环给出 OK/WARN/FAIL，包括读写嵌入模型是否一致）。
+- 不动 Codex：`~/.codex/*` 与 `codex.json` 既不读也不写，已有 Codex 数据仍是 `origin_agent=codex`。
+
+**证据与边界，直说：** 在一台 macOS、Claude Desktop 3P 上开发并运行。CLI 这一路是用模拟宿主标记经真实桥接脚本验证的，没有在真实 CLI 会话里跑过。
+钩子有活动只证明上下文送达，不证明回答用到了它。Desktop 需要一次 `sudo` 写系统插件目录。细节和全部已知边界见该指南和 [RELEASE-NOTES-5.1.3](docs/RELEASE-NOTES-5.1.3.md)。
+
+新增[宿主准备档案与管理工具](docs/host-integrations/README-中文.md)，包含WorkBuddy、
+豆包工作和通用MCP。档案和管理能力已经实现，不只是未来计划；目标客户端真实生命周期
+仍待验收。见[自动生成的能力矩阵](docs/host-integrations/MATRIX-中文.md)，其文档支持项
+不是原生实测得分，不宣称与Codex同等验证。
 
 网页的模块、相关度、Provider/fallback、模型与索引、RAG/JEV 和备份建议见
 [配置怎么调](docs/DEPLOYMENT-中文.md#5-网页配置怎么调)。
@@ -274,23 +326,26 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 - 网页提供英文、中文等语言切换；后台诊断和用户原文并不保证全部自动翻译。
 - 来源文本扫描不等于二进制图片审计或依赖风险认证。
 - 全部历史的语义准确率和最终回答收益未取得全局认证。
+- 启动时使用文档中的`--hostname 127.0.0.1`；遗留裸CLI仍默认全接口，
+  本候选不静默改变该行为，也不授权公开服务。
 
 产品版本读取 [`VERSION`](VERSION)。实际发布状态、测试、依赖风险和已知限制
-见[发布说明](docs/RELEASE-NOTES-5.1.1.md)与[发布记录](docs/RELEASE-LEDGER.md)，
+见[候选版说明](docs/RELEASE-NOTES-5.1.2.md)与[发布记录](docs/RELEASE-LEDGER.md)，
 不在多个固定徽章中重复维护“最新版”。
 依赖的生产分类审计、完整工作区审计和保留的 RC 风险分别见[依赖风险说明](docs/DEPENDENCY-RISKS.md)。
 
 ## 作者、来源与文档
 
 EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/ccygod/evolving-profile-2.2)
-与[上游贡献渠道](https://github.com/94Hao94/evolving-profile/pull/4)是同一条发行来源线，
+与[上游贡献渠道](https://github.com/94Hao94/evolving-profile)是同一条发行来源线，
 不是两套不相干的实现。保留 [NOTICE](NOTICE.md) 与相应上游许可；
 仓库拥有者、Git 提交身份和上游致谢分别记录。
 
 - [English README](README.md)
 - [本地安装与回退](docs/LOCAL-SETUP.md) · [API 配置](api/README.md)
 - [完整部署](docs/DEPLOYMENT-中文.md) · [分宿主接入](docs/HOST-SETUP-中文.md) · [Agent 安装话](docs/AGENT-SETUP-中文.md)
-- [更新日志](CHANGELOG-5.1.md) · [当前补丁说明](docs/RELEASE-NOTES-5.1.1.md)
+- [Agent 日常操作](docs/AGENT-USAGE-中文.md) · [候选包安装](docs/CANDIDATE-SETUP.md)
+- [更新日志](CHANGELOG-5.1.md) · [当前候选版说明](docs/RELEASE-NOTES-5.1.2.md)
 - [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)
 
 ## 基于 Hindsight 开发

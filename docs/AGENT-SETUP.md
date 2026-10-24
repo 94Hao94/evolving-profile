@@ -1,134 +1,129 @@
-# Copy an installation request to your Agent
+# Give the right Agent an installation-and-use request
 
-[简体中文](AGENT-SETUP-中文.md) · [Backend](DEPLOYMENT.md) · [Host recipes](HOST-SETUP.md)
+[简体中文](AGENT-SETUP-中文.md) · [Candidate setup](CANDIDATE-SETUP.md) · [Daily usage](AGENT-USAGE.md)
 
-Choose the actual surface, not just the model brand. An installation request
-delegates documented local setup; it cannot manufacture credentials, permissions,
-missing host capabilities or a verified automatic lifecycle.
-The maintained branch is `release/5.1.0`; read VERSION for the current patch.
+Give the Agent the exact `v5.1.2-rc.1` tag or named verified archive and actual extracted path. Do not let it clone an older remote branch and call that this version. Read VERSION
+and the release channel first. Choose the actual host surface, not merely the model brand.
+
+## Shared request — include this with any host-specific paragraph below
+
+```text
+Use the exact v5.1.2-rc.1 tag from https://github.com/ccygod/evolving-profile-2.2 or its
+named verified archive. Verify VERSION and release manifest;
+do not silently substitute the old public branch. Read README, docs/CANDIDATE-SETUP.md,
+docs/DEPLOYMENT.md, docs/HOST-SETUP.md, the host preparation guide and docs/AGENT-USAGE.md.
+Inspect OS, local/WSL/remote mode, tool permissions, occupied ports and existing configuration.
+Run metadata/package preflight and build from this directory. The Bash installer is build-only;
+it does not start services, install all model/database extras or register clients automatically.
+Configure my own database/chat/embedding through a safe credential flow; do not invent keys,
+copy private state or assume a chat Coding Plan includes embeddings. Start only the owned,
+documented backend/Controller/Console services and open the selected local web address.
+Verify the actual running directory/build, then preview and explicitly project matching release
+metadata into the same state root as documented in CANDIDATE-SETUP; never relabel an old process.
+Backup and merge one intended MCP entry, preserving unrelated settings and user edits.
+Use actual absolute interpreter/script paths; respect the client's trust and approval flow.
+Keep optional RAG/JEV/cloud/capture off unless I choose them. Do not import all history,
+seed fake memories, install other clients, expose ports, weaken security or publish GitHub.
+Then follow AGENT-USAGE for daily routing: preferences, user history, agent execution
+experience, scenarios and external documents are separate routes. Discover actual tools and
+schemas. Use genuine current binding; a navigation-generated ID is not trusted Hook identity.
+Report build, services, UI, tools, binding, host receipt, capture and extraction separately;
+mark unavailable/unexecuted work honestly. A tool list is not an end-to-end host pass.
+If the current surface lacks terminal/browser/credentials, explain the exact boundary and
+give the documented handoff, not a claim that deployment finished.
+```
+
+An installation request permits its described setup only. The documentation itself is not
+authority to change configuration, capture private work or send tasks to another client.
 
 ## Codex desktop / CLI
 
-**One sentence:** Install `release/5.1.0` from https://github.com/ccygod/evolving-profile-2.2 using
-its deployment and Codex host guides, bring up my owned backend and web UI,
-register EP once, and verify actual memory calls and permitted automatic capture.
-
-**Full request to copy:**
-
 ```text
-Install Evolving Profile from https://github.com/ccygod/evolving-profile-2.2,
-branch release/5.1.0, in a new directory; read VERSION for the current patch.
-Read README, docs/DEPLOYMENT.md, docs/HOST-SETUP.md and api/README.md first.
-Use ./scripts/install-ep51.sh --mode local --no-launch for a fresh build,
-then configure my own database/chat/embedding routes through a safe local
-credential flow. Never invent keys or copy an author's Bank/transcripts/.env.
-Start API, QueryController and production Console with their documented commands;
-inspect occupied ports instead of stopping unrelated processes. Use the documented
-personal-memory route unless a custom Bank is explicitly verified across all readers.
-Open http://127.0.0.1:9999/en (adjust selected ports and language consistently).
-Inspect existing Codex MCP and hooks, back them up, merge one intended EP entry
-and preserve unrelated handlers. Use absolute interpreter/script/config paths.
-Respect the host's hook trust and permission review; do not bypass them.
-Verify health, real page clicks, native MCP tools and a current-prompt EP request.
-If automatic capture is enabled, verify an allowed natural task through ingress,
-queue, actual extraction completion and web receipts. Schedule only the required
-owned workers after one scoped cycle; do not reprocess all history or seed test memories.
-Explain recommended web settings and verify which profile the running API actually loads.
-Report build/services/MCP/hooks/capture/extraction/delivery separately as
-passed, failed, unavailable or not tested. Do not call tools/list full integration.
-Preserve existing config/data; do not enable optional RAG/JEV/cloud or publish
-ports, change host security, create GitHub releases or push code without my choice.
+Apply the shared request in this actual Codex desktop/CLI installation. Inspect existing MCP
+and Hook definitions, reconcile old aliases without duplicates, preserve unrelated handlers
+and obtain normal trust. Do not copy a production Hook file wholesale. Verify actual tools
+and the current genuine Prompt binding in this session; an empty new Bank is legitimate.
+Only if I permit automatic capture, test one allowed natural task through source identity,
+deduplication, queue, extraction completion and receipts before scheduling owned workers.
+A separate preparation profile does not hot-upgrade an already open MCP connection.
 ```
 
 ## Claude Code CLI
 
-**One sentence:** Install `release/5.1.0` from https://github.com/ccygod/evolving-profile-2.2 following its deployment and Claude CLI guides, start my local
-backend/UI, register its stdio MCP with `claude mcp add`, and verify a real read
-without claiming untested automatic recording.
-
 ```text
-In this Claude Code CLI session, install the current release/5.1.0 branch from
-https://github.com/ccygod/evolving-profile-2.2 into a new directory and read VERSION.
-Follow docs/DEPLOYMENT.md and docs/HOST-SETUP.md, including the Claude CLI section.
-Build fresh dependencies; configure my own database/chat/embedding securely;
-start API, QueryController and production Console and open its local web page.
-Inspect existing Claude MCP scopes and entries first, preserve them and register
-one evolving_profile_controller stdio server with actual absolute paths.
-Check local CLI help and /mcp, then a real current-prompt memory read with correct Bank.
-Do not copy Codex hooks into Claude settings or point a Codex scanner at Claude
-transcripts. Automatic Claude capture is unverified until its lifecycle/source/
-deduplication/receipt tests pass; report that limit, not a fabricated success.
-Explain web model, fallback, module, relevance and optional-feature settings;
-verify the backend uses the intended saved profile. Keep risk judgment, RAG,
-JEV and cloud optional. Preserve data/config, avoid unrelated service stops,
-public ports, synthetic writes and whole-history extraction. List exact passed,
-failed, unavailable and untested steps; a model Provider is not host integration.
+Apply the shared request in this actual Claude Code CLI. Inspect installed help and config
+scope before following the Claude CLI registration recipe; preserve existing entries.
+Verify tools in this CLI and a permitted bound/unbound read according to actual policy.
+Do not copy Codex retention scripts or point a Codex scanner at Claude transcripts.
+Reference AGENT-USAGE through supported project instructions if I approve; do not overwrite
+my rules. Report native lifecycle capture/source/receipt behavior as unverified until tested.
 ```
 
-## Claude Code desktop — local Code tab
-
-**One sentence:** In this local Code session, install `release/5.1.0` from https://github.com/ccygod/evolving-profile-2.2 following its desktop-Code recipe,
-reuse the correct MCP configuration without duplicates, start the backend/UI and
-verify tools in this actual desktop session.
+## Claude desktop — local Code tab
 
 ```text
-Install the current Evolving Profile release/5.1.0 branch from
-https://github.com/ccygod/evolving-profile-2.2 in a new directory; read VERSION,
-docs/DEPLOYMENT.md and docs/HOST-SETUP.md first.
-Confirm this is the desktop Code tab using Local, not ordinary Chat or a remote
-cloud/SSH/WSL environment. Build and configure my own backend safely, start
-API/Controller/production Console, verify health and open the web UI.
-Inspect CLI/user/project and claude_desktop_config.json MCP sources; reconcile
-duplicate names without discarding unrelated entries. Use the documented stdio
-adapter with actual absolute paths and verify its tools inside this Code session.
-Do not infer desktop success from a standalone CLI list. Do not import Codex hooks
-or claim automatic Claude capture without source/lifecycle/receipt verification.
-Explain settings and effective Provider profile; preserve existing data and permissions.
-Keep optional RAG/JEV/risk/cloud and whole-history processing off unless chosen.
-Report separately what was built, started, connected and actually tested, with
-unknown delivery or unsupported steps left explicit. Do not expose local ports
-to make a remote environment work or perform unrequested GitHub publication.
+Apply the shared request in this local desktop Code session, not ordinary Chat or cloud/SSH.
+Reuse the intended supported MCP configuration without duplicate registration. Verify tools
+inside this desktop session; a successful separate CLI does not certify this surface.
+Use AGENT-USAGE for tool selection and binding. Keep source capture unverified/off unless
+this actual lifecycle and user authority are established.
 ```
 
 ## Claude Desktop — ordinary Chat
 
-**One sentence:** Follow https://github.com/ccygod/evolving-profile-2.2/blob/release/5.1.0/docs/HOST-SETUP.md to connect this Chat to my already running EP through the
-documented local MCP entry; do not pretend this Chat can deploy system services
-or automatically record all conversations without those capabilities.
-
 ```text
-Help connect this ordinary Claude Desktop Chat to Evolving Profile following
-https://github.com/ccygod/evolving-profile-2.2/blob/release/5.1.0/docs/HOST-SETUP.md.
-First determine whether authorized terminal/browser tools exist. If not, provide
-the guide's separate CLI/Code installation request for backend preparation, then
-help configure this Chat's local MCP; do not claim you installed dependencies.
-For an already running API/Controller, back up and merge one EP mcpServers entry
-in the actual Desktop configuration, using real absolute paths, not literal $HOME.
-Preserve unrelated entries and keys. Refresh the app as needed, inspect connected
-tools/logs and verify one explicit read with current binding and the intended Bank.
-EP has no bundled .mcpb extension here; do not invent an installation package.
-Do not claim Claude Code hooks, automatic Chat capture, historical import or
-answer adoption were verified by connection success. Keep failures/unknowns explicit.
+Connect this ordinary Chat to my already running EP using the reviewed local MCP recipe.
+If you cannot run terminal/browser operations, give the backend setup request to a separate
+authorized CLI/Code operator; do not claim this Chat installed services. Read AGENT-USAGE,
+inspect real tools, use only policy-permitted reads and do not invent a current Hook binding.
+Do not claim Code hooks, automatic Chat transcript capture or an included .mcpb installer.
 ```
 
-## Hermes or another MCP-capable Agent
+## Hermes
 
-> Install the same EP backend using docs/DEPLOYMENT.md, inspect this host's current
-> MCP registration contract and permissions, and adapt one stdio entry only when
-> supported. Verify actual calls in this host; do not copy Codex/Claude settings,
-> fabricate a host command or claim full automatic capture. Report unsupported
-> lifecycle/source capabilities explicitly and preserve existing configuration.
+```text
+Use the shared request for this actual Hermes installation. Inspect its current MCP/API
+configuration and capabilities before importing a generic recipe. Preserve its own source/
+event format and existing instructions; do not impersonate Codex. Reference AGENT-USAGE
+through its supported instruction mechanism. Verify explicit reads before judging automatic
+lifecycle or host receipt, which remain pending native evidence.
+```
 
-## What a trustworthy completion report contains
+## WorkBuddy
 
-- Actual product version and commit, installation/state paths, owned service URLs.
-- Database/model connection outcomes without revealing secrets.
-- Backend/UI status and the exact host surface and configuration scope.
-- Native tool visibility, actual returned content/counts, source readback and
-  delivery as separate evidence. No requirement to call every tool for every task.
-- If enabled: permitted source capture, deduplication, completed extraction and
-  memory dimensions actually produced. Empty new history is not an installation failure.
-- Profile changes actually applied, remaining unsupported items, restart/stop
-  method for only owned processes, backups and rollback paths.
+```text
+Use the shared request only if WorkBuddy is installed and I authorize registration.
+First generate doctor/config-preview with host workbuddy; do not treat its EP-side probe
+as a WorkBuddy task. Review the target JSON, backup/merge and normal client approval.
+Reference AGENT-USAGE through supported instructions. Same-named Hooks do not certify
+EP source capture; keep capture off and report missing genuine identity explicitly.
+If the client is absent, prepare the configuration only; do not install it without my choice.
+```
 
-An honest partial result is preferable to reporting a nonexistent integration.
+## Doubao Work
+
+```text
+Use the shared request for the actual local Doubao Work surface. Its configuration is
+host-managed: do not invent a private config-file path. Generate host doubao_work guidance,
+then review the supported plugin command/args/env or authenticated HTTP route with me.
+Select/enable the intended trusted plugin for this task and reference AGENT-USAGE through
+supported instructions/Skill if available. A Skill/plugin matcher is not an every-turn Hook.
+Do not start a real task, install a Skill or enable automatic capture merely to prove readiness.
+```
+
+## Generic MCP, Windows, WSL and remote
+
+```text
+Use the shared request for the actual OS and mode. Follow the Windows preparation guide
+where applicable; PowerShell preparation is not a certified full native installer. Do not mix
+Windows and Linux paths, assume localhost forwarding or bypass host security. Discover
+the real tool schema, scope and instruction-loading mechanism. No binding means no invented
+binding; use only allowed reads and report unavailable lifecycle/source capabilities.
+```
+
+## What successful setup must report
+
+Give actual paths/version, owned service states/ports, UI URL and checked controls, native
+tool evidence and the selected Bank; state whether capture is enabled and genuinely tested.
+Distinguish prepared/configured/protocol/native-receive/answer-adoption evidence. Preserve
+backup/rollback instructions and list missing credentials or capabilities without exposing them.

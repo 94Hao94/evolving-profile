@@ -4,8 +4,10 @@ The model selects a witness; source bytes determine its author and authority.
 This module makes no semantic claim that a source quote is a confirmed fact.
 """
 
+import difflib
 import hashlib
 import json
+import os
 import re
 from typing import get_args
 
@@ -294,6 +296,69 @@ def source_quote_catalog(chunk):
     return catalog
 
 
+def _quote_repair_enabled():
+    return os.environ.get("EVOLVING_PROFILE_API_QUOTE_REPAIR", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+_QR_MIN_RATIO = 0.90
+_QR_MARGIN = 0.10
+_QR_MAX_QUOTE = 1500
+_QR_MAX_TEXT = 80000
+# `cat -n` style line numbers pasted into messages ("\n118\t..."): the model drops them when retyping a quote. Snapping onto such a
+# span would store verbatim-but-polluted text (38 of 47 snaps in the first replay), so those stay rejected as before.
+_QR_LINE_NO = re.compile(r"(?:^|\n)[ \t]*\d{1,6}\t")
+
+
+def _best_verbatim_span(quote, text):
+    """Closest span of `text` to `quote`: (ratio, span) or (0.0, None). Deterministic, no model, span is always a substring."""
+    if len(quote) > _QR_MAX_QUOTE or len(text) > _QR_MAX_TEXT:
+        return 0.0, None
+    anchor = difflib.SequenceMatcher(None, quote, text, autojunk=False).find_longest_match(0, len(quote), 0, len(text))
+    if anchor.size < 6:
+        return 0.0, None
+    pad = max(8, len(quote) // 4)
+    lo = max(0, anchor.b - anchor.a - pad)
+    hi = min(len(text), anchor.b - anchor.a + len(quote) + pad)
+    window = text[lo:hi]
+    blocks = [b for b in difflib.SequenceMatcher(None, quote, window, autojunk=False).get_matching_blocks() if b.size >= 4]
+    if not blocks:
+        return 0.0, None
+    span = window[blocks[0].b : blocks[-1].b + blocks[-1].size].strip()
+    if not span or not (0.8 <= len(span) / len(quote) <= 1.25):
+        return 0.0, None
+    return difflib.SequenceMatcher(None, quote, span, autojunk=False).ratio(), span
+
+
+def _repair_source_quote(messages, index, role, quote):
+    """None = nothing to repair or not safely repairable (caller keeps the original fail-closed behaviour);
+    otherwise (index, quote, resolution). Only messages of the CLAIMED role are ever considered."""
+    if not _quote_repair_enabled() or role not in ("user", "assistant"):
+        return None
+    if messages[index].get("role") == role and quote in _text(messages[index]):
+        return None
+    same = [(i, _text(m)) for i, m in enumerate(messages) if m.get("role") == role]
+    exact = [i for i, t in same if quote in t]
+    if len(exact) == 1:
+        return exact[0], quote, {"kind": "exact_quote_index_corrected", "model_index": index}
+    if exact:
+        return None
+    scored = []
+    for i, t in same:
+        ratio, span = _best_verbatim_span(quote, t)
+        if span is not None and ratio >= _QR_MIN_RATIO:
+            scored.append((ratio, i, span))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    if not scored or (len(scored) > 1 and scored[0][0] - scored[1][0] < _QR_MARGIN):
+        return None
+    ratio, i, span = scored[0]
+    if _text(messages[i]).count(span) != 1:
+        return None
+    if _QR_LINE_NO.search(span) and not _QR_LINE_NO.search(quote):
+        return None
+    return i, span, {"kind": "snapped_to_verbatim_span", "model_index": index, "similarity": round(ratio, 4),
+                     "model_quote_sha256": hashlib.sha256(quote.encode()).hexdigest()}
+
+
 def verify_attribution(chunk, raw_fact, metadata):
     """Return canonical text/type/metadata, or reject an unproved source alias."""
     if not requires_attribution(metadata):
@@ -304,6 +369,11 @@ def verify_attribution(chunk, raw_fact, metadata):
     role = raw_fact.get("source_role")
     if isinstance(index, bool) or not isinstance(index, int) or index < 0 or index >= len(messages):
         raise ValueError("source_message_index_missing_or_invalid")
+    quote_repair = None
+    if raw_fact.get("source_quote_ref") is None and isinstance(quote, str) and quote.strip():
+        fixed = _repair_source_quote(messages, index, role, quote)
+        if fixed is not None:
+            index, quote, quote_repair = fixed
     message = messages[index]
     text = _text(message)
     if role not in ("user", "assistant") or role != message.get("role"):
@@ -375,4 +445,7 @@ def verify_attribution(chunk, raw_fact, metadata):
     if selected:
         witness_metadata["source_quote_ref"] = selector
         witness_metadata["source_quote_resolution"] = "exact_chunk_catalog_selector"
+    if quote_repair:
+        witness_metadata["source_quote_resolution"] = "repaired_" + quote_repair["kind"]
+        witness_metadata["source_quote_repair"] = json.dumps(quote_repair, ensure_ascii=False, sort_keys=True)
     return canonical, fact_type, witness_metadata
