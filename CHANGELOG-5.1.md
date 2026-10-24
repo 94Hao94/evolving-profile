@@ -1,4 +1,4 @@
-# Evolving Profile 5.1.2
+# Evolving Profile 5.1.3
 
 > English release notes first. 中文更新说明见本文后半部分。
 
@@ -13,6 +13,18 @@ those planes meet: long sessions, incomplete provider drafts, nested host
 receipts, native source review, and source-to-state coverage.
 
 ## Main changes
+
+### 5.1.3 — Claude Desktop / Claude CLI host integration
+
+- New `claude-code/` kit: one host-aware Hook bridge for Claude Desktop (org plugin), Claude CLI (`~/.claude/settings.json`) and generic Claude Code; hosts are
+  detected automatically (`EP_HOST` overrides) and recorded as `origin_agent` / `host_id`. Codex is untouched. Guide: `docs/host-integrations/CLAUDE-DESKTOP-CLI.md`.
+- Retained transcripts keep only human-visible dialogue (no tool results, thinking, images, sidechains, system reminders); output uses the standard `hookSpecificOutput` shape.
+- Desktop chats become Codex-format rollouts in EP's own `claude-code/rollouts/` after a 20-minute settle period, so Scenario Summaries cover them.
+- Four idempotent `host-adapter` edits (`origin_agent`, `host_id`, session root) with `check/apply`, applied in this package.
+- Deterministic, fail-closed repair of almost-verbatim `source_quote`s in `source_attribution.py` (kill switch `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`).
+- Memory-use instruction sent in full at SessionStart and as a one-line stub on later prompts (kill switch `EP_FULL_INSTRUCTION=1`).
+- `install.sh` / `install_cli_hooks.py` / `install-desktop-plugin.sh` (dry-run, backups, uninstall) and a read-only health check including read/write embedding-model consistency.
+- Evidence boundary: exercised on one macOS machine; the CLI path through the real bridge with simulated host markers only. See `docs/RELEASE-NOTES-5.1.3.md`.
 
 ### 5.1.2 RC1 — cross-host preparation and agent operating guidance
 
@@ -261,6 +273,17 @@ evidence. Historical test counts are not reused as current results.
 宿主回执、独立原文复核，以及用户原句到情境状态的逐条覆盖。
 
 ## 主要变化
+
+### 5.1.3 Claude Desktop／Claude CLI 宿主接入
+
+- 新增 `claude-code/` 套件：一个按宿主自适应的 Hook 桥，服务 Claude Desktop（组织插件）、Claude CLI（`~/.claude/settings.json`）和通用 Claude Code；自动识别宿主（可用 `EP_HOST` 指定），记录为 `origin_agent`／`host_id`，不改 Codex。说明见 `docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md`。
+- 入库的对话只保留人能看到的内容（不含工具结果、思考、图片、子链路、系统提醒），输出采用标准 `hookSpecificOutput` 格式。
+- 桌面对话经 20 分钟静置期后写成 Codex 格式 rollout（EP 自己的 `claude-code/rollouts/`），情景摘要可覆盖。
+- 四处幂等的 `host-adapter` 改动（`origin_agent`、`host_id`、会话根目录），带 `check/apply`，本包已应用。
+- `source_attribution.py` 新增确定性、失败即拒绝的“近似逐字引文”修复（关闭开关 `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`）。
+- 记忆使用说明在会话开始时完整发送，之后每轮只发一行占位（关闭开关 `EP_FULL_INSTRUCTION=1`）。
+- `install.sh`／`install_cli_hooks.py`／`install-desktop-plugin.sh`（支持 dry-run、备份、卸载）和只读健康检查（含读写嵌入模型一致性）。
+- 证据边界：在一台 macOS 上运行过；CLI 一路仅以模拟宿主标记经真实桥接脚本验证。见 `docs/RELEASE-NOTES-5.1.3.md`。
 
 ### 2026-10-13 后台写入热修复
 

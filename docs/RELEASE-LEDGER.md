@@ -2,10 +2,17 @@
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
-**本目录：5.1.2 RC1候选发行线。**以[VERSION](../VERSION)为产品版本权威，
+**本目录：5.1.3（在5.1.2 RC1候选线上增加 Claude 宿主接入）。**以[VERSION](../VERSION)为产品版本权威，
 新候选通道见发行清单；当前远端旧分支/下载包不代表它。新包验收见
-[候选验收](CANDIDATE-ACCEPTANCE.md)，变化见[5.1.2说明](RELEASE-NOTES-5.1.2.md)。
+[候选验收](CANDIDATE-ACCEPTANCE.md)，变化见[5.1.3说明](RELEASE-NOTES-5.1.3.md)和[5.1.2说明](RELEASE-NOTES-5.1.2.md)。
 下文5.1.1及更早的PR/提交均为历史发布证据，不是本候选已发布的证明。
+
+### 2026-10-24：5.1.3 Claude Desktop／Claude CLI 宿主接入
+
+- 本地准备：完成；预检、包校验、秘密扫描、套件测试结果见[5.1.3说明](RELEASE-NOTES-5.1.3.md)的验证表。
+- 分支：个人 fork `ccygod/evolving-profile-2.2` 的 `release/5.1.3`，基于 `release/5.1.2-rc.1`（后者的上游 PR #6 仍为 OPEN）。最终 head 以远端读回为准。
+- 上游 PR：**未创建**。Tag：**未创建**。GitHub Release：**未发布**。旧 RC 标签不移动。
+- 证据边界：一台 macOS 上的 Claude Desktop 3P 端到端运行；CLI 仅以模拟宿主标记经真实桥接脚本验证；Windows/Linux 未测；不含收益或召回率结论。
 
 ### 2026-10-18：5.1.2 RC1候选发布跟踪
 

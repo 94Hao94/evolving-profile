@@ -112,9 +112,11 @@ def run_once(config,root):
     def expand(s):
         for k,v in vars.items():s=str(s).replace('{'+k+'}',v)
         return s
+    _rows=batch.get('items') or locals().get('chosen') or []
+    _origin=','.join(sorted({str((r.get('metadata') or {}).get('origin_agent') or 'codex') for r in _rows})) or 'codex'
     item={'content':batch['content'],'document_id':'codex-batch-'+batch['batch_id'],
           'context':config.get('retainContext','codex'),
-          'metadata':{'source':'codex-hook-token-batch','project':batch['project'],'session_ids':vars['session_id'],'retained_at':vars['timestamp'],'estimated_tokens':str(batch.get('estimated_tokens',0)),
+          'metadata':{'source':'codex-hook-token-batch','origin_agent':_origin,'project':batch['project'],'session_ids':vars['session_id'],'retained_at':vars['timestamp'],'estimated_tokens':str(batch.get('estimated_tokens',0)),
                       **{k:expand(v) for k,v in config.get('retainMetadata',{}).items()}, **submission_metadata(batch)},
           'tags':[expand(t) for t in config.get('retainTags',[])],
           'observation_scopes':config.get('retainObservationScopes','shared')}

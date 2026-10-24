@@ -1,8 +1,8 @@
 {
   "product": "Evolving Profile",
-  "product_version": "5.1.2",
+  "product_version": "5.1.3",
   "release_channel": "candidate",
-  "build_id": "ep512-host-preparation-rc1",
+  "build_id": "ep513-claude-hosts",
   "schema_versions": {
     "runtime_settings": "1",
     "backup_settings": "1",

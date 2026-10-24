@@ -334,10 +334,27 @@ no-Hook behavior and host-specific limits. The machine-readable companion is
 | Host | Current position | Do not assume |
 | --- | --- | --- |
 | **Codex** | Most deeply exercised MCP/Hook, memory-route, scenario and receipt path | Every black-box answer has an adoption receipt |
-| **Claude Code CLI** | Documented stdio registration recipe; verify native reads on the target host | Automatic transcript/Hook capture certified by MCP visibility |
+| **Claude Code CLI** | Documented stdio registration recipe **plus, since 5.1.3, a host-adaptive Hook bridge** (capture + per-prompt recall context); exercised through the real bridge with simulated host markers | A live-CLI-session acceptance run, or certification by MCP visibility |
+| **Claude Desktop — Cowork / local agent sessions** | **5.1.3: Hook plugin + bridge, desktop chats captured with `origin_agent=claude-desktop`, Scenario Summaries for desktop chats, health check** — exercised end to end on one macOS machine | Windows/Linux, other Desktop versions, or that every answer used the injected context |
 | **Claude Code desktop — Code tab** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
 | **Claude Desktop — Chat** | Separate local MCP JSON recipe | A bundled `.mcpb` installer, Code hooks or automatic Chat history capture |
 | **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
+
+### Claude Desktop and Claude CLI (new in 5.1.3)
+
+One EP Bank can now be fed and read by **Codex, Claude Desktop and Claude CLI at the same time**, and the integration works out which host is calling by itself.
+Full guide: **[docs/host-integrations/CLAUDE-DESKTOP-CLI.md](docs/host-integrations/CLAUDE-DESKTOP-CLI.md)** ([中文](docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md)).
+
+- **Host-adaptive bridge** (`claude-code/hook_bridge_desktop.py`): one entry point for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact and Stop.
+  It detects Claude Desktop / Claude CLI / generic Claude Code (or an explicit `EP_HOST` override), tags every captured record with `origin_agent`, and never blocks Claude (always exit 0).
+- **Only human-visible dialogue is retained.** Tool results, thinking, images, sidechains and system reminders are dropped, fixing the old behaviour where file dumps were stored as things *you* said.
+- **Desktop chats reach Scenario Summaries**: a Codex-format rollout is written into EP's own `claude-code/rollouts/` (never `~/.codex`) after a settle period, so the background summariser is not invalidated mid-run.
+- **Fact-extraction quote repair**: deterministic, fail-closed repair of almost-verbatim `source_quote`s, so fewer batches end in quarantine while the "exact substring of the claimed author's message" guarantee is kept. Kill switch `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`.
+- **One command to install, one to check**: `zsh claude-code/install.sh [--desktop-plugin]` (dry-run, backups, uninstall supported) and `python3 claude-code/compat/ep_desktop_health.py` (read-only OK/WARN/FAIL for every link, including read/write embedding-model consistency).
+- Codex is untouched: `~/.codex/*` and `codex.json` are never read or written, and existing Codex data keeps `origin_agent=codex`.
+
+**Evidence and limits, stated plainly:** developed and exercised on one macOS machine with Claude Desktop 3P. The CLI path was verified through the real bridge with simulated host markers, not in a live CLI session.
+Hook activity proves context delivery, not that an answer used it. Desktop needs one `sudo` for the system plugin directory. Details and every known limit are in the guide and in [RELEASE-NOTES-5.1.3](docs/RELEASE-NOTES-5.1.3.md).
 
 The new [host-preparation profiles and management tools](docs/host-integrations/README.md)
 also cover WorkBuddy, Doubao Work and generic MCP clients. Profiles are implemented,

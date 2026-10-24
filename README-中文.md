@@ -288,10 +288,27 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 | 宿主 | 当前定位 | 不应直接推断 |
 | --- | --- | --- |
 | **Codex** | 当前实际验证较充分的 MCP/Hook、记忆路由、情景与回执路线 | 所有黑盒回答都提供了答案采用回执 |
-| **Claude Code CLI** | 已有明确 stdio 注册步骤，目标宿主需实际验证查询 | 看到 MCP 就代表自动 transcript/Hook 捕获已认证 |
+| **Claude Code CLI** | 已有明确 stdio 注册步骤；**5.1.3 起另有按宿主自适应的 Hook 桥**（捕获 + 每轮召回上下文），已用模拟宿主标记经真实桥接脚本运行 | 已做过真实 CLI 会话验收，或看到 MCP 就代表已认证 |
+| **Claude Desktop（Cowork／本地智能体会话）** | **5.1.3：Hook 插件 + 桥接，桌面对话以 `origin_agent=claude-desktop` 入库，桌面对话有情景摘要，附健康检查**——在一台 macOS 上端到端运行过 | Windows/Linux、其他 Desktop 版本，或每条回答都用到了注入的上下文 |
 | **Claude Code 桌面 Code 页** | 本地会话可复用受支持的 CLI 配置，另有专项步骤 | CLI 工具列表证明桌面/云端/SSH 也已完成 |
 | **Claude Desktop 普通 Chat** | 独立的本地 MCP JSON 接法 | 已有 `.mcpb` 一键包、Code Hook 或自动抓取全部聊天 |
 | **Hermes** | 可复用共享记忆服务及兼容的 MCP/API 契约 | 能力探针、回执与安装流程已经完全相同 |
+
+### Claude Desktop 与 Claude CLI（5.1.3 新增）
+
+同一个 EP Bank 现在可以被 **Codex、Claude Desktop、Claude CLI 同时写入和读取**，接入层会自己判断是谁在调用。
+完整说明：**[docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md](docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md)**（[English](docs/host-integrations/CLAUDE-DESKTOP-CLI.md)）。
+
+- **按宿主自适应的桥接脚本**（`claude-code/hook_bridge_desktop.py`）：SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、PreCompact、Stop 共用一个入口。
+  自动识别 Claude Desktop／Claude CLI／通用 Claude Code（也可用环境变量 `EP_HOST` 指定），给每条捕获记录打上 `origin_agent`，并且绝不阻塞 Claude（始终退出 0）。
+- **只保留人能看到的对话。** 工具结果、思考、图片、子链路和系统提醒都会丢弃，修掉了旧行为里“文件转储被当成*你*说过的话”的问题。
+- **桌面对话进入情景摘要**：经过静置期后，把 Codex 格式的 rollout 写入 EP 自己的 `claude-code/rollouts/`（绝不写 `~/.codex`），避免后台摘要器处理到一半被打断。
+- **事实提炼的引文修复**：对“几乎逐字”的 `source_quote` 做确定性、失败即拒绝的修复，减少批次被隔离，同时保留“必须是所述作者原消息精确子串”的保证。关闭开关 `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`。
+- **一条命令安装，一条命令检查**：`zsh claude-code/install.sh [--desktop-plugin]`（支持 dry-run、备份、卸载）和 `python3 claude-code/compat/ep_desktop_health.py`（只读，对链路每一环给出 OK/WARN/FAIL，包括读写嵌入模型是否一致）。
+- 不动 Codex：`~/.codex/*` 与 `codex.json` 既不读也不写，已有 Codex 数据仍是 `origin_agent=codex`。
+
+**证据与边界，直说：** 在一台 macOS、Claude Desktop 3P 上开发并运行。CLI 这一路是用模拟宿主标记经真实桥接脚本验证的，没有在真实 CLI 会话里跑过。
+钩子有活动只证明上下文送达，不证明回答用到了它。Desktop 需要一次 `sudo` 写系统插件目录。细节和全部已知边界见该指南和 [RELEASE-NOTES-5.1.3](docs/RELEASE-NOTES-5.1.3.md)。
 
 新增[宿主准备档案与管理工具](docs/host-integrations/README-中文.md)，包含WorkBuddy、
 豆包工作和通用MCP。档案和管理能力已经实现，不只是未来计划；目标客户端真实生命周期

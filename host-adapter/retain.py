@@ -374,7 +374,7 @@ def main():
             project=project, content=turn_transcript or '',
             write_policy=turn['write_policy'],
             messages=json.loads(structured_transcript) if structured_transcript else [],
-            metadata={'source':'codex-hook-token-batch', 'session_id':session_id,
+            metadata={'source':'codex-hook-token-batch', 'origin_agent':(os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex')[:40], 'session_id':session_id,
                       'project':project, 'priority_tail':str(_priority_short_task(turn_transcript, config)).lower()},
         ) or captured
     if captured:
