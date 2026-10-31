@@ -69,6 +69,119 @@ comparison is about the actual host boundary rather than an imaginary empty chat
 EP is therefore an evidence and recovery layer around native agent memory, not a claim that native
 Codex or Claude memory does not exist or that EP removes every possible memory error.
 
+EP's advantage is not a single “memory score”. It is the combination of a user-memory
+plane, an agent-process plane and host adapters that keep their evidence connected. A
+standalone native memory feature, Hindsight backend or AgentMemory MCP can each be useful;
+the difference is whether the whole chain is visible and recoverable for the person using
+Codex and Claude across projects.
+
+## A realistic cross-host walkthrough
+
+The following is a longer **illustrative walkthrough**, not a benchmark or a claim that
+any competing product can never implement one of these actions. It shows the difference
+between using each component by itself and using EP as the coordinating evidence layer.
+
+### 1. The user resumes a real project in Claude Desktop
+
+```text
+Claude Desktop
+You: Continue the AI course outline for the School of Economics and Management.
+
+Native memory only
+Claude: I remember an AI course outline, but I cannot tell whether it was the
+      Tianjin Vocational University project or the Hebei University project.
+      Please paste the audience and the last approved version.
+
+Hindsight-only backend
+Recall: 3 similar chunks returned.
+       The chunks do not identify the active Session, the later correction,
+       or whether the text was a draft or an approved version.
+
+AgentMemory-only process store
+Process hint: “Use a causal-first structure.”
+             It does not prove which project source supplied that preference.
+
+EP-connected Claude Desktop
+EP user_scenario_summary: 1 matching project, 2 nearby candidates excluded.
+EP user_preference: preserve leadership perspective; lead with the result;
+                   explain the causal chain before listing implementation.
+EP user_source_readback: approved scope and the latest correction located.
+Claude: I found the matching project Session. I will keep the leadership angle,
+        verify names and scope against the original source, then produce the
+        outline and a regression checklist.
+```
+
+The visible benefit is not that EP “knows more words”. It keeps project identity,
+conditions, corrections and source readback together, while excluding similar projects
+that merely share an institution name.
+
+### 2. The user moves from Claude Desktop to Codex
+
+```text
+Codex desktop
+You: Turn that outline into the leadership briefing and keep the same decisions.
+
+Without a shared evidence layer
+Codex: I can use the current chat, but I do not have the Claude conversation's
+        source boundary or the reason the earlier structure was selected.
+
+With EP
+EP origin_agent: claude-desktop → codex
+EP lineage: same Bank, same project key, later stage of the same task
+EP preference packet: result-first · causal explanation · visual acceptance check
+EP source revision: approved-scope@r17
+Codex: I am using the same project-scoped decisions. I will not merge the
+       similar Tianjin project, and I will re-read the source before changing
+       an amount, date, named institution or approved conclusion.
+```
+
+This is where EP differs from a host-local memory toggle: it carries the identity and
+revision boundary between hosts and makes the handoff inspectable.
+
+### 3. A real failure is repaired instead of hidden
+
+```text
+EP Console · Operations overview
+Incident: mental-model refresh failed
+Root cause: source/version contract mismatch
+Original operation: retained and linked
+Repair action: bounded AI diagnosis + source-fingerprint check
+
+[Preview repair]
+Model report: the failure came from an old source envelope; no original record
+              will be deleted; the candidate update is limited to this model.
+
+[Apply repair]
+Status: applied → completed
+Verification: source fingerprint matched; queue terminal state read back;
+              previous error retained in attempt_errors; backup receipt present.
+
+Native memory only: “memory unavailable” or a silent retry.
+Hindsight-only: a useful memory of the error may be retrieved, but the host queue,
+                repair plan, backup and final operation state are separate concerns.
+AgentMemory-only: a repair strategy may be remembered, but not necessarily linked
+                  to the user's source, current Bank or actual terminal receipt.
+```
+
+EP keeps the failed attempt instead of rewriting history. The user can see what failed,
+what the model proposed, what was applied and what was actually verified.
+
+### What the combination adds
+
+| Layer | What a standalone memory component can provide | What EP adds around it |
+| --- | --- | --- |
+| Native Codex/Claude memory | Host-level personalization and remembered context | Shared Bank scope, source identity, cross-host lineage and delivery/adoption boundaries |
+| Hindsight | A strong retain/recall/reflect memory backend when configured | Five-dimensional preferences, scenario navigation, source readback, host adapters and operational receipts |
+| AgentMemory | Agent traces, strategies and process-memory candidates | Links process experience to user/project evidence, model/tool conditions, repair plans and revalidation |
+| External RAG | Search over operator-selected documents | Keeps external documents separate from personal history and agent experience, with explicit source categories |
+| EP integrated stack | — | User memory + agent experience + host lifecycle + repair + backup/restore + observable evidence in one workflow |
+
+That is the claim the README should make: EP is difficult to replace with one memory
+backend because it connects the planes and closes the loop from retrieval to source
+verification, execution, repair and recovery. It is not a claim that Hindsight, AgentMemory
+or native host memory are useless; EP makes them more useful by giving them scope and
+operational evidence.
+
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
 ## See the workflow
