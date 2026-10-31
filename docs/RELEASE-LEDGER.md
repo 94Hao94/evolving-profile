@@ -1,10 +1,20 @@
+# Evolving Profile Release Ledger
+
+### 2026-10-31：5.1.4 AI 自动修复与队列闭环（本地准备）
+
+- 产品版本：5.1.4，以根目录 VERSION 和 config/release-manifest.json 为准。
+- 本地基线：release/5.1.3，朋友 fork 已有 5.1.3；个人 origin 尚未有 release/5.1.3。
+- 本次更新：Repair API、心智模型 AI 修复、AI 报告态、来源信封扩容、情景 jobs 对账、无人工审核状态机。
+- 本地验证：API repair/source attribution 22 项通过；Console operational overview 24 项通过；生产构建通过；本机 EP 回归检查通过。
+- GitHub 状态：尚未推送 5.1.4 分支、Tag 或 Release；需要分别核对个人 origin 和朋友 fork 的推送回执。
+
 # 发布记录
 
 这里记录已核实的发布阶段，不代替各版本 CHANGELOG。状态变更时更新本页，保持 PR、Tag 和 GitHub Release 分开。
 
-**本目录：5.1.3（在5.1.2 RC1候选线上增加 Claude 宿主接入）。**以[VERSION](../VERSION)为产品版本权威，
+**本目录：5.1.4（在5.1.3基础上增加 AI 自动修复与队列闭环）。**以[VERSION](../VERSION)为产品版本权威，
 新候选通道见发行清单；当前远端旧分支/下载包不代表它。新包验收见
-[候选验收](CANDIDATE-ACCEPTANCE.md)，变化见[5.1.3说明](RELEASE-NOTES-5.1.3.md)和[5.1.2说明](RELEASE-NOTES-5.1.2.md)。
+[候选验收](CANDIDATE-ACCEPTANCE.md)，变化见[5.1.4说明](RELEASE-NOTES-5.1.4.md)和[5.1.3说明](RELEASE-NOTES-5.1.3.md)。
 下文5.1.1及更早的PR/提交均为历史发布证据，不是本候选已发布的证明。
 
 ### 2026-10-24：5.1.3 Claude Desktop／Claude CLI 宿主接入

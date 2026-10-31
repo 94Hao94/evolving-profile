@@ -66,10 +66,13 @@ guarantee that every old memory is correct or every future task will improve.
 
 ## Maturity at a glance
 
-**5.1.2 RC1 is a release candidate, not an all-platform stable certification.**
+**5.1.4 is the current candidate release; platform-specific validation boundaries remain explicit.**
+
+The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
+
 Product version comes from [VERSION](VERSION); channel/build metadata comes from
 the checked [release manifest](config/release-manifest.json). Use the exact
-[RC tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1).
+[RC tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/release/5.1.4).
 Publication and contribution status are separate; older branches/assets are not this candidate.
 
 | Area | Current evidence | Still needs validation |
@@ -84,7 +87,7 @@ Publication and contribution status are separate; older branches/assets are not 
 
 “Detected”, “configured”, “EP protocol verified”, “host received” and “answer
 adopted” are different claims. Missing evidence stays unknown, not zero or success.
-See [candidate scope and acceptance](docs/RELEASE-NOTES-5.1.2.md).
+See [candidate scope and acceptance](docs/RELEASE-NOTES-5.1.4.md).
 
 ## Personalization beyond a list of likes
 
@@ -248,7 +251,7 @@ automatic version indicators.
 ### 1. Install and build
 
 ```bash
-git clone --branch v5.1.2-rc.1 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch release/5.1.4 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
@@ -319,7 +322,7 @@ your own credentials are still required.
 | **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
 Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
-Use the exact `v5.1.2-rc.1` tag or its named verified archive, not the old remote branch.
+Use the exact `release/5.1.4` tag or its named verified archive, not the old remote branch.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
 effective configuration, optional features and safe stopping/rollback.
@@ -380,7 +383,7 @@ the same configuration.** Verify the effective profile before claiming changes a
   to all interfaces. This candidate does not silently change that default or authorize public exposure.
 
 Product version: [`VERSION`](VERSION). Current release status, actual checks,
-dependency risks and known limits belong in the [candidate notes](docs/RELEASE-NOTES-5.1.2.md)
+dependency risks and known limits belong in the [candidate notes](docs/RELEASE-NOTES-5.1.4.md)
 and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
 See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
 production-classified and full-workspace audit results and retained RC risks.
@@ -398,7 +401,7 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 - [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
 - [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
 - [Agent operating guide](docs/AGENT-USAGE.md) · [Candidate setup](docs/CANDIDATE-SETUP.md)
-- [Changelog](CHANGELOG-5.1.md) · [Current candidate notes](docs/RELEASE-NOTES-5.1.2.md)
+- [Changelog](CHANGELOG-5.1.md) · [Current candidate notes](docs/RELEASE-NOTES-5.1.4.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)
 
 ## Built on Hindsight

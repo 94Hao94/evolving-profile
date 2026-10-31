@@ -61,9 +61,12 @@
 
 ## 哪些较成熟，哪些还需验证
 
-**本版为5.1.2 RC1发布候选，不是全平台稳定认证版。**
+**本版为5.1.4候选发行版；不同平台的验证边界仍单独标注。**
+
+5.1.4 增加了带来源指纹的 AI 自动修复链路：失败操作会被诊断、自动修复，或转换为可追踪的 AI 报告，不再设置人工审核节点；同时补上情景队列与可执行 jobs 的对账、来源信封扩容和报告态与成功发布态的分离。
+
 产品版本以 [VERSION](VERSION) 为唯一权威，候选通道和构建信息见
-[发行清单](config/release-manifest.json)。使用[精确RC标签与资产](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1)；
+[发行清单](config/release-manifest.json)。使用[精确RC标签与资产](https://github.com/ccygod/evolving-profile-2.2/releases/tag/release/5.1.4)；
 实际发布/贡献状态见发布记录，旧远端分支或下载资产不代表本候选版本。
 
 | 能力 | 当前成熟度与证据 | 仍需验证 |
@@ -77,7 +80,7 @@
 | 外部 RAG、JEV、本地模型 | 已有可选模块与配置 | 你自己的文件、密钥、模型、索引兼容和实际收益 |
 
 “发现安装”“配置存在”“EP 协议通过”“宿主接收”“回答采用”不是一回事。
-没有证据就保留未知，不补成零或成功。详见[本候选版边界与验收](docs/RELEASE-NOTES-5.1.2.md)。
+没有证据就保留未知，不补成零或成功。详见[本候选版边界与验收](docs/RELEASE-NOTES-5.1.4.md)。
 
 ## 个性化，不止于记住“喜欢什么”
 
@@ -209,7 +212,7 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 ### 1. 一键安装构建
 
 ```bash
-git clone --branch v5.1.2-rc.1 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch release/5.1.4 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
@@ -275,7 +278,7 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 | **豆包工作** | 审阅实际插件配置，为当前任务启用并阅读日常协议；Skill不保证每轮自动调用。 |
 
 源码来源为 `https://github.com/ccygod/evolving-profile-2.2`；使用精确
-`v5.1.2-rc.1`标签或对应命名核验归档，不能用旧远端分支替代。
+`release/5.1.4`标签或对应命名核验归档，不能用旧远端分支替代。
 **[完整分宿主提示词（含 Hermes）直接复制](docs/AGENT-SETUP-中文.md)。**
 长版包括备份合并、绝对路径、健康检查、网页点击、工具/捕获验收、配置生效、可选项和停止回退。
 
@@ -330,7 +333,7 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
   本候选不静默改变该行为，也不授权公开服务。
 
 产品版本读取 [`VERSION`](VERSION)。实际发布状态、测试、依赖风险和已知限制
-见[候选版说明](docs/RELEASE-NOTES-5.1.2.md)与[发布记录](docs/RELEASE-LEDGER.md)，
+见[5.1.4 说明](docs/RELEASE-NOTES-5.1.4.md)与[发布记录](docs/RELEASE-LEDGER.md)，
 不在多个固定徽章中重复维护“最新版”。
 依赖的生产分类审计、完整工作区审计和保留的 RC 风险分别见[依赖风险说明](docs/DEPENDENCY-RISKS.md)。
 
@@ -345,7 +348,7 @@ EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/cc
 - [本地安装与回退](docs/LOCAL-SETUP.md) · [API 配置](api/README.md)
 - [完整部署](docs/DEPLOYMENT-中文.md) · [分宿主接入](docs/HOST-SETUP-中文.md) · [Agent 安装话](docs/AGENT-SETUP-中文.md)
 - [Agent 日常操作](docs/AGENT-USAGE-中文.md) · [候选包安装](docs/CANDIDATE-SETUP.md)
-- [更新日志](CHANGELOG-5.1.md) · [当前候选版说明](docs/RELEASE-NOTES-5.1.2.md)
+- [更新日志](CHANGELOG-5.1.md) · [当前 5.1.4 说明](docs/RELEASE-NOTES-5.1.4.md)
 - [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)
 
 ## 基于 Hindsight 开发

@@ -8,7 +8,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useBank } from "@/lib/bank-context";
 import { bankRoute } from "@/lib/bank-url";
-import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, CircleHelp, RefreshCw, Settings2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, CircleHelp, RefreshCw, Settings2, WandSparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AttemptGroup, LocalRetentionEvidence, OperationalIncident, OperationalLane, ScanCoverage } from "@/lib/operational-overview";
 import { dispatcherHealth } from "@/lib/operational-overview";
@@ -28,6 +28,7 @@ type Overview = {
     failedBatches?: number | null; failedTaskRows?: number | null; localRetention?: LocalRetentionEvidence; scenario?: ScenarioOperationalEvidence };
   scan: { llmFailures: ScanCoverage; llmFailureGroups: { total: number | null }; failedOperations: ScanCoverage; relatedSuccess: { coverage: string; returned?: number; total?: number } };
 };
+type RepairPlan = { repair_id: string; status: string; mode: "auto" | "llm"; root_cause: string; risk: string; actions: Array<Record<string, unknown>>; evidence: Array<Record<string, unknown>>; source_fingerprint?: string | null; regression_plan: string[]; apply_receipt?: Record<string, unknown> | null };
 
 export function OperationalScenarioSummary({ evidence }: { evidence: ScenarioOperationalEvidence }) {
   const t = useTranslations("operationalEvidence");
@@ -160,9 +161,9 @@ function operationalText(value: unknown, english: boolean): string {
     .trim();
 }
 
-export function OperationalLaneCard({ lane, incident, pipeline, acknowledged, onDetail, onToggleAcknowledgement, disabled }: {
+export function OperationalLaneCard({ lane, incident, pipeline, acknowledged, onDetail, onRepair, onToggleAcknowledgement, disabled }: {
   lane: OperationalLane; incident?: OperationalIncident; pipeline: Overview["pipeline"];
-  acknowledged: boolean; onDetail: () => void; onToggleAcknowledgement: () => Promise<void>; disabled: boolean;
+  acknowledged: boolean; onDetail: () => void; onRepair?: () => Promise<void>; onToggleAcknowledgement: () => Promise<void>; disabled: boolean;
 }) {
   const locale = useLocale();
   const english = !locale.startsWith("zh");
@@ -185,6 +186,7 @@ export function OperationalLaneCard({ lane, incident, pipeline, acknowledged, on
       </div>
     </button>
     {incident && ["warning", "critical"].includes(lane.state) && <div className="px-3 pb-3">
+      {incident.repair && <ActionButton size="sm" variant="outline" className="mr-2 h-auto min-h-8 whitespace-normal text-xs" onAction={onRepair ?? (async () => undefined)} disabled={disabled} successLabel={english ? "Preview ready" : "预览已生成"} resetKey={`${incident.id}:repair`}>{incident.repair.label}</ActionButton>}
       <ActionButton size="sm" variant="outline" className="h-auto min-h-8 whitespace-normal text-xs" onAction={onToggleAcknowledgement} disabled={disabled} resetKey={`${lane.id}:${acknowledged}`} successLabel={english ? "Saved" : "已保存"}>{acknowledged ? english ? "Restore this alert" : "恢复本次提醒" : english ? "Acknowledge this alert" : "解除本次提醒"}</ActionButton>
       {acknowledged && <p role="status" className="mt-1 text-[11px] text-muted-foreground">{english ? "Confirmation is not recovery; new failures will alert again." : "已解除本次强调；不代表恢复，新故障仍会提醒。"}</p>}
     </div>}
@@ -207,6 +209,8 @@ export function OperationalOverview() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<OperationalIncident | null>(null);
   const [selectedAttempt, setSelectedAttempt] = useState<AttemptGroup | null>(null);
+  const [repairPlan, setRepairPlan] = useState<RepairPlan | null>(null);
+  const [repairLoading, setRepairLoading] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
   const requestVersion = useRef(0);
   useEffect(()=>{
@@ -282,6 +286,26 @@ export function OperationalOverview() {
   };
 
   const openDetail = (incident: OperationalIncident) => setSelected(incident);
+  const startRepair = async (incident: OperationalIncident) => {
+    if (!bankId || !incident.repair) return;
+    setRepairLoading(true);
+    try {
+      const response = await fetch("/api/evolving-profile/repair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankId, payload: { incident_id: incident.id, source_id: incident.repair.sourceId ?? incident.sourceId ?? null, source_fingerprint: incident.repair.sourceFingerprint ?? null, operation: { status: incident.severity === "critical" ? "failed" : "failed", task_type: incident.operation ?? incident.category, error_message: incident.detail } } }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(String(payload?.detail || "repair_diagnose_failed"));
+      setRepairPlan(payload); setSelected(null);
+    } finally { setRepairLoading(false); }
+  };
+  const applyRepair = async () => {
+    if (!bankId || !repairPlan) return;
+    setRepairLoading(true);
+    try {
+      const response = await fetch("/api/evolving-profile/repair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankId, action: "apply", repairId: repairPlan.repair_id, payload: { confirmed: true, current_source_fingerprint: repairPlan.source_fingerprint ?? null } }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(String(payload?.detail || "repair_apply_failed"));
+      setRepairPlan(payload); void load(true);
+    } finally { setRepairLoading(false); }
+  };
   const navigate = (incident: OperationalIncident) => {
     if (!bankId) return false;
     const suffix = incident.action === "scenario" ? "?view=data&subTab=context" : incident.action === "flow" ? "?view=flow" : incident.action === "llm-requests" ? "?view=profile&bankConfigTab=llm-requests" : incident.action === "operations" ? "?view=profile&bankConfigTab=general#bank-operations" : "?view=profile&bankConfigTab=configuration";
@@ -320,7 +344,7 @@ export function OperationalOverview() {
       {data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {data.lanes.map((lane) => {
           const incident = data.incidents.find((item) => item.category === lane.id);
-          return <OperationalLaneCard key={lane.id} lane={lane} incident={incident} pipeline={data.pipeline} acknowledged={laneAcknowledged(lane)} onDetail={() => incident && openDetail(incident)} onToggleAcknowledgement={() => toggleAcknowledgement(lane)} disabled={error || acknowledgements?.bankId !== bankId} />;
+          return <OperationalLaneCard key={lane.id} lane={lane} incident={incident} pipeline={data.pipeline} acknowledged={laneAcknowledged(lane)} onDetail={() => incident && openDetail(incident)} onRepair={incident?.repair ? () => startRepair(incident) : undefined} onToggleAcknowledgement={() => toggleAcknowledgement(lane)} disabled={error || repairLoading || acknowledgements?.bankId !== bankId} />;
         })}
       </div>}
 
@@ -333,11 +357,14 @@ export function OperationalOverview() {
           {visibleIncidents.length ? visibleIncidents.map((incident) => {
             const confirmed = data.lanes.some(lane => lane.id === incident.category && laneAcknowledged(lane));
             const Icon = confirmed ? CircleHelp : ICONS[incident.severity];
-            return <button type="button" key={incident.id} onClick={() => openDetail(incident)} className="flex w-full items-center gap-3 py-3 text-left hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-primary">
-              <Icon className={`h-4 w-4 shrink-0 ${TONES[confirmed ? "unknown" : incident.severity].split(" ")[0]}`} />
-              <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{confirmed ? english ? "Acknowledged · " : "已确认 · " : ""}{incidentTitle(incident)}</span><span className="block truncate text-xs text-muted-foreground">{incidentDetail(incident)}</span></span>
-              <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">{time(incident.at, locale)}</span><ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>;
+            return <div key={incident.id} className="flex w-full items-center gap-3 py-3 text-left hover:bg-muted/50">
+              <button type="button" onClick={() => openDetail(incident)} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-primary">
+                <Icon className={`h-4 w-4 shrink-0 ${TONES[confirmed ? "unknown" : incident.severity].split(" ")[0]}`} />
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{confirmed ? english ? "Acknowledged · " : "已确认 · " : ""}{incidentTitle(incident)}</span><span className="block truncate text-xs text-muted-foreground">{incidentDetail(incident)}</span></span>
+                <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">{time(incident.at, locale)}</span><ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+              {incident.repair && <ActionButton size="sm" variant="outline" className="mr-2 shrink-0 text-xs" onAction={() => startRepair(incident)} disabled={repairLoading} successLabel={english ? "Ready" : "已生成"} resetKey={`${incident.id}:row-repair`}>{incident.repair.label}</ActionButton>}
+            </div>;
           }) : <p className="py-4 text-sm text-muted-foreground">{hiddenCount>0 ? (english?"List cleared. This does not mean issues are fixed; see the health status above.":"列表已清空，不代表故障已修复；真实状态请查看上方。") : inlineUiText("最近 24 小时没有观测到失败回执。未核验链路仍显示在上方，不等于全部正常。")}</p>}
         </div>
         {((data.scan?.llmFailures.total ?? 0) > (data.scan?.llmFailures.returned ?? 0) || (data.scan?.failedOperations.total ?? 0) > (data.scan?.failedOperations.returned ?? 0)) &&
@@ -351,7 +378,21 @@ export function OperationalOverview() {
             <p className="break-words leading-6">{incidentDetail(selected)}</p>
             {selected.sourceIds && selected.taskRowCount != null && <div className="space-y-1 text-xs"><p>{t("failedTaskRows", { count: selected.taskRowCount.toLocaleString(locale) })}</p>{selected.sourceIds.map(id => <p key={id} className="break-all font-mono">{id}</p>)}</div>}
             <dl className="grid grid-cols-[80px_1fr] gap-2 border-t border-border pt-3 text-xs"><dt className="text-muted-foreground">{inlineUiText("证据来源")}</dt><dd className="break-all">{selected.sourceKey ? t(selected.sourceKey) : selected.source}</dd><dt className="text-muted-foreground">{inlineUiText("记录 ID")}</dt><dd className="break-all font-mono">{selected.sourceId ?? inlineUiText("未提供")}</dd><dt className="text-muted-foreground">{inlineUiText("级别")}</dt><dd>{english ? ({ healthy: "Healthy", warning: "Needs attention", critical: "Failure", unknown: "Unverified" } as Record<string, string>)[selected.severity] : LABELS[selected.severity]}</dd></dl>
+            {selected.repair && <ActionButton variant="outline" onAction={() => startRepair(selected)} disabled={repairLoading} successLabel={english ? "Preview ready" : "预览已生成"}><WandSparkles className="mr-2 h-4 w-4" />{selected.repair.label}</ActionButton>}
             <button type="button" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline" onClick={() => navigate(selected)}>{inlineUiText("查看对应页面")} <ArrowRight className="h-4 w-4" /></button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(repairPlan)} onOpenChange={(open) => !open && setRepairPlan(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader><DialogTitle>{repairPlan?.mode === "llm" ? "大模型修复预览" : "自动修复预览"}</DialogTitle><DialogDescription>先诊断和预览，确认后才应用；原始证据不会被覆盖。</DialogDescription></DialogHeader>
+          {repairPlan && <div className="space-y-3 text-sm">
+            <p><strong>状态：</strong>{repairPlan.status}</p><p><strong>根因：</strong>{repairPlan.root_cause}</p><p><strong>风险：</strong>{repairPlan.risk}</p>
+            <pre className="max-h-48 overflow-auto rounded border bg-muted/40 p-3 text-xs">{JSON.stringify(repairPlan.actions, null, 2)}</pre>
+            <p className="text-xs text-muted-foreground">回归：{repairPlan.regression_plan.join("、")}</p>
+            {repairPlan.status === "preview_ready" && <div className="flex gap-2">{(repairPlan.mode === "auto" || repairPlan.actions.some(action => action.type === "repair_refresh_mental_model")) ? <ActionButton onAction={applyRepair} disabled={repairLoading} successLabel="已应用">确认应用修复</ActionButton> : <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">大模型诊断已生成；当前没有可安全直接发布的来源处理器，已进入 AI 审查队列。</p>}<ActionButton variant="outline" onAction={async () => { if (!bankId) return; const response = await fetch("/api/evolving-profile/repair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankId, action: "cancel", repairId: repairPlan.repair_id, payload: {} }) }); if (response.ok) setRepairPlan(await response.json()); }} disabled={repairLoading}>取消</ActionButton></div>}
+            {repairPlan.status === "applied" && <p role="status" className="text-emerald-700">{repairPlan.mode === "llm" ? "大模型修复已写入并回读，原失败记录已标记为已恢复。" : "自动修复已提交，运行总览将自动刷新。"}</p>}
+            {repairPlan.status === "ai_report" && <p role="status" className="text-amber-800">AI 报告已生成；后续由模型自动处理，原文不会被覆盖。</p>}
           </div>}
         </DialogContent>
       </Dialog>

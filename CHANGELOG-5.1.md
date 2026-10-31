@@ -1,3 +1,15 @@
+# Evolving Profile 5.1.4
+
+### 5.1.4 — AI 自动修复与队列闭环
+
+- 新增有来源指纹和目标版本校验的 repair API：诊断、预览、应用、取消和状态回读。
+- refresh_mental_model 失败改走受限 AI 压缩修复，成功写入后回读并保留原失败证据。
+- 无法安全直接发布的记录进入 AI 报告态，不再进入人工审核状态。
+- 修复情景索引与 worker jobs 不一致造成的“页面有队列、后台无任务”问题；worker 启动会自动补齐缺失 jobs。
+- 来源信封超过普通分块预算时动态扩容，避免合法来源被误隔离。
+- Reflect 与主模型分离配置，工具调用模型可独立使用；保留 AI 报告、来源指纹和回滚边界。
+- 验证：repair/source attribution 相关测试、Console 测试与本机 EP 回归检查通过。
+
 # Evolving Profile 5.1.3
 
 > English release notes first. 中文更新说明见本文后半部分。

@@ -238,26 +238,39 @@ def fragment_source_message(message, start, end):
 
 
 def iter_source_fragments(message, max_chars):
-    """Split only source text; JSON and authority fields are independently intact."""
+    """Split only source text; authority fields stay intact.
+
+    A provenance envelope can be larger than the normal extraction chunk (for
+    example, a long quote catalog or many exact ranges). In that case a hard
+    failure would discard an otherwise valid source record. Expand only the
+    transport budget for this source witness; the caller still batches the
+    resulting fragment and the text itself remains bounded by the envelope.
+    """
     text = _text(message)
     start = 0
     while start < len(text):
-        low, high = start + 1, len(text)
+        budget = max_chars
         candidate = None
-        while low <= high:
-            middle = (low + high) // 2
-            row = fragment_source_message(message, start, middle)
-            serialized = json.dumps([row], ensure_ascii=False)
-            if len(serialized) <= max_chars:
-                candidate = serialized
-                low = middle + 1
-            else:
-                high = middle - 1
-        if candidate is None:
-            raise ValueError("source_envelope_exceeds_chunk_budget")
+        while candidate is None:
+            low, high = start + 1, len(text)
+            while low <= high:
+                middle = (low + high) // 2
+                row = fragment_source_message(message, start, middle)
+                serialized = json.dumps([row], ensure_ascii=False)
+                if len(serialized) <= budget:
+                    candidate = serialized
+                    low = middle + 1
+                else:
+                    high = middle - 1
+            if candidate is None:
+                # Metadata is evidence, so do not trim it to fit a smaller
+                # chunk. Increase only this witness's envelope budget, with a
+                # finite ceiling to avoid an unbounded memory allocation.
+                if budget >= 131072:
+                    raise ValueError("source_envelope_exceeds_chunk_budget")
+                budget = min(131072, budget * 2)
         yield candidate
         start = json.loads(candidate)[0]["source_fragment"]["end"] - _fragment_origin(message)["start"]
-
 
 def source_quote_catalog(chunk):
     """Bounded retry selectors bound to exact chunk bytes and author/span.
@@ -370,7 +383,10 @@ def verify_attribution(chunk, raw_fact, metadata):
     if isinstance(index, bool) or not isinstance(index, int) or index < 0 or index >= len(messages):
         raise ValueError("source_message_index_missing_or_invalid")
     quote_repair = None
-    if raw_fact.get("source_quote_ref") is None and isinstance(quote, str) and quote.strip():
+    # Quote repair is deterministic and source-byte based, so it is safe to
+    # attempt even when the model supplied a selector.  A stale selector must
+    # not disable the existing exact/near-verbatim repair path.
+    if isinstance(quote, str) and quote.strip():
         fixed = _repair_source_quote(messages, index, role, quote)
         if fixed is not None:
             index, quote, quote_repair = fixed
@@ -380,14 +396,36 @@ def verify_attribution(chunk, raw_fact, metadata):
         raise ValueError("source_role_mismatch")
     selector = raw_fact.get("source_quote_ref")
     selected = None
+    selector_repair = None
     if selector is not None:
         if not isinstance(selector, str):
-            raise ValueError("source_quote_selector_invalid")
-        selected = next((e for e in source_quote_catalog(chunk)["entries"] if e["id"] == selector), None)
-        if (not selected or selected["source_message_index"] != index or selected["source_role"] != role
-                or quote not in ("", selected["text"])):
-            raise ValueError("source_quote_selector_invalid")
-        quote = selected["text"]
+            if isinstance(quote, str) and quote.strip() and quote in text:
+                selector_repair = {"kind": "invalid_selector_type_ignored_exact_quote", "model_selector": selector}
+            else:
+                raise ValueError("source_quote_selector_invalid")
+        else:
+            selected = next((e for e in source_quote_catalog(chunk)["entries"] if e["id"] == selector), None)
+        if selector_repair is not None or (
+            not selected
+            or selected["source_message_index"] != index
+            or selected["source_role"] != role
+            or quote not in ("", selected["text"])
+        ):
+            # The catalog selector is a transport hint, not authority.  A
+            # provider can return a stale/wrong selector while still copying
+            # an exact quote from the claimed original message.  Keep the
+            # fail-closed source checks by dropping only the bad hint and
+            # resolving the quote directly; missing or ambiguous quotes still
+            # raise below.  This repairs the common qwen/glm failure without
+            # accepting paraphrases or cross-role evidence.
+            if isinstance(quote, str) and quote.strip() and quote in text:
+                if selector_repair is None:
+                    selector_repair = {"kind": "invalid_selector_ignored_exact_quote", "model_selector": selector}
+                selected = None
+            else:
+                raise ValueError("source_quote_selector_invalid")
+        else:
+            quote = selected["text"]
     if not isinstance(quote, str) or not quote.strip() or quote not in text:
         raise ValueError("source_quote_not_in_original_message")
     # A quote occurring more than once needs an unambiguous source span.
@@ -448,4 +486,13 @@ def verify_attribution(chunk, raw_fact, metadata):
     if quote_repair:
         witness_metadata["source_quote_resolution"] = "repaired_" + quote_repair["kind"]
         witness_metadata["source_quote_repair"] = json.dumps(quote_repair, ensure_ascii=False, sort_keys=True)
+    if selector_repair:
+        if quote_repair:
+            witness_metadata["source_quote_resolution"] = "invalid_selector_ignored_repaired_" + quote_repair["kind"]
+            witness_metadata["source_quote_repair"] = json.dumps(
+                {"selector": selector_repair, "quote": quote_repair}, ensure_ascii=False, sort_keys=True
+            )
+        else:
+            witness_metadata["source_quote_resolution"] = selector_repair["kind"]
+            witness_metadata["source_quote_repair"] = json.dumps(selector_repair, ensure_ascii=False, sort_keys=True)
     return canonical, fact_type, witness_metadata

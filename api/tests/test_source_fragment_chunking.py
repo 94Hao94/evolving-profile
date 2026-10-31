@@ -9,7 +9,7 @@ from evolving_profile_api.engine.retain.fact_extraction import (
     chunk_text,
     extract_facts_from_contents,
 )
-from evolving_profile_api.engine.retain.source_attribution import _text, validate_write_policy, verify_attribution
+from evolving_profile_api.engine.retain.source_attribution import _text, iter_source_fragments, validate_write_policy, verify_attribution
 from evolving_profile_api.engine.retain.types import RetainContent
 from tests.test_fact_extraction_retry import _make_config, _make_llm_config
 
@@ -202,3 +202,11 @@ def test_mutated_source_fragment_cannot_claim_confirmed_user_authority(mutation)
         row["source_fragment"]["evidence_group_id"] = "invented-new-vote"
     with pytest.raises(ValueError, match="original"):
         witness(json.dumps([row], ensure_ascii=False), 0, row["content"])
+
+
+def test_oversized_source_envelope_expands_budget_instead_of_dropping_record():
+    row = source('user', 'x' * 1200, 'oversized-envelope')
+    row['source_record']['original_message_quoted_ranges'] = [[i, i + 1] for i in range(0, 1200, 2)]
+    fragments = list(iter_source_fragments(row, 3000))
+    assert fragments
+    assert ''.join(_text(json.loads(fragment)[0]) for fragment in fragments) == 'x' * 1200
