@@ -6,7 +6,7 @@
 - 本地基线：release/5.1.3，朋友 fork 已有 5.1.3；个人 origin 尚未有 release/5.1.3。
 - 本次更新：Repair API、心智模型 AI 修复、AI 报告态、来源信封扩容、情景 jobs 对账、无人工审核状态机。
 - 本地验证：API repair/source attribution 22 项通过；Console operational overview 24 项通过；生产构建通过；本机 EP 回归检查通过。
-- GitHub 状态：朋友 fork 已推送 release/5.1.4 与 v5.1.4，提交 f594aab；个人 origin 推送被 GitHub 403 拒绝，当前凭据 ccygod 没有 94Hao94 仓库写权限；未创建 GitHub Release 或上游 PR。
+- GitHub 状态：朋友 fork 已推送 release/5.1.4 与 v5.1.4，提交 f594aab；个人 origin 推送被 GitHub 403 拒绝，当前凭据 ccygod 没有 94Hao94 仓库写权限；已创建上游 PR [#8](https://github.com/94Hao94/evolving-profile/pull/8)，尚未合并或创建 GitHub Release。
 
 # 发布记录
 
