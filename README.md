@@ -31,11 +31,17 @@ a separate knowledge source.
 
 ## Before and after EP
 
+Codex and Claude already have native long-term memory in some surfaces. This comparison
+does not pretend that the hosts start empty: it shows the difference between native host
+memory alone and the same hosts connected to EP. Native memory can be stale, scoped to one
+host, hard to attribute to a source or revision, inconsistent with a later correction, or
+retrieved without any visible proof that the answer used it.
+
 The examples below are **illustrative conversations**, written to show the kind of
 continuity and evidence handling EP is designed to provide. They are not an accuracy
 benchmark, and they do not promise that every answer will use every returned memory.
 
-| Without EP | With EP |
+| Native Codex/Claude memory only | Codex/Claude + EP |
 | --- | --- |
 | **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “Please resend the audience, the last version, your preferred structure and the previous conclusion.”<br><br>The user repeats context, while an old omission can be repeated. | **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “I located the matching project session. I will preserve the leadership perspective, use the agreed causal-first structure, read back the source material where names or scope matter, and run a regression check before delivery.”<br><br>EP supplies scoped navigation and conditional preferences; the agent still verifies the source. |
 | **User:** “The memory job failed again.”<br>**Agent:** “Retrying the same operation.”<br><br>A retry can hide a contract mismatch or lose the reason for failure. | **User:** “The memory job failed again.”<br>**Agent:** “The receipt shows a source/version contract mismatch. I will compare the current fingerprint, choose a bounded repair or an AI report, preserve the failed record, and verify the terminal job status before reporting success.”<br><br>EP keeps failure, repair and verification as separate evidence. |
@@ -44,10 +50,24 @@ The practical difference is a shorter path from request → relevant context →
 execution → verification. EP does not retrain the underlying model or turn an unverified
 candidate into a fact.
 
-![Concept UI comparison: without EP versus with EP](docs/assets/ep-before-after-ui-en.svg)
+![Realistic Codex and Claude Desktop surface mockup: native memory only versus the same hosts connected to EP](docs/assets/ep-before-after-ui-en.svg)
 
-The interface above is a fictional product walkthrough: it shows the evidence states a user
-would look for, not a captured production screen.
+The interface above is a realistic product walkthrough, not a captured production screen.
+It uses the visual grammar of Codex desktop, Claude Desktop and an EP browser console so the
+comparison is about the actual host boundary rather than an imaginary empty chat window.
+
+### Why native memory alone can still fail
+
+| Question | Native host memory | EP alongside the host |
+| --- | --- | --- |
+| Where did this come from? | The host may show a memory setting or a personalized answer without a source receipt. | EP links the candidate to a scoped Session, source revision and optional original-source readback. |
+| Is it current? | A later correction can coexist with an older remembered statement. | EP retains conditions, superseding evidence and version/fingerprint checks before repair or publication. |
+| Can Codex and Claude share it? | Each host may keep its own memory namespace and lifecycle. | EP records `origin_agent`, Bank scope and cross-agent lineage as separate evidence. |
+| Did the agent really use it? | A memory being available does not prove it reached the prompt or changed the answer. | EP separates returned context, host delivery and answer adoption; unknown remains unknown. |
+| What happens after failure? | Native memory usually does not expose a repair queue, failed attempt, or restore receipt. | EP keeps the failure, proposes bounded repair/AI report, preserves the original and verifies the terminal state. |
+
+EP is therefore an evidence and recovery layer around native agent memory, not a claim that native
+Codex or Claude memory does not exist or that EP removes every possible memory error.
 
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
