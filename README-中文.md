@@ -38,6 +38,10 @@
 实际差异是把请求 → 相关上下文 → 原文核对 → 执行 → 验证这条链缩短。EP
 不会重训底层模型，也不会把未核验候选直接当成事实。
 
+![虚拟界面对比：不使用 EP 与使用 EP](docs/assets/ep-before-after-ui-zh.svg)
+
+上图是虚构的产品 walkthrough，用来展示用户应该看到的证据状态，不是实际生产截图。
+
 ![概念示意图：三路来源经过检查、检索与可审计回答流程；不是实际界面截图](docs/assets/ep51-release-hero.png)
 
 ## 先看实际工作流
@@ -76,13 +80,15 @@
 
 ## 哪些较成熟，哪些还需验证
 
-**本版为 5.1.4 发布线；不同平台的验证边界仍单独标注。**
+**本版为 5.1.4 候选发行版；不同平台的验证边界仍单独标注。**
 
 5.1.4 增加了带来源指纹的 AI 自动修复链路：失败操作会被诊断、自动修复，或转换为可追踪的 AI 报告，不再设置人工审核节点；同时补上情景队列与可执行 jobs 的对账、来源信封扩容和报告态与成功发布态的分离。
 
 产品版本以 [VERSION](VERSION) 为唯一权威，候选通道和构建信息见
-[发行清单](config/release-manifest.json)。使用[精确 v5.1.4 标签与资产](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)；
-实际发布/贡献状态见发布记录，旧远端分支或下载资产不代表本候选版本。
+[发行清单](config/release-manifest.json)。当前候选文档与代码在
+[`release/5.1.4` 分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.4)。
+不可变的 [`v5.1.4` 标签](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)
+是较早的候选基线；GitHub Release 和可下载资产尚未创建。实际发布/贡献状态见发布记录。
 
 | 能力 | 当前成熟度与证据 | 仍需验证 |
 | --- | --- | --- |
@@ -228,8 +234,8 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 [选择具体宿主](docs/HOST-SETUP-中文.md) → [复制对应 Agent 提示词](docs/AGENT-SETUP-中文.md)。
 **安装本候选包：**先看[候选版安装入口](docs/CANDIDATE-SETUP.md)。
 **给 Agent 读：**接入不等于会使用，继续阅读[Agent 日常操作协议](docs/AGENT-USAGE-中文.md)。
-本工作树是 5.1.4 发布线，精确公开标签为 `v5.1.4`；产品版本始终读 [VERSION](VERSION)，
-不能根据分支名或旧 RC 下载包判断最新版。
+本工作树是 5.1.4 候选线，当前文档分支为 `release/5.1.4`；产品版本始终读 [VERSION](VERSION)，
+旧的不可变 `v5.1.4` 标签不是本次文档构建的来源，不能根据旧 Tag 判断最新版。
 
 ### 环境要求
 
@@ -246,8 +252,9 @@ cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 
-脚本文件名沿用5.1发行线，实际版本读取VERSION。不能克隆旧贡献分支后，
-把得到的旧版本当成本候选包；也可解压命名的核验归档后进入根目录。
+脚本文件名沿用 5.1 发行线，实际版本读取 VERSION。这里使用当前候选
+`release/5.1.4` 分支以包含最新文档和修复；运行前确认 `VERSION` 为 `5.1.4`，
+并记录 `git rev-parse HEAD` 的提交。也可解压命名的核验归档后进入根目录。
 
 脚本执行预检与来源文本扫描，安装基础依赖，**先构建 SDK 再构建 Console**，
 并生成本地启动清单；只在 `.env` 不存在时创建模板。
@@ -307,7 +314,7 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 | **豆包工作** | 审阅实际插件配置，为当前任务启用并阅读日常协议；Skill不保证每轮自动调用。 |
 
 源码来源为 `https://github.com/ccygod/evolving-profile-2.2`；使用精确
-`release/5.1.4`标签或对应命名核验归档，不能用旧远端分支替代。
+当前 `release/5.1.4` 分支或对应命名核验归档，不能用旧远端分支替代。
 **[完整分宿主提示词（含 Hermes）直接复制](docs/AGENT-SETUP-中文.md)。**
 长版包括备份合并、绝对路径、健康检查、网页点击、工具/捕获验收、配置生效、可选项和停止回退。
 

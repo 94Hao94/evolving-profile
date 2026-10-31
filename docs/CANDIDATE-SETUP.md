@@ -2,8 +2,8 @@
 
 [English overview](../README.md) · [中文介绍](../README-中文.md) · [Agent usage](AGENT-USAGE.md)
 
-Use the exact **v5.1.4** tag or the named verified archives on its
-[release page](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4).
+Use the current **release/5.1.4** branch or a named verified archive. The immutable
+`v5.1.4` tag is an earlier candidate baseline; no GitHub Release assets have been published.
 Read VERSION and the manifest. A contribution PR is not an upstream merge or stable Release;
 actual states belong in the release ledger. Never substitute an older public branch.
 

@@ -44,6 +44,11 @@ The practical difference is a shorter path from request → relevant context →
 execution → verification. EP does not retrain the underlying model or turn an unverified
 candidate into a fact.
 
+![Concept UI comparison: without EP versus with EP](docs/assets/ep-before-after-ui-en.svg)
+
+The interface above is a fictional product walkthrough: it shows the evidence states a user
+would look for, not a captured production screen.
+
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
 ## See the workflow
@@ -83,14 +88,16 @@ guarantee that every old memory is correct or every future task will improve.
 
 ## Maturity at a glance
 
-**5.1.4 is the current release line; platform-specific validation boundaries remain explicit.**
+**5.1.4 is the current candidate release; platform-specific validation boundaries remain explicit.**
 
 The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
 
 Product version comes from [VERSION](VERSION); channel/build metadata comes from
-the checked [release manifest](config/release-manifest.json). Use the
-[exact v5.1.4 tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4).
-Publication and contribution status are separate; older branches/assets are not this release line.
+the checked [release manifest](config/release-manifest.json). The current candidate
+documentation and code are on the [`release/5.1.4` branch](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.4).
+The immutable [`v5.1.4` tag](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)
+is the earlier candidate baseline; a GitHub Release with downloadable assets has not
+been created. Publication and contribution status are separate.
 
 | Area | Current evidence | Still needs validation |
 | --- | --- | --- |
@@ -251,9 +258,9 @@ statuses are not erased merely to make a dashboard green.
 **Installing this candidate?** Start with [candidate setup](docs/CANDIDATE-SETUP.md).
 **Agent reading this repository:** installation alone is not usage; read
 [the Agent operating guide](docs/AGENT-USAGE.md) before choosing memory tools.
-This checkout is the 5.1.4 release line. The product version is read from
-[VERSION](VERSION), and the exact public tag is `v5.1.4`; branch names and old
-RC assets are not automatic version indicators.
+This checkout is the 5.1.4 candidate line. The product version is read from
+[VERSION](VERSION), and the current documentation branch is `release/5.1.4`;
+the older immutable `v5.1.4` tag is not the source for this documentation build.
 
 ### First-run acceptance path
 
@@ -289,7 +296,9 @@ cd evolving-profile-2.2
 ```
 
 The installer filename is retained for the 5.1 release line; it reads `VERSION`.
-Use the exact `v5.1.4` tag or a named verified archive, not an older contribution branch.
+This command intentionally uses the current candidate branch so it includes the
+latest verified documentation and fixes. Before running it, confirm `VERSION` is
+`5.1.4` and record the commit shown by `git rev-parse HEAD`.
 
 This runs preflight and a release text-source scan, installs base dependencies,
 builds the SDK **before** the Console and writes a local launch manifest.
@@ -354,7 +363,8 @@ your own credentials are still required.
 | **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
 Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
-Use the exact `v5.1.4` tag or its named verified archive, not the old remote branch.
+Use the current `release/5.1.4` branch or a named verified archive; do not silently
+substitute the older `v5.1.4` tag without comparing its commit and manifest.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
 effective configuration, optional features and safe stopping/rollback.

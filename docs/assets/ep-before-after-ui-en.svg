@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="720" viewBox="0 0 1440 720" role="img" aria-labelledby="title desc">
+  <title id="title">Concept UI comparison: without Evolving Profile and with Evolving Profile</title>
+  <desc id="desc">A fictional side-by-side console. The left panel repeats context and shows an unresolved failure. The right panel links a project, reads back evidence, and shows a verified repair receipt.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#0b1220"/><stop offset="1" stop-color="#111c31"/></linearGradient>
+    <linearGradient id="teal" x1="0" x2="1"><stop offset="0" stop-color="#6ee7c7"/><stop offset="1" stop-color="#35b7b0"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#030712" flood-opacity=".28"/></filter>
+  </defs>
+  <rect width="1440" height="720" rx="28" fill="url(#bg)"/>
+  <text x="72" y="76" fill="#e5edf7" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="700">A request, two operating modes</text>
+  <text x="72" y="112" fill="#91a4bd" font-family="Inter,Arial,sans-serif" font-size="17">Concept interface — illustrative, not a live product screenshot or an accuracy benchmark</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="154" width="620" height="492" rx="20" fill="#f7f5f1"/>
+    <rect x="756" y="154" width="620" height="492" rx="20" fill="#122139" stroke="#3c6e78" stroke-width="2"/>
+  </g>
+
+  <g font-family="Inter,Arial,sans-serif">
+    <circle cx="100" cy="196" r="7" fill="#ef766b"/>
+    <text x="120" y="204" fill="#263449" font-size="19" font-weight="800" letter-spacing="1.8">WITHOUT EP</text>
+    <text x="100" y="244" fill="#6e7c8e" font-size="15">Chat history is local to this turn</text>
+    <rect x="100" y="274" width="548" height="88" rx="14" fill="#ffffff" stroke="#e6ddd4"/>
+    <text x="124" y="305" fill="#9a5a52" font-size="14" font-weight="700">USER</text>
+    <text x="124" y="331" fill="#2c3b50" font-size="16">“Continue the AI course outline.”</text>
+    <rect x="100" y="378" width="548" height="88" rx="14" fill="#fff0ed" stroke="#f2b3aa"/>
+    <text x="124" y="409" fill="#c95249" font-size="14" font-weight="700">AGENT</text>
+    <text x="124" y="435" fill="#713d3b" font-size="16">“Please resend the audience and last version.”</text>
+    <rect x="100" y="482" width="548" height="74" rx="14" fill="#ffffff" stroke="#e6ddd4"/>
+    <circle cx="126" cy="519" r="6" fill="#ef766b"/>
+    <text x="146" y="525" fill="#657387" font-size="15">memory job failed · retrying the same operation</text>
+    <rect x="100" y="578" width="548" height="38" rx="10" fill="#ebe5de"/>
+    <text x="124" y="603" fill="#8c8178" font-size="14">No source link · no repair receipt · no terminal proof</text>
+
+    <circle cx="792" cy="196" r="7" fill="#62e5c0"/>
+    <text x="812" y="204" fill="#d8fff3" font-size="19" font-weight="800" letter-spacing="1.8">WITH EP · 5.1.4</text>
+    <text x="792" y="244" fill="#8eb8bf" font-size="15">Project scope, source evidence and execution receipt</text>
+    <rect x="792" y="274" width="548" height="72" rx="14" fill="#1b3349" stroke="#2d5961"/>
+    <circle cx="820" cy="310" r="11" fill="#62e5c0"/>
+    <text x="816" y="315" fill="#102234" font-size="13" font-weight="800">1</text>
+    <text x="846" y="304" fill="#e5fff8" font-size="16" font-weight="700">Project located</text>
+    <text x="846" y="327" fill="#9bc3c4" font-size="14">School of Economics · matching session</text>
+    <line x1="820" y1="346" x2="820" y2="366" stroke="#62e5c0" stroke-width="2"/>
+    <rect x="792" y="366" width="548" height="72" rx="14" fill="#1b3349" stroke="#2d5961"/>
+    <circle cx="820" cy="402" r="11" fill="#62e5c0"/>
+    <text x="816" y="407" fill="#102234" font-size="13" font-weight="800">2</text>
+    <text x="846" y="396" fill="#e5fff8" font-size="16" font-weight="700">Source readback</text>
+    <text x="846" y="419" fill="#9bc3c4" font-size="14">preferences + original wording checked</text>
+    <line x1="820" y1="438" x2="820" y2="458" stroke="#62e5c0" stroke-width="2"/>
+    <rect x="792" y="458" width="548" height="72" rx="14" fill="#173b3e" stroke="#3e9b8e"/>
+    <circle cx="820" cy="494" r="11" fill="#62e5c0"/>
+    <text x="813" y="499" fill="#102234" font-size="15" font-weight="800">✓</text>
+    <text x="846" y="488" fill="#e5fff8" font-size="16" font-weight="700">Repair verified</text>
+    <text x="846" y="511" fill="#9bc3c4" font-size="14">source fingerprint match · bounded AI report</text>
+    <rect x="792" y="552" width="548" height="64" rx="14" fill="#0d182a" stroke="#27445b"/>
+    <text x="816" y="580" fill="#87a4bc" font-size="13" font-weight="700">RECEIPT</text>
+    <text x="904" y="580" fill="#d8fff3" font-size="15">completed · queue terminal · backup evidence retained</text>
+    <text x="816" y="603" fill="#62e5c0" font-size="13">answer adoption remains a separate, observable claim</text>
+  </g>
+</svg>

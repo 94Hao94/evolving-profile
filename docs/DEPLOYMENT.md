@@ -5,12 +5,13 @@
 This guide targets a new **local macOS installation**. Linux needs platform
 prerequisites checked; native Windows and cloud-host access are not certified.
 The product version is read from [VERSION](../VERSION), which is `5.1.4` in this
-checkout. The current source branch is `release/5.1.4`, and the exact public tag is
-`v5.1.4`; branch names and archived candidate assets are not version sources.
-No private Bank, provider account, transcript or model weights are bundled.
+checkout. The current candidate documentation and code are on `release/5.1.4`;
+that branch is the source for this working tree. The immutable `v5.1.4` tag is an
+earlier candidate baseline, and a GitHub Release with downloadable assets has not
+been created. No private Bank, provider account, transcript or model weights are bundled.
 
-Use the exact `v5.1.4` tag or a named verified archive; see [candidate setup](CANDIDATE-SETUP.md).
-Older branch/tag assets are not this release line.
+Use this checkout's `release/5.1.4` branch or a named verified archive; read VERSION
+and the release manifest before starting. Do not silently substitute the older tag.
 After setup, the Agent also needs [daily operating guidance](AGENT-USAGE.md).
 After verifying the actual running candidate directory, complete the explicit
 [runtime version projection](CANDIDATE-SETUP.md#project-verified-version-metadata-into-the-selected-runtime);
@@ -423,6 +424,6 @@ database versions before restoring. UI backup retention does not replace this
 first verified recovery drill. Inspect the cloud toggle on a new install: some
 legacy no-file defaults show a WPS mirror enabled, which does not install an
 uploader. Leave cloud disabled when not chosen; do not start cloud jobs from
-that prefilled state. An installed5.1.0 runtime may legitimately differ
-from a staged5.1.1 checkout: the live source-of-truth integration audit is opt-in
+that prefilled state. An installed prior 5.1.x runtime may legitimately differ
+from a staged 5.1.4 candidate checkout: the live source-of-truth integration audit is opt-in
 (`EP_TEST_LIVE_STATE_AUDIT=1`), not permission to mutate live state to pass tests.

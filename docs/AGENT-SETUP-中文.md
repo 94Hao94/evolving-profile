@@ -2,7 +2,7 @@
 
 [English](AGENT-SETUP.md) · [候选包安装](CANDIDATE-SETUP.md) · [日常使用协议](AGENT-USAGE-中文.md)
 
-把精确v5.1.4标签或对应命名核验归档及实际目录交给Agent，先读VERSION与通道。
+把当前 release/5.1.4 分支或对应命名核验归档及实际目录交给 Agent，先读 VERSION 与通道。
 不能让它克隆旧分支，再声称装了这个新版本。选择真实宿主入口，不只看模型品牌。
 
 ## 所有入口共同使用的完整要求
@@ -10,7 +10,7 @@
 下面通用段落与对应宿主补充段一起复制：
 
 ```text
-请使用ccygod/evolving-profile-2.2的精确v5.1.4标签或对应命名核验归档，
+请使用 ccygod/evolving-profile-2.2 的当前 release/5.1.4 分支或对应命名核验归档，
 核对VERSION与发行清单，不要用旧远端分支替代。
 先读README、CANDIDATE-SETUP、DEPLOYMENT-中文、HOST-SETUP-中文、宿主准备说明，
 以及AGENT-USAGE-中文。确认系统、本机/WSL/远端、权限、端口与已有配置。
