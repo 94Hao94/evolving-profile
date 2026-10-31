@@ -88,7 +88,7 @@ guarantee that every old memory is correct or every future task will improve.
 The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
 
 Product version comes from [VERSION](VERSION); channel/build metadata comes from
-the checked [release manifest](config/release-manifest.json). Use the exact
+the checked [release manifest](config/release-manifest.json). Use the
 [exact v5.1.4 tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4).
 Publication and contribution status are separate; older branches/assets are not this release line.
 
@@ -354,7 +354,7 @@ your own credentials are still required.
 | **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
 Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
-Use the exact `release/5.1.4` tag or its named verified archive, not the old remote branch.
+Use the exact `v5.1.4` tag or its named verified archive, not the old remote branch.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
 effective configuration, optional features and safe stopping/rollback.
