@@ -2,7 +2,7 @@
 
 [English](AGENT-SETUP.md) · [候选包安装](CANDIDATE-SETUP.md) · [日常使用协议](AGENT-USAGE-中文.md)
 
-把精确v5.1.2-rc.1标签或对应命名核验归档及实际目录交给Agent，先读VERSION与通道。
+把精确v5.1.4标签或对应命名核验归档及实际目录交给Agent，先读VERSION与通道。
 不能让它克隆旧分支，再声称装了这个新版本。选择真实宿主入口，不只看模型品牌。
 
 ## 所有入口共同使用的完整要求
@@ -10,7 +10,7 @@
 下面通用段落与对应宿主补充段一起复制：
 
 ```text
-请使用ccygod/evolving-profile-2.2的精确v5.1.2-rc.1标签或对应命名核验归档，
+请使用ccygod/evolving-profile-2.2的精确v5.1.4标签或对应命名核验归档，
 核对VERSION与发行清单，不要用旧远端分支替代。
 先读README、CANDIDATE-SETUP、DEPLOYMENT-中文、HOST-SETUP-中文、宿主准备说明，
 以及AGENT-USAGE-中文。确认系统、本机/WSL/远端、权限、端口与已有配置。
@@ -48,7 +48,7 @@ schema。使用真实本轮绑定；导航生成的ID不等于可信Hook身份�
 已有规则。原生生命周期、来源与接收未测时如实标明，不能因注册成功写成完成。
 ```
 
-## Claude桌面端，本地Code页补充
+## Claude Code 桌面端：本地 Code 页（不是 Claude Desktop）
 
 ```text
 确认是当前桌面本地Code，而不是普通Chat、云端或SSH。复用正确的MCP配置，不重复注册；
@@ -56,7 +56,7 @@ schema。使用真实本轮绑定；导航生成的ID不等于可信Hook身份�
 来源、生命周期证据与我的允许，就不启用自动捕获。
 ```
 
-## Claude Desktop普通Chat补充
+## Claude Desktop：普通 Chat/Cowork
 
 ```text
 连接我已运行的EP，按普通Chat的本地MCP配方处理。没有终端/浏览器权限就把后端安装

@@ -2,12 +2,12 @@
 
 [English overview](../README.md) · [中文介绍](../README-中文.md) · [Agent usage](AGENT-USAGE.md)
 
-Use the exact **v5.1.2-rc.1** tag or the named verified archives on its
-[release page](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.2-rc.1).
+Use the exact **v5.1.4** tag or the named verified archives on its
+[release page](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4).
 Read VERSION and the manifest. A contribution PR is not an upstream merge or stable Release;
 actual states belong in the release ledger. Never substitute an older public branch.
 
-本目录是**5.1.2 RC1候选版**，从精确标签或对应命名核验归档读取VERSION与发行清单。
+本目录是**5.1.4候选版**，从精确标签或对应命名核验归档读取VERSION与发行清单。
 旧远端分支、旧下载链接和宿主能连上的事实，都不能证明已经装了这个候选包。
 
 ## macOS source setup

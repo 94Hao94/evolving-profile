@@ -2,13 +2,13 @@
 
 [简体中文](AGENT-SETUP-中文.md) · [Candidate setup](CANDIDATE-SETUP.md) · [Daily usage](AGENT-USAGE.md)
 
-Give the Agent the exact `v5.1.2-rc.1` tag or named verified archive and actual extracted path. Do not let it clone an older remote branch and call that this version. Read VERSION
+Give the Agent the exact `v5.1.4` tag or named verified archive and actual extracted path. Do not let it clone an older remote branch and call that this version. Read VERSION
 and the release channel first. Choose the actual host surface, not merely the model brand.
 
 ## Shared request — include this with any host-specific paragraph below
 
 ```text
-Use the exact v5.1.2-rc.1 tag from https://github.com/ccygod/evolving-profile-2.2 or its
+Use the exact v5.1.4 tag from https://github.com/ccygod/evolving-profile-2.2 or its
 named verified archive. Verify VERSION and release manifest;
 do not silently substitute the old public branch. Read README, docs/CANDIDATE-SETUP.md,
 docs/DEPLOYMENT.md, docs/HOST-SETUP.md, the host preparation guide and docs/AGENT-USAGE.md.
@@ -59,7 +59,7 @@ Reference AGENT-USAGE through supported project instructions if I approve; do no
 my rules. Report native lifecycle capture/source/receipt behavior as unverified until tested.
 ```
 
-## Claude desktop — local Code tab
+## Claude Code desktop — local Code tab (not Claude Desktop)
 
 ```text
 Apply the shared request in this local desktop Code session, not ordinary Chat or cloud/SSH.
@@ -69,7 +69,7 @@ Use AGENT-USAGE for tool selection and binding. Keep source capture unverified/o
 this actual lifecycle and user authority are established.
 ```
 
-## Claude Desktop — ordinary Chat
+## Claude Desktop — ordinary Chat/Cowork
 
 ```text
 Connect this ordinary Chat to my already running EP using the reviewed local MCP recipe.

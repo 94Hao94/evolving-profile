@@ -1,5 +1,7 @@
 # Evolving Profile
 
+[简体中文](README-中文.md)
+
 <div align="center">
 
 **Turn past conversations into personal context—and past work into reusable agent experience.**
@@ -8,7 +10,7 @@ Source-linked memory about you, how you work, and how your agent gets things don
 
 **Multi-dimensional evidence distillation · Five-dimensional preferences · Reusable agent experience · Observable execution**
 
-[简体中文](README-中文.md) · [Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
+[Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
 
 </div>
 
@@ -26,6 +28,21 @@ adapt to how you prefer to collaborate, and consult relevant execution experienc
 The console lets you inspect the extracted memory, correct preferences and trace
 the evidence behind retrieval and delivery. Optional external documents remain
 a separate knowledge source.
+
+## Before and after EP
+
+The examples below are **illustrative conversations**, written to show the kind of
+continuity and evidence handling EP is designed to provide. They are not an accuracy
+benchmark, and they do not promise that every answer will use every returned memory.
+
+| Without EP | With EP |
+| --- | --- |
+| **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “Please resend the audience, the last version, your preferred structure and the previous conclusion.”<br><br>The user repeats context, while an old omission can be repeated. | **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “I located the matching project session. I will preserve the leadership perspective, use the agreed causal-first structure, read back the source material where names or scope matter, and run a regression check before delivery.”<br><br>EP supplies scoped navigation and conditional preferences; the agent still verifies the source. |
+| **User:** “The memory job failed again.”<br>**Agent:** “Retrying the same operation.”<br><br>A retry can hide a contract mismatch or lose the reason for failure. | **User:** “The memory job failed again.”<br>**Agent:** “The receipt shows a source/version contract mismatch. I will compare the current fingerprint, choose a bounded repair or an AI report, preserve the failed record, and verify the terminal job status before reporting success.”<br><br>EP keeps failure, repair and verification as separate evidence. |
+
+The practical difference is a shorter path from request → relevant context → source check →
+execution → verification. EP does not retrain the underlying model or turn an unverified
+candidate into a fact.
 
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
@@ -66,14 +83,14 @@ guarantee that every old memory is correct or every future task will improve.
 
 ## Maturity at a glance
 
-**5.1.4 is the current candidate release; platform-specific validation boundaries remain explicit.**
+**5.1.4 is the current release line; platform-specific validation boundaries remain explicit.**
 
 The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
 
 Product version comes from [VERSION](VERSION); channel/build metadata comes from
 the checked [release manifest](config/release-manifest.json). Use the exact
-[RC tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/release/5.1.4).
-Publication and contribution status are separate; older branches/assets are not this candidate.
+[exact v5.1.4 tag and assets](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4).
+Publication and contribution status are separate; older branches/assets are not this release line.
 
 | Area | Current evidence | Still needs validation |
 | --- | --- | --- |
@@ -234,9 +251,24 @@ statuses are not erased merely to make a dashboard green.
 **Installing this candidate?** Start with [candidate setup](docs/CANDIDATE-SETUP.md).
 **Agent reading this repository:** installation alone is not usage; read
 [the Agent operating guide](docs/AGENT-USAGE.md) before choosing memory tools.
-The existing contribution branch is named `release/5.1.0`; the current product
-patch is read from [VERSION](VERSION). Branch names and old RC assets are not
-automatic version indicators.
+This checkout is the 5.1.4 release line. The product version is read from
+[VERSION](VERSION), and the exact public tag is `v5.1.4`; branch names and old
+RC assets are not automatic version indicators.
+
+### First-run acceptance path
+
+For a complete local run, treat these as separate gates:
+
+1. **Build:** run the installer and confirm it reports `EP 5.1.4` from `VERSION`.
+2. **API:** start port `8888` and require `curl --fail http://127.0.0.1:8888/health`.
+3. **Controller:** start port `12079` and require `curl --fail http://127.0.0.1:12079/v1/status`.
+4. **Console:** start port `9999`, open the selected language route, create or select your own Bank, and click through the health/configuration pages.
+5. **Host:** register exactly one MCP/Hook entry for the actual host, then make one real read and one permitted capture task.
+6. **Recovery:** inspect the receipt, queue terminal state, local backup checksum and (if enabled) cloud readback separately.
+
+A green Console page alone proves none of the later gates. The full commands,
+macOS scheduler, cloud-backup boundary, upgrade and rollback steps are in
+[Deployment](docs/DEPLOYMENT.md).
 
 ### Requirements
 
@@ -257,7 +289,7 @@ cd evolving-profile-2.2
 ```
 
 The installer filename is retained for the 5.1 release line; it reads `VERSION`.
-Use the exact RC tag or named verified archive, not an older contribution branch.
+Use the exact `v5.1.4` tag or a named verified archive, not an older contribution branch.
 
 This runs preflight and a release text-source scan, installs base dependencies,
 builds the SDK **before** the Console and writes a local launch manifest.
@@ -315,8 +347,8 @@ your own credentials are still required.
 | --- | --- |
 | **Codex desktop / CLI** | Use my supplied EP candidate, read its deployment and Agent-use guides, start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
 | **Claude Code CLI** | Follow EP's deployment and Claude CLI guides, start my local backend/UI, register its stdio MCP with `claude mcp add` and verify a real read without claiming untested automatic recording. |
-| **Claude Code desktop, local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
-| **Claude Desktop, ordinary Chat** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
+| **Claude Code desktop — local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
+| **Claude Desktop — ordinary Chat/Cowork** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
 | **Hermes** | Inspect this Hermes installation's real MCP/API capabilities, use the supplied candidate and operating guide, and verify explicit reads before claiming automatic lifecycle. |
 | **WorkBuddy** | Prepare host-specific configuration first; register only if the installed client and my authorization are present, then follow the Agent operating guide. |
 | **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
@@ -334,12 +366,14 @@ no-Hook behavior and host-specific limits. The machine-readable companion is
 
 ## Host compatibility
 
+**Claude Desktop is not Claude Code.** `Claude Desktop` means the ordinary Chat/Cowork surface; `Claude Code` means the CLI or the separate desktop Code workspace. They have different settings, lifecycle hooks and evidence boundaries.
+
 | Host | Current position | Do not assume |
 | --- | --- | --- |
 | **Codex** | Most deeply exercised MCP/Hook, memory-route, scenario and receipt path | Every black-box answer has an adoption receipt |
 | **Claude Code CLI** | Documented stdio registration recipe **plus, since 5.1.3, a host-adaptive Hook bridge** (capture + per-prompt recall context); exercised through the real bridge with simulated host markers | A live-CLI-session acceptance run, or certification by MCP visibility |
 | **Claude Desktop — Cowork / local agent sessions** | **5.1.3: Hook plugin + bridge, desktop chats captured with `origin_agent=claude-desktop`, Scenario Summaries for desktop chats, health check** — exercised end to end on one macOS machine | Windows/Linux, other Desktop versions, or that every answer used the injected context |
-| **Claude Code desktop — Code tab** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
+| **Claude Code desktop — Code tab (not Claude Desktop)** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
 | **Claude Desktop — Chat** | Separate local MCP JSON recipe | A bundled `.mcpb` installer, Code hooks or automatic Chat history capture |
 | **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
 

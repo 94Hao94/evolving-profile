@@ -3,11 +3,12 @@
 [English](DEPLOYMENT.md) · [分宿主安装](HOST-SETUP-中文.md) · [给 Agent 的提示词](AGENT-SETUP-中文.md)
 
 本指南面向**新装、本地 macOS**；Linux 要另查系统依赖，未认证 Windows 原生或云端部署。
-产品版本读 [VERSION](../VERSION)。为续接现有贡献 PR，分支仍叫 `release/5.1.0`，
-分支名称不等于当前补丁版本。发行包不带作者的记忆、账号、密钥、对话或模型权重。
+产品版本读取 [VERSION](../VERSION)，本工作树为 `5.1.4`。当前源码分支是
+`release/5.1.4`，公开精确标签是 `v5.1.4`；分支名和旧候选资产都不是版本来源。
+发行包不带作者的记忆、账号、密钥、对话或模型权重。
 
-本候选使用精确`v5.1.2-rc.1`标签或对应命名核验归档，见[候选安装入口](CANDIDATE-SETUP.md)，
-不能用旧分支或旧Tag替代。安装后继续让Agent阅读[日常操作协议](AGENT-USAGE-中文.md)。
+使用精确 `v5.1.4` 标签或命名核验归档，见[候选包安装入口](CANDIDATE-SETUP.md)，
+不能用旧分支或旧 Tag 替代。安装后继续让 Agent 阅读[日常操作协议](AGENT-USAGE-中文.md)。
 确认当前进程实际加载候选后，按[运行版本投影步骤](CANDIDATE-SETUP.md#project-verified-version-metadata-into-the-selected-runtime)
 显式更新所选state root；只构建不能自动覆盖已有安装的版本清单。
 
@@ -20,7 +21,8 @@
 | C：日常自动化 | B + 经审查的 Hook + 已配置 Worker | 所有历史均完成、每次回答都受益 |
 
 先验收 A，再验收 B。C 必须用目标宿主上的真实任务验证事件格式、来源身份、写入策略和回执。
-Claude Code CLI、桌面 **Code** 页、普通 Claude Desktop **Chat** 必须分开。
+Claude Code CLI、桌面 **Code** 页、普通 Claude Desktop **Chat/Cowork** 必须分开。
+**Claude Desktop 不是 Claude Code；两者不能互抄配置。**
 已有“一键安装构建”；没有把所有宿主全部配置好的统一一键部署器。
 
 ## 1. 准备环境和源码
@@ -37,7 +39,7 @@ cd /path/to/extracted-evolving-profile
 脚本预检、安装基础依赖，先构建 SDK 再构建 Console；`.env` 不存在时才创建模板。
 它不会安装所有系统环境、创建数据库、拉起服务、注册宿主或开启外部 RAG/JEV/云备份。
 `--dry-run` 是无写入预演，首次安装不要 `--skip-deps`。
-脚本名字表示5.1系列，具体补丁读 VERSION。升级与回退见 [LOCAL-SETUP.md](LOCAL-SETUP.md)。
+脚本名字表示 5.1 系列，具体补丁读 VERSION。升级与回退见 [LOCAL-SETUP.md](LOCAL-SETUP.md)。
 
 ## 2. 在本机填配置，统一 Bank
 
@@ -164,6 +166,31 @@ Console 命令前两个环境字段把网页恢复 runner 绑定到本安装真�
 表示另一套安装，不是可以控制默认目录守护进程。部分宿主读取器仍以用户家目录定位，
 单改该变量也不代表完成多实例隔离。
 
+### 云备份为什么默认关闭，以及怎样才算启用
+
+新安装的备份设置默认 `cloud.enabled: false`。这是有意的：EP 不能把私密记忆
+上传到不明目的地，安装包不带云端凭据或 bucket，而且应先把本地加密制品和校验
+做通。内置备份 Worker 负责生成加密本地制品和 SHA-256 清单；网页开关或计划任务
+本身不能证明云端上传和恢复已经完成。
+
+确实需要外部镜像时，先准备私有的 provider/bucket 和操作者自己管理的加密同步
+任务，再按下面四项分别验收：
+
+1. `~/.evolving-profile/config/backup-settings.json` 中的周期、保留和云策略是有效配置；
+2. `~/.evolving-profile/logs/backup-run-receipts.jsonl` 最近一条状态为 `completed`；
+3. 远端对象存在，大小和 SHA-256/校验清单匹配；
+4. 新下载的制品能解密，并在可丢弃的数据库/state root 中完成恢复演练。
+
+没有目的地、凭据、加密密钥和恢复演练前保持关闭。计划、已上传、校验通过、
+恢复演练通过是四种不同状态，面板应显示最弱的实际证据。macOS 先装本地调度器，
+再做一次 dry-run：
+
+```bash
+./scripts/install-backup-macos.sh
+launchctl print "gui/$(id -u)/com.evolving-profile.backup"
+"$HOME/.evolving-profile/bin/evolving-profile-backup.zsh" daily --dry-run
+```
+
 **链路图布局：**点链路页齿轮→保存布局。坐标写入本安装状态目录的
 `config/topology-layout.json`，页面显示共享修订号；不再由各网址/端口各自保存一套权威坐标。
 旧 v7 浏览器布局保留为可明确载入的未保存草稿，载入不等于发布；旧页面不能覆盖新版。
@@ -266,6 +293,21 @@ macOS plist 是模板：要替换全部 `__EP_HOME__`，将示例中的历史起
 
 另读[依赖风险](DEPENDENCY-RISKS.md)、[发布记录](RELEASE-LEDGER.md)。本文不代表所有
 宿主、平台、历史或未来模型响应都已验证，也不移动旧标签。
+
+### 如果要离开本机运行
+
+本指南给的是先回环地址的本机部署。要做共享或常驻部署，API、Controller 和 Console
+仍绑定 `127.0.0.1`，只把明确需要的路由放在带鉴权的 HTTPS 反向代理后面，不能公开
+PostgreSQL 或 Controller 管理面。每个进程由一个明确的拥有者托管（macOS 用 `launchd`，
+Linux 用操作者自己的 `systemd` unit），标准输出/错误写入专属日志并设置轮转；同时记录
+实际源码目录、`VERSION`、生效的 `.env`/profile 和数据库迁移状态。代理能访问不等于
+健康或模型检查通过：API `/health`、Controller `/v1/status`、Console 页面、宿主回执和
+备份证据仍要分开保留。
+
+升级时先暂停写入方，导出数据库和加密状态，记录当前 commit 与运行元数据，再安装/构建
+新工作树，跑预检和健康检查，最后一次只恢复一个宿主。如果检查失败，先停止新写入，
+保留新的作业 ID，只在可丢弃环境演练匹配的源码/配置/数据库回退，然后报告回退证据。
+重启进程、构建成功或页面变绿，都不能单独算作恢复完成。
 
 ## 8. 如何停止、重启和备份
 
