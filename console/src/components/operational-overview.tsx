@@ -33,7 +33,7 @@ type RepairPlan = { repair_id: string; status: string; mode: "auto" | "llm"; roo
 export function OperationalScenarioSummary({ evidence }: { evidence: ScenarioOperationalEvidence }) {
   const t = useTranslations("operationalEvidence");
   const locale = useLocale();
-  const values = Object.fromEntries(["total", "reviewed", "failed", "pending", "notApplicable", "protected", "waitingSource", "unknown"].map(key => [key, (evidence[key as keyof ScenarioOperationalEvidence] as number | null)?.toLocaleString(locale) ?? "—"]));
+  const values = Object.fromEntries(["total", "reviewed", "failed", "pending", "aiReports", "notApplicable", "protected", "waitingSource", "unknown"].map(key => [key, (evidence[key as keyof ScenarioOperationalEvidence] as number | null)?.toLocaleString(locale) ?? "—"]));
   const reasons: Record<string, string> = { automated_source_coverage_incomplete: "coverage", scenario_model_response_incomplete: "draft", scenario_user_claim_not_verbatim: "quote", scenario_state_invalid: "state", scenario_review_source_mismatch: "source" };
   return <div className="space-y-2 rounded border border-border p-3 text-xs" data-testid="scenario-operational-summary">
     <h3 className="text-sm font-semibold">{t("scenarioTitle")}</h3>

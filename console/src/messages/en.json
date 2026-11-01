@@ -247,7 +247,7 @@
     "scenarioFailed": "{count} failed scenario summaries",
     "scenarioHelp": "Original sources are retained. Source consolidation health does not prove summary publication or answer quality.",
     "scenarioReceipt": "Bank-scoped scenario index",
-    "scenarioTotals": "{reviewed}/{total} published · {failed} failed · {pending} pending",
+    "scenarioTotals": "{reviewed}/{total} published · {failed} failed · {pending} pending · AI reports {aiReports}",
     "scenarioExcluded": "Not applicable {notApplicable} · protected {protected} · waiting for source {waitingSource} · unknown {unknown}",
     "scenarioDetails": "Inspect failed summaries",
     "scenarioReasons": {"coverage":"Source coverage review failed","draft":"Draft incomplete","quote":"Original user quote mismatch","state":"Invalid summary state","source":"Review source mismatch","unknown":"Unclassified failure"},

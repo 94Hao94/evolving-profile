@@ -247,7 +247,7 @@
     "scenarioFailed": "{count} 个情景摘要失败",
     "scenarioHelp": "原文保留。源记忆加工正常不代表摘要已发布，也不代表回答质量通过。",
     "scenarioReceipt": "当前记忆库情景索引",
-    "scenarioTotals": "已发布 {reviewed}/{total} · 失败 {failed} · 待审查 {pending}",
+    "scenarioTotals": "已发布 {reviewed}/{total} · 失败 {failed} · 待审查 {pending} · AI报告 {aiReports}",
     "scenarioExcluded": "不适用 {notApplicable} · 已保护 {protected} · 等待来源 {waitingSource} · 未知 {unknown}",
     "scenarioDetails": "查看失败摘要",
     "scenarioReasons": {"coverage":"来源覆盖审查未通过","draft":"摘要草稿不完整","quote":"用户原句不一致","state":"摘要状态结构不合法","source":"复核来源不一致","unknown":"未分类故障"},
