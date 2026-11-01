@@ -46,8 +46,16 @@ def run_once(config,root):
     client=HindsightClient(config['evolvingProfileApiUrl'],config.get('evolvingProfileApiToken'))
     statuses={}
     rows=q._read()['items']
+    intent_hint=previous.get('intent') or {}
     for bank,op in sorted({(r['bank_id'],r['operation_id']) for r in rows if r.get('operation_id')}):
         try: statuses[op]=client.operation_status(bank,op,timeout=10).get('status')
+        except RuntimeError as e:
+            # A submitted UUID that vanished before its acknowledgement is the
+            # lost-ack path below. Do not leave the queue permanently inflight.
+            if 'HTTP 404 ' in str(e) and intent_hint.get('operation_id') == op:
+                statuses[op]='not_found'
+                continue
+            return finish('status_unavailable',error=type(e).__name__,next_retry_at_epoch=time.time()+30)
         except Exception as e: return finish('status_unavailable',error=type(e).__name__,next_retry_at_epoch=time.time()+30)
         if statuses[op] in ('failed','cancelled'):
             operation_rows=[r for r in rows if r.get('operation_id')==op]
@@ -70,7 +78,6 @@ def run_once(config,root):
     completed=sum(s=='completed' for s in statuses.values())
     if completed:
         q.reconcile(statuses);base['completed_total']+=completed
-    if q.pending_operations(): return finish('processing',operations=q.pending_operations())
     # Recover a lost acknowledgement before selecting a different batch. The
     # caller-supplied UUID makes a resend idempotent on the actual API.
     intent=previous.get('intent')
@@ -84,6 +91,7 @@ def run_once(config,root):
             if not q.mark_submitted(intent['batch_id'],intent['operation_id'],item_ids=intent['item_ids']): return finish('acknowledgement_conflict',intent=intent)
             base['submitted_total']+=1
             return finish('recovered_acknowledgement',operation_id=intent['operation_id'])
+    if q.pending_operations() and not intent: return finish('processing',operations=q.pending_operations())
     batches=allowed_retention_batches(q.ready_batches(config=config),config)
     tails=allowed_retention_batches(q.ready_batches(force_tail=True,min_age_seconds=config.get('retainTailMinAgeSeconds',1800),config=config),config)
     priority=allowed_retention_batches(q.ready_batches(force_tail=True,min_age_seconds=config.get('shortTaskTailMinAgeSeconds',600),config=config),config)
