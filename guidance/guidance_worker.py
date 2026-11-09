@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
-import fcntl
+import ep_platform_lock as fcntl
 import json
 import os
 from pathlib import Path

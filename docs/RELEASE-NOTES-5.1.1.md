@@ -1,6 +1,6 @@
-# Evolving Profile 5.1.1 — Deployment and host onboarding
+# Evolving Profile 5.1.1 — Host onboarding and receipt reliability
 
-日期：2026-10-17。状态：贡献分支补丁；实际提交和 PR 状态以
+日期：2026-10-17；送达修复更新：2026-10-18。状态：贡献分支补丁；实际提交和 PR 状态以
 [发布记录](RELEASE-LEDGER.md)为准，不移动旧 RC 标签，不自动创建 GitHub Release。
 
 ## 解决的问题
@@ -11,6 +11,14 @@
 
 ## 本次变更
 
+- 2026-10-18 长会话送达回执修复：不再只按当前 Prompt 日期寻找旧会话；优先核对
+  受授权的实际来源路径和原生 Session 身份，支持跨日期、归档和有界目录回退。
+  大文件采用有界尾部/流读取及目标轮次范围缓存，处理追加、部分来源和合法大行；
+  不完整、超预算、不可读或歧义来源保留未知，不用候选数反推送达。
+- 链路汇总区分 Hook 已准备内容、工具实际返回和宿主已收到；
+  `refresh_runtime_guidance` 的真实偏好包进入原偏好节点和汇总。
+  无回执的计划占位分支不再冲掉已有接收小计；收到结果不等于最终回答采用。
+  中英文标签同步，手动校准布局与历史记忆不变。
 - 2026-10-18 指导工具参数防护：共享任务绑定先校验对象/字段类型，运行恢复工具
   严格检查单个 `runtime_event.failure`。错误参数返回可纠正的字段提示，不再抛出
   `'str' object has no attribute 'items'`，也不通过猜测转换错误事件或递归补查掩盖问题。
@@ -35,16 +43,24 @@
 
 ## Upgrade / migration / rollback
 
-This is a documentation, example-configuration and release-preflight patch, not
-a database migration or an automatic rewrite of installed host settings. Preserve
+This patch includes read-only Console receipt discovery/projection fixes alongside
+documentation, example configuration and release preflight. It does not require
+a database migration or automatically rewrite installed host settings. Preserve
 existing `.env`, Bank, Guidance registry, queues, hooks and owned service profiles.
 Do not replace an existing Controller contract with the new-install minimal one.
 Review source/dependency/build compatibility before adopting updated Console
 metadata. Roll back the matching source/build set, not old data over new writes.
 
-The contribution branch remains `release/5.1.0` to continue PR4; it now carries
-the patch from VERSION. Old RC1/RC2 downloads remain old. No stable/new Release
-is implied by a branch push.
+The contribution branch remains `release/5.1.0` and carries the patch version
+from VERSION. PR4 was merged before this receipt patch; the new increment is
+submitted as a separate PR against upstream main. Old RC1/RC2 downloads remain
+old. No stable/new tagged Release is implied by a branch push.
+
+For the receipt patch, rebuild and restart only the matching Console using the
+deployment guide, then refresh the page. Existing Prompts can be projected from
+their real source; users do not need to regenerate their history. There is no
+MCP tool-schema change in this patch and no forced Codex restart. Keep the prior
+Console source/build for rollback; do not restore old memory data over new writes.
 
 ## Known limits / 已知边界
 
@@ -59,6 +75,11 @@ is implied by a branch push.
   explicitly connected. Save success is not proof of effective backend reload.
 - [Existing dependency risks](DEPENDENCY-RISKS.md) remain disclosed; this patch
   does not fix or hide them, claim all-history quality, or relax source checks.
+- Receipt replay is bounded: source discovery, scan size, line size and selected
+  turn bodies have explicit limits. Missing or incomplete coverage stays unknown.
+  Real-path and native identity checks are not a guarantee against every hostile
+  local filesystem replacement race. The fix is not Windows/Claude/Hermes
+  end-to-end certification.
 
 ## Verification
 
@@ -66,6 +87,15 @@ Tests, example startup, Markdown/render/link checks and independent fresh-reader
 review are recorded for the actual published commit in [release ledger](RELEASE-LEDGER.md).
 An isolated Controller/MCP probe does not prove native Claude delivery. No
 production credentials or private history are needed for documentation checks.
+
+Receipt-repair acceptance on 2026-10-18: Console **94 files / 660 tests** passed;
+TypeScript and distribution/private Console production + standalone builds passed.
+Real old-Prompt replay and Chinese/English browser clicks confirmed a native
+guidance return of 5 items and 5 host-received items; a Hook-only case retained
+unconfirmed delivery. These are bounded functional observations, not a recall-rate
+or answer-benefit benchmark. Private prompts and screenshots are not distributed.
+Fresh publication package gates and exact remote synchronization are recorded in
+the release ledger; unchanged backend tests are not presented as newly rerun.
 
 ## 作者与致谢
 

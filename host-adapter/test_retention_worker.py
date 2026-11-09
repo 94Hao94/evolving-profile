@@ -145,6 +145,19 @@ class RetentionWorkerTest(unittest.TestCase):
         with patch.object(retention_worker.HindsightClient,'operation_status',side_effect=RuntimeError('HTTP 404 missing')):
             self.assertEqual(retention_worker.run_once(self.config,self.root)['status'],'intent_policy_held')
         self.assertEqual(self.posts,[])
+    def test_lost_ack_missing_operation_is_recovered_even_when_queue_still_has_inflight_rows(self):
+        import retention_worker
+        self.capture('old','2020-01-01T00:00:00Z')
+        batch=self.queue._select_batches(self.queue._read(),force_tail=True)[0]
+        self.queue.mark_submitted(batch['batch_id'],'missing',item_ids=batch['item_ids'])
+        path=self.root/'retention/worker-state.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'intent':{'batch_id':batch['batch_id'],'bank_id':'test-bank','operation_id':'missing','item_ids':batch['item_ids']},'next_retry_at_epoch':0}))
+        with patch.object(retention_worker.HindsightClient,'operation_status',side_effect=RuntimeError('HTTP 404 missing')):
+            with patch.object(retention_worker.HindsightClient,'_request',return_value={'success':True,'operation_id':'missing'}):
+                result=retention_worker.run_once(self.config,self.root)
+        self.assertEqual(result['status'],'submitted')
+        self.assertEqual(self.queue._read()['items'][0]['operation_id'],'missing')
     def test_selected_items_can_be_acknowledged_after_a_new_capture(self):
         self.capture('old','2020-01-01T00:00:00Z')
         selected=self.queue._select_batches(self.queue._read(),force_tail=True)[0]

@@ -15,7 +15,7 @@ import os
 import tempfile
 import uuid
 import re
-import fcntl
+from . import platform_lock as fcntl
 import threading
 from contextlib import contextmanager
 from functools import wraps

@@ -4,9 +4,18 @@
 
 This guide targets a new **local macOS installation**. Linux needs platform
 prerequisites checked; native Windows and cloud-host access are not certified.
-The product version is [VERSION](../VERSION). The existing contribution branch
-is still named `release/5.1.0`; its name is not the installed patch version.
-No private Bank, provider account, transcript or model weights are bundled.
+The product version is read from [VERSION](../VERSION), which is `5.1.4` in this
+checkout. The current candidate documentation and code are on `release/5.1.4`;
+that branch is the source for this working tree. The immutable `v5.1.4` tag is an
+earlier candidate baseline, and a GitHub Release with downloadable assets has not
+been created. No private Bank, provider account, transcript or model weights are bundled.
+
+Use this checkout's `release/5.1.4` branch or a named verified archive; read VERSION
+and the release manifest before starting. Do not silently substitute the older tag.
+After setup, the Agent also needs [daily operating guidance](AGENT-USAGE.md).
+After verifying the actual running candidate directory, complete the explicit
+[runtime version projection](CANDIDATE-SETUP.md#project-verified-version-metadata-into-the-selected-runtime);
+build-only setup does not overwrite an existing installation's release metadata.
 
 ## Choose the level you need
 
@@ -18,7 +27,8 @@ No private Bank, provider account, transcript or model weights are bundled.
 
 Start with A, then B. Enable C only after a fresh natural task proves the host's
 event format, source identity, write policy and receipts. Claude Code CLI, the
-desktop **Code** tab and ordinary Claude Desktop **Chat** are different surfaces.
+desktop **Code** tab and ordinary Claude Desktop **Chat/Cowork** are different surfaces.
+**Claude Desktop is not Claude Code; do not copy one product's settings into the other.**
 One-command **build** is available; one-command complete host onboarding is not.
 
 ## 1. Requirements and download
@@ -29,8 +39,7 @@ subscription's chat key may not support embeddings. CPU/local models require
 their own dependencies, memory and load tests; they are not downloaded here.
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
-cd evolving-profile-2.2
+cd /path/to/extracted-evolving-profile
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
 
@@ -38,7 +47,7 @@ The script installs base dependencies, builds the SDK before Console, and
 creates `.env` only if absent. It does not install system prerequisites, create a
 database, start services, register hosts or enable RAG/JEV/cloud. `--dry-run`
 previews without writes; `--skip-deps` is not for a fresh install. The script name
-tracks the5.1 line; read VERSION for the patch. See [upgrade/rollback](LOCAL-SETUP.md).
+tracks the 5.1 line; read VERSION for the patch. See [upgrade/rollback](LOCAL-SETUP.md).
 
 ## 2. Set credentials locally and choose one Bank
 
@@ -184,6 +193,35 @@ State files and managed service controls are operator-local. An alternate
 control the default installation's daemons. Several host readers remain home-
 scoped, so changing that variable alone does not create full multi-instance isolation.
 
+### Cloud backup is deliberately opt-in
+
+A fresh install creates a local backup policy with `cloud.enabled: false`. That is
+intentional: EP must not upload private memories to an unknown destination, no provider
+credential or bucket is bundled, and a local encrypted artifact should be verified first.
+The built-in backup worker creates encrypted local configuration/capture artifacts and
+checksum manifests; a cloud toggle or a scheduled job is not proof that an upload or
+restore is complete.
+
+If you need an external mirror, use a private provider/bucket and an operator-owned
+encrypted sync job after the local job succeeds. Then verify all of the following separately:
+
+1. the effective `~/.evolving-profile/config/backup-settings.json` has the intended
+   schedule, retention and cloud policy;
+2. the local receipt in `~/.evolving-profile/logs/backup-run-receipts.jsonl` is `completed`;
+3. the remote object exists with the expected size and SHA-256/checksum;
+4. a fresh download can be decrypted and restored into a disposable database/state root.
+
+Keep cloud disabled when no destination, credential, encryption key and restore test are
+ready. “Planned”, “uploaded”, “checksum verified” and “restore rehearsed” are different
+states; report the weakest observed state. On macOS, install the local scheduler only after
+configuration and run a dry run first:
+
+```bash
+./scripts/install-backup-macos.sh
+launchctl print "gui/$(id -u)/com.evolving-profile.backup"
+"$HOME/.evolving-profile/bin/evolving-profile-backup.zsh" daily --dry-run
+```
+
 **Flow layout:** use the chain page's gear → Save layout. Geometry is shared in
 this installation's `config/topology-layout.json` under its state root; the badge
 shows the shared revision. Browser origins/ports do not own separate saved
@@ -305,6 +343,25 @@ evidence; they are not filled with synthetic successes.
 Read [dependency risks](DEPENDENCY-RISKS.md) and [release ledger](RELEASE-LEDGER.md).
 No procedure here moves old tags or certifies every host/platform/history.
 
+### If this leaves the laptop
+
+The supplied path is a loopback-first local deployment. For a shared or always-on
+installation, keep API, Controller and Console bound to `127.0.0.1`, put an authenticated
+HTTPS reverse proxy in front of only the routes you intend to expose, and do not publish
+PostgreSQL or the Controller admin surface. Run each process under one explicit owner
+(`launchd` on macOS or an operator-owned `systemd` unit on Linux), send stdout/stderr to
+owned log files, configure rotation, and record the loaded checkout, `VERSION`, effective
+`.env`/profile and database migration state. A proxy being reachable is not a health or
+model check: retain the API `/health`, Controller `/v1/status`, Console page, host receipt
+and backup evidence as separate checks.
+
+For an upgrade, quiesce writers, export the database and encrypted state, record the
+current commit and runtime metadata, install/build the new checkout, run preflight and
+health checks, then resume one host at a time. If a check fails, stop the new writers,
+keep any new operation IDs, restore only the matching source/config/database backup in a
+disposable rehearsal first, and report the rollback evidence. Never call a process
+restart, a successful build or a green page a completed recovery by itself.
+
 ## 8. Stop, restart and back up this installation
 
 For the foreground commands above, use **Ctrl-C in that process's terminal**.
@@ -367,6 +424,6 @@ database versions before restoring. UI backup retention does not replace this
 first verified recovery drill. Inspect the cloud toggle on a new install: some
 legacy no-file defaults show a WPS mirror enabled, which does not install an
 uploader. Leave cloud disabled when not chosen; do not start cloud jobs from
-that prefilled state. An installed5.1.0 runtime may legitimately differ
-from a staged5.1.1 checkout: the live source-of-truth integration audit is opt-in
+that prefilled state. An installed prior 5.1.x runtime may legitimately differ
+from a staged 5.1.4 candidate checkout: the live source-of-truth integration audit is opt-in
 (`EP_TEST_LIVE_STATE_AUDIT=1`), not permission to mutate live state to pass tests.

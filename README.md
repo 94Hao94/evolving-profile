@@ -1,5 +1,7 @@
 # Evolving Profile
 
+[简体中文](README-中文.md)
+
 <div align="center">
 
 **Turn past conversations into personal context—and past work into reusable agent experience.**
@@ -8,7 +10,7 @@ Source-linked memory about you, how you work, and how your agent gets things don
 
 **Multi-dimensional evidence distillation · Five-dimensional preferences · Reusable agent experience · Observable execution**
 
-[简体中文](README-中文.md) · [Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
+[Quick start](#ep-quick-start) · [How it works](#ep-how-it-works) · [Agent installation](#ep-agent-setup) · [Release status](docs/RELEASE-LEDGER.md)
 
 </div>
 
@@ -26,6 +28,159 @@ adapt to how you prefer to collaborate, and consult relevant execution experienc
 The console lets you inspect the extracted memory, correct preferences and trace
 the evidence behind retrieval and delivery. Optional external documents remain
 a separate knowledge source.
+
+## Before and after EP
+
+Codex and Claude already have native long-term memory in some surfaces. This comparison
+does not pretend that the hosts start empty: it shows the difference between native host
+memory alone and the same hosts connected to EP. Native memory can be stale, scoped to one
+host, hard to attribute to a source or revision, inconsistent with a later correction, or
+retrieved without any visible proof that the answer used it.
+
+The examples below are **illustrative conversations**, written to show the kind of
+continuity and evidence handling EP is designed to provide. They are not an accuracy
+benchmark, and they do not promise that every answer will use every returned memory.
+
+| Native Codex/Claude memory only | Codex/Claude + EP |
+| --- | --- |
+| **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “Please resend the audience, the last version, your preferred structure and the previous conclusion.”<br><br>The user repeats context, while an old omission can be repeated. | **User:** “Continue the AI course outline for the School of Economics and Management.”<br>**Agent:** “I located the matching project session. I will preserve the leadership perspective, use the agreed causal-first structure, read back the source material where names or scope matter, and run a regression check before delivery.”<br><br>EP supplies scoped navigation and conditional preferences; the agent still verifies the source. |
+| **User:** “The memory job failed again.”<br>**Agent:** “Retrying the same operation.”<br><br>A retry can hide a contract mismatch or lose the reason for failure. | **User:** “The memory job failed again.”<br>**Agent:** “The receipt shows a source/version contract mismatch. I will compare the current fingerprint, choose a bounded repair or an AI report, preserve the failed record, and verify the terminal job status before reporting success.”<br><br>EP keeps failure, repair and verification as separate evidence. |
+
+The practical difference is a shorter path from request → relevant context → source check →
+execution → verification. EP does not retrain the underlying model or turn an unverified
+candidate into a fact.
+
+![Realistic Codex and Claude Desktop surface mockup: native memory only versus the same hosts connected to EP](docs/assets/ep-before-after-ui-en.svg)
+
+The interface above is a realistic product walkthrough, not a captured production screen.
+It uses the visual grammar of Codex desktop, Claude Desktop and an EP browser console so the
+comparison is about the actual host boundary rather than an imaginary empty chat window.
+
+### Why native memory alone can still fail
+
+| Question | Native host memory | EP alongside the host |
+| --- | --- | --- |
+| Where did this come from? | The host may show a memory setting or a personalized answer without a source receipt. | EP links the candidate to a scoped Session, source revision and optional original-source readback. |
+| Is it current? | A later correction can coexist with an older remembered statement. | EP retains conditions, superseding evidence and version/fingerprint checks before repair or publication. |
+| Can Codex and Claude share it? | Each host may keep its own memory namespace and lifecycle. | EP records `origin_agent`, Bank scope and cross-agent lineage as separate evidence. |
+| Did the agent really use it? | A memory being available does not prove it reached the prompt or changed the answer. | EP separates returned context, host delivery and answer adoption; unknown remains unknown. |
+| What happens after failure? | Native memory usually does not expose a repair queue, failed attempt, or restore receipt. | EP keeps the failure, proposes bounded repair/AI report, preserves the original and verifies the terminal state. |
+
+EP is therefore an evidence and recovery layer around native agent memory, not a claim that native
+Codex or Claude memory does not exist or that EP removes every possible memory error.
+
+EP's advantage is not a single “memory score”. It is the combination of a user-memory
+plane, an agent-process plane and host adapters that keep their evidence connected. A
+standalone native memory feature, Hindsight backend or AgentMemory MCP can each be useful;
+the difference is whether the whole chain is visible and recoverable for the person using
+Codex and Claude across projects.
+
+## A realistic cross-host walkthrough
+
+The following is a longer **illustrative walkthrough**, not a benchmark or a claim that
+any competing product can never implement one of these actions. It shows the difference
+between using each component by itself and using EP as the coordinating evidence layer.
+
+### 1. The user resumes a real project in Claude Desktop
+
+```text
+Claude Desktop
+You: Continue the AI course outline for the School of Economics and Management.
+
+Native memory only
+Claude: I remember an AI course outline, but I cannot tell whether it was the
+      Tianjin Vocational University project or the Hebei University project.
+      Please paste the audience and the last approved version.
+
+Hindsight-only backend
+Recall: 3 similar chunks returned.
+       The chunks do not identify the active Session, the later correction,
+       or whether the text was a draft or an approved version.
+
+AgentMemory-only process store
+Process hint: “Use a causal-first structure.”
+             It does not prove which project source supplied that preference.
+
+EP-connected Claude Desktop
+EP user_scenario_summary: 1 matching project, 2 nearby candidates excluded.
+EP user_preference: preserve leadership perspective; lead with the result;
+                   explain the causal chain before listing implementation.
+EP user_source_readback: approved scope and the latest correction located.
+Claude: I found the matching project Session. I will keep the leadership angle,
+        verify names and scope against the original source, then produce the
+        outline and a regression checklist.
+```
+
+The visible benefit is not that EP “knows more words”. It keeps project identity,
+conditions, corrections and source readback together, while excluding similar projects
+that merely share an institution name.
+
+### 2. The user moves from Claude Desktop to Codex
+
+```text
+Codex desktop
+You: Turn that outline into the leadership briefing and keep the same decisions.
+
+Without a shared evidence layer
+Codex: I can use the current chat, but I do not have the Claude conversation's
+        source boundary or the reason the earlier structure was selected.
+
+With EP
+EP origin_agent: claude-desktop → codex
+EP lineage: same Bank, same project key, later stage of the same task
+EP preference packet: result-first · causal explanation · visual acceptance check
+EP source revision: approved-scope@r17
+Codex: I am using the same project-scoped decisions. I will not merge the
+       similar Tianjin project, and I will re-read the source before changing
+       an amount, date, named institution or approved conclusion.
+```
+
+This is where EP differs from a host-local memory toggle: it carries the identity and
+revision boundary between hosts and makes the handoff inspectable.
+
+### 3. A real failure is repaired instead of hidden
+
+```text
+EP Console · Operations overview
+Incident: mental-model refresh failed
+Root cause: source/version contract mismatch
+Original operation: retained and linked
+Repair action: bounded AI diagnosis + source-fingerprint check
+
+[Preview repair]
+Model report: the failure came from an old source envelope; no original record
+              will be deleted; the candidate update is limited to this model.
+
+[Apply repair]
+Status: applied → completed
+Verification: source fingerprint matched; queue terminal state read back;
+              previous error retained in attempt_errors; backup receipt present.
+
+Native memory only: “memory unavailable” or a silent retry.
+Hindsight-only: a useful memory of the error may be retrieved, but the host queue,
+                repair plan, backup and final operation state are separate concerns.
+AgentMemory-only: a repair strategy may be remembered, but not necessarily linked
+                  to the user's source, current Bank or actual terminal receipt.
+```
+
+EP keeps the failed attempt instead of rewriting history. The user can see what failed,
+what the model proposed, what was applied and what was actually verified.
+
+### What the combination adds
+
+| Layer | What a standalone memory component can provide | What EP adds around it |
+| --- | --- | --- |
+| Native Codex/Claude memory | Host-level personalization and remembered context | Shared Bank scope, source identity, cross-host lineage and delivery/adoption boundaries |
+| Hindsight | A strong retain/recall/reflect memory backend when configured | Five-dimensional preferences, scenario navigation, source readback, host adapters and operational receipts |
+| AgentMemory | Agent traces, strategies and process-memory candidates | Links process experience to user/project evidence, model/tool conditions, repair plans and revalidation |
+| External RAG | Search over operator-selected documents | Keeps external documents separate from personal history and agent experience, with explicit source categories |
+| EP integrated stack | — | User memory + agent experience + host lifecycle + repair + backup/restore + observable evidence in one workflow |
+
+That is the claim the README should make: EP is difficult to replace with one memory
+backend because it connects the planes and closes the loop from retrieval to source
+verification, execution, repair and recovery. It is not a claim that Hindsight, AgentMemory
+or native host memory are useless; EP makes them more useful by giving them scope and
+operational evidence.
 
 ![Concept illustration: three source streams, source checks, retrieval and an auditable response workflow—not a live product screenshot](docs/assets/ep51-release-hero.png)
 
@@ -63,6 +218,33 @@ empty result, an excluded candidate and unknown host visibility are different st
 
 These capabilities provide structured evidence and reusable context; they do not
 guarantee that every old memory is correct or every future task will improve.
+
+## Maturity at a glance
+
+**5.1.4 is the current candidate release; platform-specific validation boundaries remain explicit.**
+
+The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
+
+Product version comes from [VERSION](VERSION); channel/build metadata comes from
+the checked [release manifest](config/release-manifest.json). The current candidate
+documentation and code are on the [`release/5.1.4` branch](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.4).
+The immutable [`v5.1.4` tag](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)
+is the earlier candidate baseline; a GitHub Release with downloadable assets has not
+been created. Publication and contribution status are separate.
+
+| Area | Current evidence | Still needs validation |
+| --- | --- | --- |
+| User/agent memory, five-dimensional preferences, scenario/source navigation and observable topology | Existing implementation; macOS/Codex is the main exercised integration | Whole-history accuracy, universal answer benefit and every model/task combination |
+| Host integrations management page | Implemented; real local Console clicks, Chinese/English, scroll and responsive checks | Native target-client acceptance is separate from this page |
+| Governed stdio and optional authenticated HTTP | Isolated EP-side protocol/policy tests; new profiles default to read-only | Actual client receipt/use, remote/TLS operation and every lazy tool dependency branch |
+| Claude CLI, local desktop Code and ordinary desktop Chat | Separate recipes and preparation profiles | Each actual surface's lifecycle, source capture, binding and end-to-end calls |
+| Hermes, WorkBuddy and Doubao Work | Capability profiles, discovery, previews, guidance and diagnostics prepared | Native task/session evidence; no equal-validation claim with Codex |
+| Windows native / WSL / remote | Separate modes, Unicode/UTF-8/path/lock preparation and manual CI definition | Actual Windows/PowerShell execution; WSL success is not native-Windows certification |
+| External RAG / JEV / local models | Existing optional modules and configuration | Operator's actual files, keys, models, index compatibility and measured benefit |
+
+“Detected”, “configured”, “EP protocol verified”, “host received” and “answer
+adopted” are different claims. Missing evidence stays unknown, not zero or success.
+See [candidate scope and acceptance](docs/RELEASE-NOTES-5.1.4.md).
 
 ## Personalization beyond a list of likes
 
@@ -206,9 +388,27 @@ statuses are not erased merely to make a dashboard green.
 
 **Start here:** [complete backend/web deployment](docs/DEPLOYMENT.md) →
 [choose your host](docs/HOST-SETUP.md) → [copy its Agent request](docs/AGENT-SETUP.md).
-The existing contribution branch is named `release/5.1.0`; the current product
-patch is read from [VERSION](VERSION). Branch names and old RC assets are not
-automatic version indicators.
+**Installing this candidate?** Start with [candidate setup](docs/CANDIDATE-SETUP.md).
+**Agent reading this repository:** installation alone is not usage; read
+[the Agent operating guide](docs/AGENT-USAGE.md) before choosing memory tools.
+This checkout is the 5.1.4 candidate line. The product version is read from
+[VERSION](VERSION), and the current documentation branch is `release/5.1.4`;
+the older immutable `v5.1.4` tag is not the source for this documentation build.
+
+### First-run acceptance path
+
+For a complete local run, treat these as separate gates:
+
+1. **Build:** run the installer and confirm it reports `EP 5.1.4` from `VERSION`.
+2. **API:** start port `8888` and require `curl --fail http://127.0.0.1:8888/health`.
+3. **Controller:** start port `12079` and require `curl --fail http://127.0.0.1:12079/v1/status`.
+4. **Console:** start port `9999`, open the selected language route, create or select your own Bank, and click through the health/configuration pages.
+5. **Host:** register exactly one MCP/Hook entry for the actual host, then make one real read and one permitted capture task.
+6. **Recovery:** inspect the receipt, queue terminal state, local backup checksum and (if enabled) cloud readback separately.
+
+A green Console page alone proves none of the later gates. The full commands,
+macOS scheduler, cloud-backup boundary, upgrade and rollback steps are in
+[Deployment](docs/DEPLOYMENT.md).
 
 ### Requirements
 
@@ -223,10 +423,15 @@ automatic version indicators.
 ### 1. Install and build
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch release/5.1.4 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
+
+The installer filename is retained for the 5.1 release line; it reads `VERSION`.
+This command intentionally uses the current candidate branch so it includes the
+latest verified documentation and fixes. Before running it, confirm `VERSION` is
+`5.1.4` and record the commit shown by `git rev-parse HEAD`.
 
 This runs preflight and a release text-source scan, installs base dependencies,
 builds the SDK **before** the Console and writes a local launch manifest.
@@ -282,30 +487,60 @@ your own credentials are still required.
 
 | Agent surface | One-sentence installation request |
 | --- | --- |
-| **Codex desktop / CLI** | Install the current EP branch following `docs/DEPLOYMENT.md` and the Codex section of `docs/HOST-SETUP.md`; start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
+| **Codex desktop / CLI** | Use my supplied EP candidate, read its deployment and Agent-use guides, start my backend/UI, register EP once and verify actual reads and permitted automatic capture. |
 | **Claude Code CLI** | Follow EP's deployment and Claude CLI guides, start my local backend/UI, register its stdio MCP with `claude mcp add` and verify a real read without claiming untested automatic recording. |
-| **Claude Code desktop, local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
-| **Claude Desktop, ordinary Chat** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
+| **Claude Code desktop — local Code tab** | Follow EP's local Code-tab guide, reuse the intended MCP definition without duplicates, start backend/UI and verify tools in this actual desktop session. |
+| **Claude Desktop — ordinary Chat/Cowork** | Connect this Chat to my already running EP with the local MCP recipe; if terminal/browser tools are absent, give the separate CLI/Code backend request rather than claim system deployment. |
+| **Hermes** | Inspect this Hermes installation's real MCP/API capabilities, use the supplied candidate and operating guide, and verify explicit reads before claiming automatic lifecycle. |
+| **WorkBuddy** | Prepare host-specific configuration first; register only if the installed client and my authorization are present, then follow the Agent operating guide. |
+| **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
-Repository for each request:
-`https://github.com/ccygod/evolving-profile-2.2`, branch `release/5.1.0`.
+Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
+Use the current `release/5.1.4` branch or a named verified archive; do not silently
+substitute the older `v5.1.4` tag without comparing its commit and manifest.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
 effective configuration, optional features and safe stopping/rollback.
 
+For day-to-day use after connection, give the Agent [AGENT-USAGE.md](docs/AGENT-USAGE.md).
+It covers tool routing, current-prompt binding, source readback, failure recovery,
+no-Hook behavior and host-specific limits. The machine-readable companion is
+[agent-usage.v1.json](config/agent-usage.v1.json); it is advisory, not a permission grant.
+
 ## Host compatibility
+
+**Claude Desktop is not Claude Code.** `Claude Desktop` means the ordinary Chat/Cowork surface; `Claude Code` means the CLI or the separate desktop Code workspace. They have different settings, lifecycle hooks and evidence boundaries.
 
 | Host | Current position | Do not assume |
 | --- | --- | --- |
 | **Codex** | Most deeply exercised MCP/Hook, memory-route, scenario and receipt path | Every black-box answer has an adoption receipt |
-| **Claude Code CLI** | Documented stdio registration recipe; verify native reads on the target host | Automatic transcript/Hook capture certified by MCP visibility |
-| **Claude Code desktop — Code tab** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
+| **Claude Code CLI** | Documented stdio registration recipe **plus, since 5.1.3, a host-adaptive Hook bridge** (capture + per-prompt recall context); exercised through the real bridge with simulated host markers | A live-CLI-session acceptance run, or certification by MCP visibility |
+| **Claude Desktop — Cowork / local agent sessions** | **5.1.3: Hook plugin + bridge, desktop chats captured with `origin_agent=claude-desktop`, Scenario Summaries for desktop chats, health check** — exercised end to end on one macOS machine | Windows/Linux, other Desktop versions, or that every answer used the injected context |
+| **Claude Code desktop — Code tab (not Claude Desktop)** | Local sessions can reuse supported CLI MCP configuration; separate recipe provided | CLI listing proves this desktop/cloud/SSH session works |
 | **Claude Desktop — Chat** | Separate local MCP JSON recipe | A bundled `.mcpb` installer, Code hooks or automatic Chat history capture |
 | **Hermes** | Shared memory services and compatible MCP/API contracts can be reused | Identical capability probes, receipts or onboarding |
 
-Dedicated Claude Code/Hermes onboarding and adaptation remain improvement work
-for a subsequent version. Recipes are now explicit; full native lifecycle
-certification is not implied. No equal-validation claim is made.
+### Claude Desktop and Claude CLI (new in 5.1.3)
+
+One EP Bank can now be fed and read by **Codex, Claude Desktop and Claude CLI at the same time**, and the integration works out which host is calling by itself.
+Full guide: **[docs/host-integrations/CLAUDE-DESKTOP-CLI.md](docs/host-integrations/CLAUDE-DESKTOP-CLI.md)** ([中文](docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md)).
+
+- **Host-adaptive bridge** (`claude-code/hook_bridge_desktop.py`): one entry point for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact and Stop.
+  It detects Claude Desktop / Claude CLI / generic Claude Code (or an explicit `EP_HOST` override), tags every captured record with `origin_agent`, and never blocks Claude (always exit 0).
+- **Only human-visible dialogue is retained.** Tool results, thinking, images, sidechains and system reminders are dropped, fixing the old behaviour where file dumps were stored as things *you* said.
+- **Desktop chats reach Scenario Summaries**: a Codex-format rollout is written into EP's own `claude-code/rollouts/` (never `~/.codex`) after a settle period, so the background summariser is not invalidated mid-run.
+- **Fact-extraction quote repair**: deterministic, fail-closed repair of almost-verbatim `source_quote`s, so fewer batches end in quarantine while the "exact substring of the claimed author's message" guarantee is kept. Kill switch `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`.
+- **One command to install, one to check**: `zsh claude-code/install.sh [--desktop-plugin]` (dry-run, backups, uninstall supported) and `python3 claude-code/compat/ep_desktop_health.py` (read-only OK/WARN/FAIL for every link, including read/write embedding-model consistency).
+- Codex is untouched: `~/.codex/*` and `codex.json` are never read or written, and existing Codex data keeps `origin_agent=codex`.
+
+**Evidence and limits, stated plainly:** developed and exercised on one macOS machine with Claude Desktop 3P. The CLI path was verified through the real bridge with simulated host markers, not in a live CLI session.
+Hook activity proves context delivery, not that an answer used it. Desktop needs one `sudo` for the system plugin directory. Details and every known limit are in the guide and in [RELEASE-NOTES-5.1.3](docs/RELEASE-NOTES-5.1.3.md).
+
+The new [host-preparation profiles and management tools](docs/host-integrations/README.md)
+also cover WorkBuddy, Doubao Work and generic MCP clients. Profiles are implemented,
+not merely a future roadmap; full target-host lifecycle certification is still pending.
+See the [generated capability matrix](docs/host-integrations/MATRIX.md). It records
+documented capabilities, not a native acceptance score. No equal-validation claim is made.
 
 For recommended modules, relevance, Provider/fallback, model/index matching,
 RAG/JEV and backup settings, read [web configuration guidance](docs/DEPLOYMENT.md#5-configuration-recommendations-in-the-web-ui).
@@ -321,9 +556,11 @@ the same configuration.** Verify the effective profile before claiming changes a
   diagnostics and user-authored source text are not guaranteed fully translated.
 - Source-text scanning is not a binary-asset audit or dependency-risk guarantee.
 - All-history semantic accuracy and answer benefit are not globally certified.
+- Always use the documented `--hostname 127.0.0.1`; the legacy bare Console CLI still defaults
+  to all interfaces. This candidate does not silently change that default or authorize public exposure.
 
 Product version: [`VERSION`](VERSION). Current release status, actual checks,
-dependency risks and known limits belong in the [release notes](docs/RELEASE-NOTES-5.1.1.md)
+dependency risks and known limits belong in the [candidate notes](docs/RELEASE-NOTES-5.1.4.md)
 and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
 See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
 production-classified and full-workspace audit results and retained RC risks.
@@ -332,7 +569,7 @@ production-classified and full-workspace audit results and retained RC risks.
 
 EP distribution author/maintainer: **CCY**. The
 [personal distribution](https://github.com/ccygod/evolving-profile-2.2) and
-[upstream contribution](https://github.com/94Hao94/evolving-profile/pull/4) are
+[upstream contribution channel](https://github.com/94Hao94/evolving-profile) are
 two channels for the same release line, not unrelated implementations.
 Preserve [NOTICE](NOTICE.md) and the applicable upstream licenses. Repository
 ownership, Git commit identity and upstream acknowledgment remain distinct.
@@ -340,7 +577,8 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 - [中文介绍](README-中文.md)
 - [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
 - [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
-- [Changelog](CHANGELOG-5.1.md) · [Current patch notes](docs/RELEASE-NOTES-5.1.1.md)
+- [Agent operating guide](docs/AGENT-USAGE.md) · [Candidate setup](docs/CANDIDATE-SETUP.md)
+- [Changelog](CHANGELOG-5.1.md) · [Current candidate notes](docs/RELEASE-NOTES-5.1.4.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)
 
 ## Built on Hindsight

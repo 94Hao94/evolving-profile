@@ -44,9 +44,11 @@ Do not repeatedly restart the API to fix a host catalog cache.
 After registration, request the real tool list. Expected entries include
 `memory_check`, `user_preference`, `user_recall`, `user_research`, `agent_recall`,
 `agent_research`, `search_scenario_summary`, `read_scenario_summary`, `read_source`.
-Call `memory_check` for the current original prompt when a fresh binding is
-needed, then use its returned check ID only in that prompt. Never invent or
-reuse a prior prompt's ID. An empty new Bank is valid; fabricated hits are not.
+Use a genuine current host/Hook binding when provided. A navigation-only
+`memory_check` can return an adapter-assigned ID, not a trusted Hook registration;
+it cannot make strictly bound calls valid by itself. Never invent or reuse an old
+ID. Follow [Agent usage](AGENT-USAGE.md) for unbound-read limits and source checks.
+An empty new Bank is valid; fabricated hits are not.
 
 ## 2. Codex automatic lifecycle: review, merge and trust hooks
 

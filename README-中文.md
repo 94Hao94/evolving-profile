@@ -1,5 +1,7 @@
 # Evolving Profile
 
+[English](README.md)
+
 <div align="center">
 
 **把聊过的背景，变成懂你如何工作的记忆；把做过的任务，变成智能体可复用的经验。**
@@ -8,7 +10,7 @@
 
 **多维证据提炼 · 五维偏好建模 · 智能体经验复用 · 全链路可观察**
 
-[English](README.md) · [快速开始](#ep-quick-start) · [工作逻辑](#ep-how-it-works) · [让智能体安装](#ep-agent-setup) · [发布状态](docs/RELEASE-LEDGER.md)
+[快速开始](#ep-quick-start) · [工作逻辑](#ep-how-it-works) · [让智能体安装](#ep-agent-setup) · [发布状态](docs/RELEASE-LEDGER.md)
 
 </div>
 
@@ -22,6 +24,146 @@
 这些记忆服务于继续做事：智能体可以找到正确的项目，参考你偏好的协作方式，
 查找相关执行经验。你可以在网页检查提炼结果、手动修正偏好，追踪检索与送达的
 证据。需要时，再接入独立管理的外部资料。
+
+## 使用 EP 前后有什么不同
+
+Codex 和 Claude 本身已经在部分入口提供长期记忆。这里不是把原生 Agent
+画成“完全没有记忆”，而是对比“只用宿主原生记忆”和“同样的 Codex/Claude 接入 EP”。
+原生记忆可能过期、只在某个宿主范围内生效，难以说明来源和版本，也可能与后续修正
+并存；能被检索到，也不等于它真的进入了本轮上下文并影响了答案。
+
+下面是**虚构示例**，用于说明 EP 设计的连续性和证据链，不是准确率基准，
+也不承诺每次回答都会采用所有返回的记忆。
+
+| 只用 Codex/Claude 原生记忆 | Codex/Claude + EP |
+| --- | --- |
+| **用户：**“继续做河工大经管学院 AI 课程大纲。”<br>**智能体：**“请重新发送受众、上一版、偏好结构和上次结论。”<br><br>用户重复交代，旧遗漏可能再次发生。 | **用户：**“继续做河工大经管学院 AI 课程大纲。”<br>**智能体：**“我已定位到匹配的项目会话。我会保留领导视角和约定的先因果后落地结构；涉及名称、范围和结论的地方先回读原始材料，交付前再做回归检查。”<br><br>EP 提供有范围的导航和条件化偏好，智能体仍然核对原文。 |
+| **用户：**“记忆任务又失败了。”<br>**智能体：**“再重试一次。”<br><br>重复重试可能掩盖契约不匹配，也留下不了失败原因。 | **用户：**“记忆任务又失败了。”<br>**智能体：**“回执显示来源/版本契约不一致。我先比对当前指纹，再选择有界修复或 AI 报告；保留失败记录，最后核对作业终态再报告成功。”<br><br>EP 把失败、修复和验证分开保存。 |
+
+实际差异是把请求 → 相关上下文 → 原文核对 → 执行 → 验证这条链缩短。EP
+不会重训底层模型，也不会把未核验候选直接当成事实。
+
+![真实入口风格的 Codex、Claude Desktop 界面模拟：只用原生记忆与接入 EP](docs/assets/ep-before-after-ui-zh.svg)
+
+上图是按真实入口风格制作的产品 walkthrough，不是实际生产截图。它参考 Codex 桌面端、
+Claude Desktop 和 EP 网页控制台的界面边界，重点是把真实宿主的差异画出来，而不是假设有一个空白聊天窗口。
+
+### 为什么 Agent 自带长期记忆仍然会出问题
+
+| 问题 | 宿主原生记忆 | EP 叠加在宿主旁边 |
+| --- | --- | --- |
+| 这条记忆从哪里来？ | 可能只有记忆开关或个性化回答，没有来源回执。 | 关联到有范围的 Session、来源版本，并可回读原文。 |
+| 这条记忆还是最新的吗？ | 后续修正可能和旧记忆并存。 | 保留条件、替代证据，并在修复/发布前检查版本和指纹。 |
+| Codex 和 Claude 能共用吗？ | 各宿主可能有自己的记忆命名空间和生命周期。 | 记录 `origin_agent`、Bank 范围和跨 Agent lineage。 |
+| Agent 真的用到了吗？ | 能检索到不等于已经送进本轮上下文，更不等于答案采用。 | 分开记录返回、宿主送达和答案采用；没有证据就保持未知。 |
+| 失败后怎么办？ | 原生记忆通常不会展示失败尝试、修复队列或恢复回执。 | EP 保留失败，生成有界修复/AI 报告，保留原记录并核对终态。 |
+
+所以 EP 是围绕原生 Agent 记忆补上的证据与恢复层，不是假设 Codex/Claude 没有长期记忆，
+也不宣称 EP 能消除所有记忆错误。
+
+EP 的优势不是一个孤立的“记忆分数”，而是把用户记忆、智能体过程记忆和宿主接入
+放在同一条有证据的链上。原生长期记忆、Hindsight 后端、AgentMemory MCP 都可以
+单独发挥作用；真正的差异在于，用户在 Codex 和 Claude 之间跨项目工作时，能不能看见
+这条链的范围、来源、修复和恢复。
+
+## 一个更真实的跨宿主使用过程
+
+下面是更完整的**虚构 walkthrough**，不是基准，也不是说竞品永远不能实现其中某个动作。
+它展示的是“单独使用一个组件”和“使用 EP 作为协调证据层”的差异。
+
+### 1. 用户在 Claude Desktop 继续一个真实项目
+
+```text
+Claude Desktop
+用户：继续做经管学院 AI 课程大纲。
+
+只用原生记忆
+Claude：我记得一个 AI 课程大纲，但无法判断是天津职业大学项目，
+       还是河北工业大学项目。请重新贴出受众和上一版定稿。
+
+只用 Hindsight 后端
+Recall：返回 3 个相似片段。
+       片段没有说明当前 Session、后续修正，
+       也没有说明这是草稿还是已批准版本。
+
+只用 AgentMemory 过程库
+Process hint：“使用先因果后落地的结构。”
+             但这不能证明偏好来自哪个项目原文。
+
+接入 EP 的 Claude Desktop
+EP user_scenario_summary：匹配到 1 个项目，排除 2 个同名近邻候选。
+EP user_preference：保留领导视角；先给结果；再解释因果链。
+EP user_source_readback：已找到批准范围和最新修正。
+Claude：我已定位到正确的项目 Session。我会保留领导视角，
+       对名称和范围先回读原文，再给课程大纲和回归检查清单。
+```
+
+这里的价值不是“EP 多记住了几句话”，而是把项目身份、适用条件、后续修正和原文回读
+放在一起，同时排除只因为机构名称相同而相似的其他项目。
+
+### 2. 用户从 Claude Desktop 转到 Codex
+
+```text
+Codex 桌面端
+用户：把刚才的大纲转成领导汇报，保留相同决策。
+
+没有共享证据层
+Codex：我可以使用当前聊天，但不知道 Claude 对话的来源范围，
+       也不知道之前为什么选择这种结构。
+
+接入 EP
+EP origin_agent：claude-desktop → codex
+EP lineage：同一个 Bank、同一个项目键、同一任务的后续阶段
+EP 偏好包：先结果 · 先因果解释 · 交付前视觉验收
+EP 来源版本：approved-scope@r17
+Codex：我会沿用同一项目的决策，不把天津项目和其他近邻项目合并；
+       涉及金额、日期、机构名称和批准结论时，先回读原文再改写。
+```
+
+这正是 EP 和“宿主本地记忆开关”的差异：它把宿主之间的身份和版本边界带过来，
+而且用户能检查这次交接到底依据了什么。
+
+### 3. 失败不是被隐藏，而是被修复并验收
+
+```text
+EP 控制台 · 运行总览
+事件：心理模型刷新失败
+根因：来源/版本契约不一致
+原始操作：已保留并关联
+修复动作：有界 AI 诊断 + 来源指纹校验
+
+[预览修复]
+模型报告：失败来自旧的来源信封；不删除原记录；候选更新只影响当前模型。
+
+[应用修复]
+状态：applied → completed
+验证：来源指纹一致；队列终态已回读；旧错误写入 attempt_errors；
+      本地备份回执存在。
+
+只用原生记忆：可能只得到“memory unavailable”，或者静默重试。
+只用 Hindsight：可以检索到关于错误的记忆，但宿主队列、修复计划、备份
+               和最终作业状态仍是分开的事情。
+只用 AgentMemory：可以记住某个修复策略，但它不一定关联当前用户来源、
+                  当前 Bank 和实际终态回执。
+```
+
+EP 不靠改写历史来制造绿色状态，而是保留失败尝试，让用户看见失败原因、模型建议、
+实际应用内容和最终验证结果。
+
+### 这组能力为什么难以被单个记忆后端替代
+
+| 层 | 单独使用时通常能提供什么 | EP 在外层补上的东西 |
+| --- | --- | --- |
+| Codex/Claude 原生记忆 | 宿主级个性化和上下文延续 | 共享 Bank 范围、来源身份、跨宿主 lineage、送达和答案采用边界 |
+| Hindsight | 配置正确时提供较强的 retain/recall/reflect 记忆后端 | 五维偏好、情景导航、原文回读、宿主适配器和运行回执 |
+| AgentMemory | 智能体轨迹、策略和过程记忆候选 | 把过程经验连接到用户/项目证据、模型/工具条件、修复计划和再验证 |
+| 外部 RAG | 在操作者选择的资料上检索 | 把外部文档和个人历史、智能体经验分开，保留来源类别 |
+| EP 组合层 | — | 用户记忆 + 智能体经验 + 宿主生命周期 + 修复 + 备份恢复 + 可观察证据 |
+
+README 应该表达的就是这个差异：EP 难以被一个记忆后端替代，因为它把不同记忆平面
+和运行生命周期接起来，闭合了“召回 → 原文核对 → 执行 → 修复 → 恢复”的链路。
+这不是说 Hindsight、AgentMemory 或宿主原生记忆没有价值，而是 EP 给它们补上了范围
+和运行证据。
 
 ![概念示意图：三路来源经过检查、检索与可审计回答流程；不是实际界面截图](docs/assets/ep51-release-hero.png)
 
@@ -58,6 +200,31 @@
 
 这些能力提供的是结构化证据和可复用上下文，不代表所有旧记忆都正确，
 也不承诺每项任务都会自动提升效果。
+
+## 哪些较成熟，哪些还需验证
+
+**本版为 5.1.4 候选发行版；不同平台的验证边界仍单独标注。**
+
+5.1.4 增加了带来源指纹的 AI 自动修复链路：失败操作会被诊断、自动修复，或转换为可追踪的 AI 报告，不再设置人工审核节点；同时补上情景队列与可执行 jobs 的对账、来源信封扩容和报告态与成功发布态的分离。
+
+产品版本以 [VERSION](VERSION) 为唯一权威，候选通道和构建信息见
+[发行清单](config/release-manifest.json)。当前候选文档与代码在
+[`release/5.1.4` 分支](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.4)。
+不可变的 [`v5.1.4` 标签](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)
+是较早的候选基线；GitHub Release 和可下载资产尚未创建。实际发布/贡献状态见发布记录。
+
+| 能力 | 当前成熟度与证据 | 仍需验证 |
+| --- | --- | --- |
+| 用户/智能体记忆、五维偏好、情景及原文导航、可观察链路 | 已有实现；macOS/Codex 是主要实际验证路线 | 全历史准确性、普遍回答收益及所有模型和任务组合 |
+| 宿主接入管理页 | 已实现；本机正式页面的中英文、点击、滚动和响应式已检查 | 页面正常不等于目标客户端实际接入通过 |
+| 受治理 stdio、可选认证 HTTP | EP 侧隔离协议及权限测试已做；新宿主档案默认只读 | 真实客户端接收/使用、远程 TLS、每个工具延迟执行分支 |
+| Claude CLI、桌面本地 Code、普通 Chat | 分入口配方与准备档案已完成 | 各入口的真实生命周期、来源捕获、绑定和端到端调用 |
+| Hermes、WorkBuddy、豆包工作 | 能力档案、识别、预览、指导和诊断已准备 | 原生任务及会话证据；不宣称与 Codex 同等验证 |
+| Windows 原生、WSL、远端 | 已分模式，准备路径/中文/UTF-8/文件锁和手动 CI | Windows、PowerShell 实际执行；WSL 通过不能冒充原生通过 |
+| 外部 RAG、JEV、本地模型 | 已有可选模块与配置 | 你自己的文件、密钥、模型、索引兼容和实际收益 |
+
+“发现安装”“配置存在”“EP 协议通过”“宿主接收”“回答采用”不是一回事。
+没有证据就保留未知，不补成零或成功。详见[本候选版边界与验收](docs/RELEASE-NOTES-5.1.4.md)。
 
 ## 个性化，不止于记住“喜欢什么”
 
@@ -172,10 +339,26 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 
 ## 快速开始
 
+### 第一次安装的验收顺序
+
+完整本机链路要分开验收：
+
+1. **构建：**运行安装器，确认它从 `VERSION` 报出 `EP 5.1.4`。
+2. **API：**启动 `8888`，要求 `curl --fail http://127.0.0.1:8888/health` 成功。
+3. **Controller：**启动 `12079`，要求 `curl --fail http://127.0.0.1:12079/v1/status` 成功。
+4. **Console：**启动 `9999`，打开所选语言页面，创建/选择自己的 Bank，并实际点击健康和配置页面。
+5. **宿主：**给实际宿主只注册一个 MCP/Hook，做一次真实读取和一次允许记录的自然任务。
+6. **恢复：**分别核对回执、队列终态、本地备份校验，以及（若启用）云端回读。
+
+网页变绿不代表后面几道验收都通过。完整命令、macOS 自动任务、云备份边界、
+升级和回退步骤见[部署说明](docs/DEPLOYMENT-中文.md)。
+
 **第一次安装看这里：**[后端与网页完整部署](docs/DEPLOYMENT-中文.md) →
 [选择具体宿主](docs/HOST-SETUP-中文.md) → [复制对应 Agent 提示词](docs/AGENT-SETUP-中文.md)。
-现有贡献分支仍叫 `release/5.1.0`，当前补丁版本读 [VERSION](VERSION)，
-不能根据分支名或旧 RC 下载包判断最新版。
+**安装本候选包：**先看[候选版安装入口](docs/CANDIDATE-SETUP.md)。
+**给 Agent 读：**接入不等于会使用，继续阅读[Agent 日常操作协议](docs/AGENT-USAGE-中文.md)。
+本工作树是 5.1.4 候选线，当前文档分支为 `release/5.1.4`；产品版本始终读 [VERSION](VERSION)，
+旧的不可变 `v5.1.4` 标签不是本次文档构建的来源，不能根据旧 Tag 判断最新版。
 
 ### 环境要求
 
@@ -187,10 +370,14 @@ Session、后续纠正和原话，再单独参考最终文档的呈现偏好。�
 ### 1. 一键安装构建
 
 ```bash
-git clone --branch release/5.1.0 https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch release/5.1.4 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
+
+脚本文件名沿用 5.1 发行线，实际版本读取 VERSION。这里使用当前候选
+`release/5.1.4` 分支以包含最新文档和修复；运行前确认 `VERSION` 为 `5.1.4`，
+并记录 `git rev-parse HEAD` 的提交。也可解压命名的核验归档后进入根目录。
 
 脚本执行预检与来源文本扫描，安装基础依赖，**先构建 SDK 再构建 Console**，
 并生成本地启动清单；只在 `.env` 不存在时创建模板。
@@ -241,27 +428,56 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 
 | Agent 入口 | 一句话安装要求 |
 | --- | --- |
-| **Codex 桌面端 / CLI** | 按 EP 的 `docs/DEPLOYMENT-中文.md` 和 `docs/HOST-SETUP-中文.md` 的 Codex 部分安装当前发行分支，拉起后端与网页，只注册一个 EP，并实际验证记忆查询与允许记录任务的自动捕获。 |
+| **Codex 桌面端 / CLI** | 使用我提供的 EP 候选包，阅读部署与 Agent 日常操作指南，拉起后端与网页，只注册一个 EP，并实际验证记忆查询与允许记录任务的自动捕获。 |
 | **Claude Code CLI** | 按 EP 部署及 Claude CLI 指南拉起本机后端与网页，用 `claude mcp add` 注册 stdio 工具并做真实读取，不把未经验证的自动记录说成完成。 |
-| **Claude Code 桌面端，本地 Code 页** | 按 EP 桌面 Code 指南安装，复用正确的 MCP 且不重复注册，拉起后端与网页，在这次桌面会话内验证实际工具。 |
-| **Claude Desktop 普通 Chat** | 按 EP 本地 MCP 指南连接已运行的后端；没有终端/浏览器工具就给出独立 CLI/Code 后端安装要求，不声称 Chat 已部署系统服务。 |
+| **Claude Code 桌面端 — 本地 Code 页** | 按 EP 桌面 Code 指南安装，复用正确的 MCP 且不重复注册，拉起后端与网页，在这次桌面会话内验证实际工具。 |
+| **Claude Desktop — 普通 Chat/Cowork** | 按 EP 本地 MCP 指南连接已运行的后端；没有终端/浏览器工具就给出独立 CLI/Code 后端安装要求，不声称 Chat 已部署系统服务。 |
+| **Hermes** | 核对当前安装实际MCP/API能力，使用提供的候选包和日常协议，先验证显式读取，不把自动生命周期写成通过。 |
+| **WorkBuddy** | 先生成专用配置预览，客户端已安装且我授权后才注册，随后按Agent日常协议选工具。 |
+| **豆包工作** | 审阅实际插件配置，为当前任务启用并阅读日常协议；Skill不保证每轮自动调用。 |
 
-各提示词的源码地址均为 `https://github.com/ccygod/evolving-profile-2.2`，分支 `release/5.1.0`。
+源码来源为 `https://github.com/ccygod/evolving-profile-2.2`；使用精确
+当前 `release/5.1.4` 分支或对应命名核验归档，不能用旧远端分支替代。
 **[完整分宿主提示词（含 Hermes）直接复制](docs/AGENT-SETUP-中文.md)。**
 长版包括备份合并、绝对路径、健康检查、网页点击、工具/捕获验收、配置生效、可选项和停止回退。
 
+接入后，把[日常操作协议](docs/AGENT-USAGE-中文.md)交给智能体，明确不同任务怎么选工具、
+本轮绑定如何处理、何时回读原文、故障怎么降级，以及不同宿主没有Hook时的边界。
+[机器可读辅助协议](config/agent-usage.v1.json)只是参考，不授予操作权限。
+
 ## 宿主兼容性
+
+**Claude Desktop 不是 Claude Code。** `Claude Desktop` 指普通 Chat/Cowork 入口；`Claude Code` 指 CLI 或独立的桌面 Code 工作区。两者的配置、生命周期钩子和证据边界不同。
 
 | 宿主 | 当前定位 | 不应直接推断 |
 | --- | --- | --- |
 | **Codex** | 当前实际验证较充分的 MCP/Hook、记忆路由、情景与回执路线 | 所有黑盒回答都提供了答案采用回执 |
-| **Claude Code CLI** | 已有明确 stdio 注册步骤，目标宿主需实际验证查询 | 看到 MCP 就代表自动 transcript/Hook 捕获已认证 |
-| **Claude Code 桌面 Code 页** | 本地会话可复用受支持的 CLI 配置，另有专项步骤 | CLI 工具列表证明桌面/云端/SSH 也已完成 |
-| **Claude Desktop 普通 Chat** | 独立的本地 MCP JSON 接法 | 已有 `.mcpb` 一键包、Code Hook 或自动抓取全部聊天 |
+| **Claude Code CLI** | 已有明确 stdio 注册步骤；**5.1.3 起另有按宿主自适应的 Hook 桥**（捕获 + 每轮召回上下文），已用模拟宿主标记经真实桥接脚本运行 | 已做过真实 CLI 会话验收，或看到 MCP 就代表已认证 |
+| **Claude Desktop（Cowork／本地智能体会话）** | **5.1.3：Hook 插件 + 桥接，桌面对话以 `origin_agent=claude-desktop` 入库，桌面对话有情景摘要，附健康检查**——在一台 macOS 上端到端运行过 | Windows/Linux、其他 Desktop 版本，或每条回答都用到了注入的上下文 |
+| **Claude Code 桌面 Code 页（不是 Claude Desktop）** | 本地会话可复用受支持的 CLI 配置，另有专项步骤 | CLI 工具列表证明桌面/云端/SSH 也已完成 |
+| **Claude Desktop — 普通 Chat/Cowork** | 独立的本地 MCP JSON 接法 | 已有 `.mcpb` 一键包、Code Hook 或自动抓取全部聊天 |
 | **Hermes** | 可复用共享记忆服务及兼容的 MCP/API 契约 | 能力探针、回执与安装流程已经完全相同 |
 
-专项步骤已补全，但 Claude Code、Hermes 的原生生命周期增强和完整验收仍是后续方向，
-不因文档有命令就宣称与 Codex 同等程度的完整适配。
+### Claude Desktop 与 Claude CLI（5.1.3 新增）
+
+同一个 EP Bank 现在可以被 **Codex、Claude Desktop、Claude CLI 同时写入和读取**，接入层会自己判断是谁在调用。
+完整说明：**[docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md](docs/host-integrations/CLAUDE-DESKTOP-CLI-中文.md)**（[English](docs/host-integrations/CLAUDE-DESKTOP-CLI.md)）。
+
+- **按宿主自适应的桥接脚本**（`claude-code/hook_bridge_desktop.py`）：SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、PreCompact、Stop 共用一个入口。
+  自动识别 Claude Desktop／Claude CLI／通用 Claude Code（也可用环境变量 `EP_HOST` 指定），给每条捕获记录打上 `origin_agent`，并且绝不阻塞 Claude（始终退出 0）。
+- **只保留人能看到的对话。** 工具结果、思考、图片、子链路和系统提醒都会丢弃，修掉了旧行为里“文件转储被当成*你*说过的话”的问题。
+- **桌面对话进入情景摘要**：经过静置期后，把 Codex 格式的 rollout 写入 EP 自己的 `claude-code/rollouts/`（绝不写 `~/.codex`），避免后台摘要器处理到一半被打断。
+- **事实提炼的引文修复**：对“几乎逐字”的 `source_quote` 做确定性、失败即拒绝的修复，减少批次被隔离，同时保留“必须是所述作者原消息精确子串”的保证。关闭开关 `EVOLVING_PROFILE_API_QUOTE_REPAIR=0`。
+- **一条命令安装，一条命令检查**：`zsh claude-code/install.sh [--desktop-plugin]`（支持 dry-run、备份、卸载）和 `python3 claude-code/compat/ep_desktop_health.py`（只读，对链路每一环给出 OK/WARN/FAIL，包括读写嵌入模型是否一致）。
+- 不动 Codex：`~/.codex/*` 与 `codex.json` 既不读也不写，已有 Codex 数据仍是 `origin_agent=codex`。
+
+**证据与边界，直说：** 在一台 macOS、Claude Desktop 3P 上开发并运行。CLI 这一路是用模拟宿主标记经真实桥接脚本验证的，没有在真实 CLI 会话里跑过。
+钩子有活动只证明上下文送达，不证明回答用到了它。Desktop 需要一次 `sudo` 写系统插件目录。细节和全部已知边界见该指南和 [RELEASE-NOTES-5.1.3](docs/RELEASE-NOTES-5.1.3.md)。
+
+新增[宿主准备档案与管理工具](docs/host-integrations/README-中文.md)，包含WorkBuddy、
+豆包工作和通用MCP。档案和管理能力已经实现，不只是未来计划；目标客户端真实生命周期
+仍待验收。见[自动生成的能力矩阵](docs/host-integrations/MATRIX-中文.md)，其文档支持项
+不是原生实测得分，不宣称与Codex同等验证。
 
 网页的模块、相关度、Provider/fallback、模型与索引、RAG/JEV 和备份建议见
 [配置怎么调](docs/DEPLOYMENT-中文.md#5-网页配置怎么调)。
@@ -274,23 +490,26 @@ Worker 有独立配置与就绪要求。API 的 HTTP MCP 握手不能证明宿�
 - 网页提供英文、中文等语言切换；后台诊断和用户原文并不保证全部自动翻译。
 - 来源文本扫描不等于二进制图片审计或依赖风险认证。
 - 全部历史的语义准确率和最终回答收益未取得全局认证。
+- 启动时使用文档中的`--hostname 127.0.0.1`；遗留裸CLI仍默认全接口，
+  本候选不静默改变该行为，也不授权公开服务。
 
 产品版本读取 [`VERSION`](VERSION)。实际发布状态、测试、依赖风险和已知限制
-见[发布说明](docs/RELEASE-NOTES-5.1.1.md)与[发布记录](docs/RELEASE-LEDGER.md)，
+见[5.1.4 说明](docs/RELEASE-NOTES-5.1.4.md)与[发布记录](docs/RELEASE-LEDGER.md)，
 不在多个固定徽章中重复维护“最新版”。
 依赖的生产分类审计、完整工作区审计和保留的 RC 风险分别见[依赖风险说明](docs/DEPENDENCY-RISKS.md)。
 
 ## 作者、来源与文档
 
 EP 发行作者/维护者：**CCY**。[个人发行仓库](https://github.com/ccygod/evolving-profile-2.2)
-与[上游贡献渠道](https://github.com/94Hao94/evolving-profile/pull/4)是同一条发行来源线，
+与[上游贡献渠道](https://github.com/94Hao94/evolving-profile)是同一条发行来源线，
 不是两套不相干的实现。保留 [NOTICE](NOTICE.md) 与相应上游许可；
 仓库拥有者、Git 提交身份和上游致谢分别记录。
 
 - [English README](README.md)
 - [本地安装与回退](docs/LOCAL-SETUP.md) · [API 配置](api/README.md)
 - [完整部署](docs/DEPLOYMENT-中文.md) · [分宿主接入](docs/HOST-SETUP-中文.md) · [Agent 安装话](docs/AGENT-SETUP-中文.md)
-- [更新日志](CHANGELOG-5.1.md) · [当前补丁说明](docs/RELEASE-NOTES-5.1.1.md)
+- [Agent 日常操作](docs/AGENT-USAGE-中文.md) · [候选包安装](docs/CANDIDATE-SETUP.md)
+- [更新日志](CHANGELOG-5.1.md) · [当前 5.1.4 说明](docs/RELEASE-NOTES-5.1.4.md)
 - [唯一真相源](config/source-of-truth.json) · [安全策略](SECURITY.md)
 
 ## 基于 Hindsight 开发

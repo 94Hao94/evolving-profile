@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "timeout": 10,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" session" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "timeout": 65,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" recall" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "^mcp__(workspace__bash|host_capability__host_run_command|host_capability__host_write_file)$",
+        "hooks": [ { "type": "command", "timeout": 6,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" pretool" } ] },
+      { "matcher": "^mcp__evolving_profile_controller__(user_recall|user_research|read_research|read_source|find_sources|memory_check)$",
+        "hooks": [ { "type": "command", "timeout": 6,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" pretool" } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "timeout": 18,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" posttool" } ] }
+    ],
+    "PreCompact": [
+      { "hooks": [ { "type": "command", "timeout": 8,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" precompact" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "timeout": 45,
+        "command": "\"__EP_PY__\" \"__EP_BRIDGE__\" retain" } ] }
+    ]
+  }
+}

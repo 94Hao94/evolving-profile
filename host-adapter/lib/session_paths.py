@@ -13,6 +13,10 @@ def session_roots(root):
     # not to arbitrary user-selected folders.
     roots=[root]
     if root.name=='sessions':roots.append(root.parent/'archived_sessions')
+    # Claude Desktop chats are converted by EP's desktop bridge into Codex-shaped rollouts under EP's own state dir
+    # (never under ~/.codex). Only the real Codex layout opts in, so any other root is untouched.
+    if root.name=='sessions' and root.parent.name=='.codex':
+        roots.append(root.parent.parent/'.evolving-profile'/'claude-code'/'rollouts')
     return list(dict.fromkeys(roots))
 
 

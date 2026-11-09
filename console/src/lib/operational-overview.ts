@@ -17,6 +17,7 @@ export type OperationalIncident = {
   detailKey?: string;
   count?: number;
   operation?: string;
+  repair?: { mode: "auto" | "llm"; sourceId?: string; sourceFingerprint?: string | null; label: string };
 };
 export type ErrorClass = "schema_validation" | "invalid_json" | "output_truncated" | "authentication" | "rate_limit" | "timeout" | "request_failed";
 export type AttemptGroup = {
@@ -242,7 +243,7 @@ export function buildOperationalOverview(input: Input) {
   const incidents: OperationalIncident[] = [];
   const localRetention = input.localRetention ?? missingLocalRetention;
   const scenario = input.scenario;
-  const scenarioState: HealthState = !scenario || scenario.status !== "observed" ? "unknown" : (scenario.failed ?? 0) > 0 ? "critical" : (scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0 ? "warning" : (scenario.unknown ?? 0) > 0 || !(scenario.reviewed ?? 0) ? "unknown" : "healthy";
+  const scenarioState: HealthState = !scenario || scenario.status !== "observed" ? "unknown" : (scenario.failed ?? 0) > 0 ? "critical" : (scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0 ? "warning" : "healthy";
   const failedBatches = failedOperationBatches(input.operations.items, now);
   const history = attemptGroups(input);
   const latestLlm = (input.llm.currentStatus ?? input.llm.status) === "observed" ? [...input.llm.items].filter((row) => recent(row.started_at, now)).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0] : undefined;
@@ -259,7 +260,7 @@ export function buildOperationalOverview(input: Input) {
     add({ id: "backup:job", category: "backup", severity: "critical", title: "备份计划异常", detail: backup.job.loaded ? `最近退出码 ${backup.job.lastExitCode}` : "备份计划未加载", at: null, source: "launchd", action: "runtime" });
   }
   if (!backupAt || !recent(backupAt, now) || !backup?.local?.latestVerified || !backup.local.artifacts?.database || !backup.local.artifacts?.config) {
-    add({ id: "backup:latest", category: "backup", severity: "warning", title: "最近备份未完整核验", detail: !backupAt ? "未发现本地备份" : `最近一套 ${backupAt}；请核对数据库、加密配置和校验清单`, at: backupAt, source: "本地备份文件", action: "runtime" });
+    add({ id: "backup:latest", category: "backup", severity: "warning", title: "最近备份未完整核验", detail: !backupAt ? "未发现本地备份" : `最近一套 ${backupAt}；请核对数据库、加密数据归档和校验清单`, at: backupAt, source: "本地备份文件", action: "runtime" });
   }
   if (backup?.cloud && backup.cloud.status !== "observed") {
     const missing=backup.cloud.status === "missing";
@@ -268,7 +269,7 @@ export function buildOperationalOverview(input: Input) {
 
   if (latestLlm?.status === "error") {
     const code = classifyOperationalError(latestLlm.error, latestLlm.finish_reason);
-    add({ id: `model:${latestLlm.id}`, category: "model", severity: code === "authentication" ? "critical" : "warning", title: `最近模型请求失败 · ${code}`, titleKey: "latestFailure", detailKey: `advice.${code}`, detail: `错误类别：${code}。请查看相应请求诊断；历史失败尝试不等于当前连接不可用。`, at: latestLlm.started_at, source: "模型请求回执", sourceId: latestLlm.id, action: "llm-requests" });
+    add({ id: `model:${latestLlm.id}`, category: "model", severity: code === "authentication" ? "critical" : "warning", title: `最近模型请求失败 · ${code}`, titleKey: "latestFailure", detailKey: `advice.${code}`, detail: `错误类别：${code}。请查看相应请求诊断；历史失败尝试不等于当前连接不可用。`, at: latestLlm.started_at, source: "模型请求回执", sourceId: latestLlm.id, action: "llm-requests", repair: { mode: "llm", sourceId: latestLlm.id, sourceFingerprint: null, label: "使用大模型修复" } });
   }
   if (failedMemories != null && failedMemories > 0) add({ id: "retention:failed-memories", category: "retention", severity: "critical", title: `当前 ${failedMemories} 条源记忆加工失败`, titleKey: "failedMemories", count: failedMemories, detailKey: "failedMemoryHelp", detail: "Bank 当前失败源记忆仍需恢复；其他请求成功不会清除这些失败。", at: null, source: "Bank /stats", action: "operations" });
   for (const [batchId, rows] of failedBatches) {
@@ -276,13 +277,14 @@ export function buildOperationalOverview(input: Input) {
     const isRetain = /retain/i.test(operation.task_type);
     const code = classifyOperationalError(operation.error_message);
     const isolated = localRetention.status === "observed" && localRetention.quarantineBatches.some(batch => batch.operationId === batchId && batch.count > 0);
-    add({ id: `operation:${batchId}`, category: "retention", severity: isRetain && !isolated ? "critical" : "warning", title: `${operation.task_type} 批次失败`, titleKey: isRetain ? "failedBatch" : "operationFailed", operation: operation.task_type, detail: `错误类别：${code}；请打开操作详情核对`, detailKey: `advice.${code}`, at: operation.created_at, source: "Bank 操作回执", sourceKey: "bankOperationReceipt", sourceId: batchId, sourceIds: rows.map(row => row.id), taskRowCount: rows.length, action: "operations" });
+    const needsModel = /schema|source|quote|contract/.test(code) || operation.task_type === "refresh_mental_model";
+    add({ id: `operation:${batchId}`, category: "retention", severity: isRetain && !isolated ? "critical" : "warning", title: `${operation.task_type} 批次失败`, titleKey: isRetain ? "failedBatch" : "operationFailed", operation: operation.task_type, detail: `错误类别：${code}；请打开操作详情核对`, detailKey: `advice.${code}`, at: operation.created_at, source: "Bank 操作回执", sourceKey: "bankOperationReceipt", sourceId: batchId, sourceIds: rows.map(row => row.id), taskRowCount: rows.length, action: "operations", repair: { mode: needsModel ? "llm" : "auto", sourceId: batchId, sourceFingerprint: null, label: needsModel ? "使用大模型修复" : "自动修复" } });
   }
   const unmatchedQuarantine = localRetention.quarantineBatches.filter(batch => !failedBatches.has(batch.operationId));
   if (scenario?.status === "observed" && (scenario.failed ?? 0) > 0) add({ id: "scenario:failed", category: "scenario", severity: "critical", title: "情景摘要失败", titleKey: "scenarioFailed", count: scenario.failed!, detail: "原文保留；摘要未通过来源或覆盖审查。", detailKey: "scenarioHelp", at: scenario.at, source: "当前记忆库情景索引", sourceKey: "scenarioReceipt", sourceIds: scenario.failures.map(row => row.id), action: "scenario" });
-  else if (scenario?.status === "observed" && ((scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0)) add({ id: "scenario:pending", category: "scenario", severity: "warning", title: "情景摘要待审查", titleKey: "scenarioPending", count: (scenario.pending ?? 0) + (scenario.waitingSource ?? 0), detail: "原文保留；待审查不代表发布成功。", detailKey: "scenarioHelp", at: scenario.at, source: "当前记忆库情景索引", sourceKey: "scenarioReceipt", action: "scenario" });
+  else if (scenario?.status === "observed" && ((scenario.pending ?? 0) > 0 || (scenario.waitingSource ?? 0) > 0)) add({ id: "scenario:pending", category: "scenario", severity: "warning", title: "情景摘要 AI 审查中", titleKey: "scenarioPending", count: (scenario.pending ?? 0) + (scenario.waitingSource ?? 0), detail: "原文保留；由 AI 按来源覆盖和版本一致性自动审查，未发布不代表失败。", detailKey: "scenarioHelp", at: scenario.at, source: "当前记忆库情景索引", sourceKey: "scenarioReceipt", action: "scenario", repair: { mode: "llm", label: "使用大模型修复" } });
   if (localRetention.status === "observed" && (localRetention.quarantinedRecords ?? 0) > 0 && (!failedBatches.size || unmatchedQuarantine.length))
-    add({ id: "retention:quarantine", category: "retention", severity: "warning", title: "已隔离的保留记录仍待恢复", titleKey: "quarantineTitle", detail: "队列原始记录保留；隔离失败不会自动清除。", detailKey: "quarantineHelp", count: localRetention.quarantinedRecords!, at: localRetention.observedAt, source: "本机队列元数据", sourceKey: "queueMetadataReceipt", sourceIds: unmatchedQuarantine.map(batch => batch.operationId), action: "operations" });
+    add({ id: "retention:quarantine", category: "retention", severity: "warning", title: "已隔离的保留记录仍待恢复", titleKey: "quarantineTitle", detail: "队列原始记录保留；隔离失败不会自动清除。", detailKey: "quarantineHelp", count: localRetention.quarantinedRecords!, at: localRetention.observedAt, source: "本机队列元数据", sourceKey: "queueMetadataReceipt", sourceIds: unmatchedQuarantine.map(batch => batch.operationId), action: "operations", repair: { mode: "llm", sourceId: unmatchedQuarantine[0]?.operationId, sourceFingerprint: null, label: "使用大模型修复" } });
   const mapAge = now - Date.parse(input.map.checked_at ?? "");
   const mapStale = Number.isFinite(mapAge) && mapAge > (input.map.stale_after_seconds ?? 180) * 1000;
   const lastMapSuccessAge = now - Date.parse(input.map.last_success_at ?? "");

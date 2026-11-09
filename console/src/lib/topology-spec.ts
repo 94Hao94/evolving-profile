@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { FlowLane, FlowLaneSummary, FlowReceipt } from "@/lib/flow-receipt";
-import { isContextBranch } from "./topology-presentation";
+import { isContextBranch,hasContextEvidence } from "./topology-presentation";
 import { sumFlowCounts, sumObservedCounts, type FlowCounts } from "./flow-receipt";
 import type { SourceNavigation } from "./tool-receipt";
 import type { ReturnedContentItem } from "./returned-content-snapshot";
@@ -13,6 +13,7 @@ export type TopologyNodeData = {
   kind: "stage" | "fork" | "merge" | "packet" | "tool" | "writeback" | "receipt" | "lane";
   status: string;
   counts: FlowCounts;
+  preparedCount?: number;
   receipts: FlowReceipt[];
   items: TopologyItem[];
   sourceScope: string;
@@ -24,6 +25,7 @@ export type TopologyEdgeData = { kind: "serial" | "branch" | "merge" | "context"
 export type TopologyBranchSummary = {
   status: string;
   counts: FlowCounts;
+  preparedCount?: number;
   receipts: FlowReceipt[];
   items: TopologyItem[];
 };
@@ -66,15 +68,16 @@ export function buildTopologySpec(args: { english: boolean; summaries: Map<FlowL
     const s = zero(config.lane); const root = config.root;
     const laneKey = config.lane === "agent_process" ? "agent-process-memory" : config.lane.replace("_", "-");
     const branchIds = config.branches.map(([, , stableKey]) => `${laneKey}-${stableKey}`);
-    const childTotals = branchIds.filter(isContextBranch).map((id) => branch(id, config.lane));
+    const childTotals = branchIds.filter(isContextBranch).map((id) => branch(id, config.lane)).filter(hasContextEvidence);
     const aggregate = sumFlowCounts(childTotals.map(child=>child.counts));
     const aggregateItems = childTotals.flatMap((child) => child.items);
     const hasBranchEvidence = childTotals.some((child) => child.receipts.length || child.items.length || child.counts.candidates || child.counts.returned || child.counts.delivered);
     const rootCounts = aggregate;
-    add(root, { label: label(...config.title), description: label(...config.description), lane: config.lane, kind: "tool", status: hasBranchEvidence ? (rootCounts.delivered ? "delivered" : rootCounts.returned ? "candidate_returned" : "observed") : s.status, counts: hasBranchEvidence ? rootCounts : s.counts, receipts: childTotals.flatMap((child) => child.receipts), items: uniqueItems(aggregateItems), width: 210, height: 86 });
+    const preparedCount=childTotals.reduce((sum,child)=>sum+(child.preparedCount||0),0);
+    add(root, { label: label(...config.title), description: label(...config.description), lane: config.lane, kind: "tool", status: hasBranchEvidence ? (rootCounts.delivered ? "delivered" : rootCounts.returned ? "candidate_returned" : "observed") : s.status, counts: hasBranchEvidence ? rootCounts : s.counts, preparedCount, receipts: childTotals.flatMap((child) => child.receipts), items: uniqueItems(aggregateItems), width: 210, height: 86 });
     edge(`e-fork-${root}`, "fork", root, "branch", { source: "bottom", target: "left" });
-    for (const [en, zh, stableKey] of config.branches) { const id = `${laneKey}-${stableKey}`; const projection = branch(id, config.lane); const description = branchDescription(stableKey); add(id, { label: label(en, zh), description: label(description[0], description[1]), lane: config.lane, kind: "tool", status: projection.status, counts: projection.counts, receipts: projection.receipts, items: projection.items, width: 150, height: 56 }); edge(`e-${root}-${id}`, root, id, "branch"); edge(`e-${id}-${config.packetId}`, id, config.packetId, "merge"); }
-    add(config.packetId, {...packet(config.lane, config.lane === "external_rag" ? "RAG Packet" : config.lane === "agent_process" ? "Process Memory Packet" : "User Memory Packet", config.lane === "external_rag" ? "RAG 知识包" : config.lane === "agent_process" ? "过程记忆包" : "用户记忆包", uniqueItems(aggregateItems)), ...(hasBranchEvidence ? {counts:aggregate,receipts:childTotals.flatMap(c=>c.receipts)} : {})});
+    for (const [en, zh, stableKey] of config.branches) { const id = `${laneKey}-${stableKey}`; const projection = branch(id, config.lane); const description = branchDescription(stableKey); add(id, { label: label(en, zh), description: label(description[0], description[1]), lane: config.lane, kind: "tool", status: projection.status, counts: projection.counts, preparedCount:projection.preparedCount, receipts: projection.receipts, items: projection.items, width: 150, height: 56 }); edge(`e-${root}-${id}`, root, id, "branch"); edge(`e-${id}-${config.packetId}`, id, config.packetId, "merge"); }
+    add(config.packetId, {...packet(config.lane, config.lane === "external_rag" ? "RAG Packet" : config.lane === "agent_process" ? "Process Memory Packet" : "User Memory Packet", config.lane === "external_rag" ? "RAG 知识包" : config.lane === "agent_process" ? "过程记忆包" : "用户记忆包", uniqueItems(aggregateItems)), preparedCount, ...(hasBranchEvidence ? {counts:aggregate,receipts:childTotals.flatMap(c=>c.receipts)} : {})});
     edge(`e-${config.packetId}-context`, config.packetId, "context", "context", { source: "right", target: "bottom" });
   }
   if(args.branchSummaries?.size){
@@ -83,7 +86,7 @@ export function buildTopologySpec(args: { english: boolean; summaries: Map<FlowL
     const receipts=packets.flatMap(node=>node.data.receipts);
     for(const id of ["context","execution"]){
       const node=nodes.find(node=>node.id===id)!;
-      node.data={...node.data,counts,receipts,status:counts.delivered ? "delivered" : counts.returned ? "candidate_returned" : "not_observed"};
+      node.data={...node.data,counts,receipts,preparedCount:packets.reduce((sum,node)=>sum+(node.data.preparedCount||0),0),status:counts.delivered ? "delivered" : counts.returned ? "candidate_returned" : "not_observed"};
     }
   }
   return { nodes, edges };

@@ -60,6 +60,7 @@ from evolving_profile_api import MemoryEngine
 from evolving_profile_api.config import RETAIN_EXTRACTION_MODES
 from evolving_profile_api.config_resolver import BankConfigPersistenceConflictError
 from evolving_profile_api.engine.retain.entity_labels import LabelGroup, _migrate_label_group
+from evolving_profile_api.engine.repair_service import RepairConflictError, RepairPlan, RepairService, load_repair_plan, save_repair_plan
 
 
 def _migrate_entity_labels_input(value: Any) -> Any:
@@ -3502,6 +3503,40 @@ class RetryOperationResponse(BaseModel):
     success: bool
     message: str
     operation_id: str
+
+
+class RepairDiagnoseRequest(BaseModel):
+    incident_id: str
+    source_id: str | None = None
+    source_fingerprint: str | None = None
+    target_version: str | None = None
+    operation: dict[str, Any] | None = None
+
+
+class RepairApplyRequest(BaseModel):
+    confirmed: bool = False
+    current_source_fingerprint: str | None = None
+    current_target_version: str | None = None
+
+
+class RepairResponse(BaseModel):
+    repair_id: str
+    bank_id: str
+    incident_id: str
+    source_id: str | None = None
+    mode: str
+    status: str
+    root_cause: str
+    risk: str
+    actions: list[dict[str, Any]]
+    evidence: list[dict[str, Any]]
+    source_fingerprint: str | None = None
+    target_version: str | None = None
+    regression_plan: list[str]
+    apply_receipt: dict[str, Any] | None = None
+    model: str = "glm-5"
+    prompt_version: str = "repair.v1"
+    confirmed_at: str | None = None
 
 
 class DeleteOperationResponse(BaseModel):
@@ -6983,6 +7018,185 @@ def _register_routes(app: FastAPI):
             error_detail = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
             logger.error(f"Error in /v1/default/banks/{bank_id}/operations/{operation_id}: {error_detail}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post(
+        "/v1/default/banks/{bank_id}/repairs/diagnose",
+        response_model=RepairResponse,
+        summary="Diagnose a bounded repair",
+        description="Create a repair preview without mutating source or memory records.",
+        operation_id="diagnose_repair",
+        tags=["Repairs"],
+    )
+    @audited("diagnose_repair", request_param="body")
+    async def api_diagnose_repair(
+        bank_id: str,
+        body: RepairDiagnoseRequest,
+        request_context: RequestContext = Depends(get_request_context),
+    ):
+        try:
+            operation = body.operation or {}
+            if body.source_id:
+                try:
+                    uuid.UUID(body.source_id)
+                    operation = await app.state.memory.get_operation_status(
+                        bank_id, body.source_id, request_context=request_context, include_payload=True
+                    )
+                except (ValueError, HTTPException):
+                    if not operation:
+                        operation = {}
+            effective_source_id = body.source_id if operation.get("status") != "not_found" else None
+            service = RepairService()
+            plan = service.diagnose(
+                bank_id=bank_id,
+                incident_id=body.incident_id,
+                source_id=effective_source_id,
+                operation=operation,
+                source_fingerprint=body.source_fingerprint,
+                target_version=body.target_version,
+            )
+            if plan.mode == "llm" and body.source_id and operation:
+                try:
+                    diagnosis, usage = await app.state.memory._llm_config.call(
+                        messages=[
+                            {"role": "system", "content": "你是 EP 修复诊断器。只分析给定失败回执，输出根因、风险和只读修复建议；禁止声称已写入或已修复。"},
+                            {"role": "user", "content": "请诊断这个失败操作，并给出可验证的预览建议：\n" + json.dumps(operation, ensure_ascii=False)[:12000]},
+                        ],
+                        scope="repair_diagnosis",
+                        max_completion_tokens=1024,
+                        max_retries=0,
+                        return_usage=True,
+                    )
+                    plan.evidence.append({"model": plan.model, "prompt_version": plan.prompt_version, "diagnosis": str(diagnosis)[:4000], "usage": getattr(usage, "total_tokens", None)})
+                except Exception as exc:
+                    plan.evidence.append({"model": plan.model, "prompt_version": plan.prompt_version, "diagnosis_error": type(exc).__name__})
+            store = getattr(app.state, "repair_plans", None)
+            if store is None:
+                store = app.state.repair_plans = {}
+            store[plan.repair_id] = plan
+            save_repair_plan(plan)
+            return RepairResponse(**plan.to_dict())
+        except (AuthenticationError, HTTPException):
+            raise
+        except Exception as e:
+            logger.exception("Error diagnosing repair")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get(
+        "/v1/default/banks/{bank_id}/repairs/{repair_id}",
+        response_model=RepairResponse,
+        summary="Get repair status",
+        operation_id="get_repair_status",
+        tags=["Repairs"],
+    )
+    async def api_get_repair_status(bank_id: str, repair_id: str):
+        plan = getattr(app.state, "repair_plans", {}).get(repair_id) or load_repair_plan(repair_id)
+        if plan is None or plan.bank_id != bank_id:
+            raise HTTPException(status_code=404, detail="repair_not_found")
+        return RepairResponse(**plan.to_dict())
+
+    @app.post(
+        "/v1/default/banks/{bank_id}/repairs/{repair_id}/apply",
+        response_model=RepairResponse,
+        summary="Apply a confirmed repair",
+        operation_id="apply_repair",
+        tags=["Repairs"],
+    )
+    @audited("apply_repair", request_param="body")
+    async def api_apply_repair(
+        bank_id: str,
+        repair_id: str,
+        body: RepairApplyRequest,
+        request_context: RequestContext = Depends(get_request_context),
+    ):
+        plan = getattr(app.state, "repair_plans", {}).get(repair_id) or load_repair_plan(repair_id)
+        if plan is None or plan.bank_id != bank_id:
+            raise HTTPException(status_code=404, detail="repair_not_found")
+
+        try:
+            service = RepairService()
+            if not body.confirmed:
+                raise ValueError("repair_confirmation_required")
+            if plan.status != "preview_ready":
+                raise ValueError(f"repair_plan_not_applicable:{plan.status}")
+            current_operation = None
+            if plan.source_id:
+                try:
+                    uuid.UUID(plan.source_id)
+                    current_operation = await app.state.memory.get_operation_status(
+                        bank_id, plan.source_id, request_context=request_context, include_payload=True
+                    )
+                except (ValueError, HTTPException):
+                    current_operation = None
+            current_fingerprint = service.fingerprint(current_operation) if current_operation else body.current_source_fingerprint
+            if plan.source_fingerprint is None or current_fingerprint != plan.source_fingerprint:
+                plan.status = "ai_report"
+                raise RepairConflictError("source_fingerprint_changed")
+            if plan.status != "preview_ready":
+                raise ValueError(f"repair_plan_not_applicable:{plan.status}")
+
+            # Execute the bounded domain action only after all plan gates pass.
+            action_type = plan.actions[0].get("type") if plan.actions else None
+            if action_type in {"retry_operation", "repair_refresh_mental_model"}:
+                plan.status = "running"
+                save_repair_plan(plan)
+                if action_type == "retry_operation":
+                    result = await app.state.memory.retry_operation(
+                        bank_id, str(plan.actions[0]["operation_id"]), request_context=request_context
+                    )
+                    receipt = {"status": "queued", **result}
+                else:
+                    receipt = await app.state.memory.repair_refresh_mental_model(
+                        bank_id,
+                        str(plan.actions[0]["operation_id"]),
+                        request_context=request_context,
+                        repair_id=plan.repair_id,
+                    )
+                plan.status = "preview_ready"
+                plan = service.apply(
+                    plan,
+                    current_source_fingerprint=current_fingerprint,
+                    current_target_version=body.current_target_version,
+                    confirmed=True,
+                    executor=lambda _action: receipt,
+                )
+            else:
+                plan = service.apply(
+                    plan,
+                    current_source_fingerprint=current_fingerprint,
+                    current_target_version=body.current_target_version,
+                    confirmed=True,
+                )
+            app.state.repair_plans = getattr(app.state, "repair_plans", {})
+            app.state.repair_plans[repair_id] = plan
+            save_repair_plan(plan)
+            return RepairResponse(**plan.to_dict())
+        except RepairConflictError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except OperationValidationError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.reason)
+
+    @app.post(
+        "/v1/default/banks/{bank_id}/repairs/{repair_id}/cancel",
+        response_model=RepairResponse,
+        summary="Cancel a pending repair",
+        operation_id="cancel_repair",
+        tags=["Repairs"],
+    )
+    async def api_cancel_repair(bank_id: str, repair_id: str):
+        try:
+            uuid.UUID(repair_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_repair_id")
+        plan = getattr(app.state, "repair_plans", {}).get(repair_id) or load_repair_plan(repair_id)
+        if plan is None or plan.bank_id != bank_id:
+            raise HTTPException(status_code=404, detail="repair_not_found")
+        plan = RepairService().cancel(plan)
+        app.state.repair_plans = getattr(app.state, "repair_plans", {})
+        app.state.repair_plans[repair_id] = plan
+        save_repair_plan(plan)
+        return RepairResponse(**plan.to_dict())
 
     @app.post(
         "/v1/default/banks/{bank_id}/operations/{operation_id}/retry",

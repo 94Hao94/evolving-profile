@@ -36,7 +36,7 @@ export function normalizeToolResult(tool: string, value: any, failed = false) {
   let records = [...arrays];
   if (body.record) records.push(body.record);
   if (body.unit) records.push(body.unit);
-  if (/preference/.test(tool)) records.push(...["included", "stable_profile", "guidance_items", "model_sections", "entries"].flatMap(key => Array.isArray(guidance[key]) ? guidance[key] : []));
+  if (/preference/.test(tool)||tool==="refresh_runtime_guidance") records.push(...["included", "stable_profile", "guidance_items", "model_sections", "entries"].flatMap(key => Array.isArray(guidance[key]) ? guidance[key] : []));
   if (body.source?.text) records.push({ ...body.source,id: body.memory?.id || body.source?.id, text: body.source.text });
   if (coverage) {
     records = [];

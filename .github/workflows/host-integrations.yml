@@ -1,0 +1,25 @@
+name: Host integration preparation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-preparation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated test dependencies
+        run: python -m pip install -r scripts/host-test-requirements.txt
+      - name: Run offline preparation checks
+        run: python scripts/verify-host-integrations.py
+      - name: Windows launcher smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ep-host.ps1 list --json

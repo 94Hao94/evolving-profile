@@ -3,7 +3,7 @@
 The original summary job and its attempts are never rewritten here. One decoder
 is owned by the worker across bounded leases; restart replays a checked prefix.
 """
-import fcntl
+from . import platform_lock as fcntl
 import json
 import os
 import re

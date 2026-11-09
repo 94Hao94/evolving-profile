@@ -125,6 +125,9 @@ def archive_returned_items(home, tool, items, binding, call):
                'items': archived, 'item_count': len(items), 'archived_count': len(archived),
                'coverage': 'complete' if len(items) == len(archived) and not any(i['archive_truncated'] for i in archived) else 'partial',
                'authority': 'historical_return_snapshot_not_live_fact_or_answer_adoption'}
+    if binding.get('host_id') not in (None,'codex'):
+        if not all(binding.get(key) for key in ('owner_id','host_id','installation_id')):return None
+        payload['host_namespace']={key:binding[key] for key in ('owner_id','host_id','installation_id')}
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
     reference = hashlib.sha256(encoded).hexdigest()
     root = Path(home) / '.evolving-profile/audit/returned-content'

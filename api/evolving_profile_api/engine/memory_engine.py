@@ -2774,7 +2774,7 @@ class MemoryEngine(MemoryEngineInterface):
                     await conn.execute(
                         f"""
                         UPDATE {fq_table("async_operations")}
-                        SET status = 'completed', updated_at = NOW(), completed_at = NOW()
+                        SET status = 'completed', error_message = NULL, updated_at = NOW(), completed_at = NOW()
                         WHERE operation_id = $1
                         """,
                         uuid.UUID(operation_id),
@@ -3682,7 +3682,7 @@ class MemoryEngine(MemoryEngineInterface):
                     row = await conn.fetchrow(
                         f"""
                         UPDATE {fq_table("async_operations")}
-                        SET status = 'completed', updated_at = NOW(), completed_at = NOW()
+                        SET status = 'completed', error_message = NULL, updated_at = NOW(), completed_at = NOW()
                         WHERE operation_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')
                         RETURNING operation_id
                         """,
@@ -3722,6 +3722,7 @@ class MemoryEngine(MemoryEngineInterface):
                     unit_ids_count=unit_ids_count,
                     extraction_errors_count=extraction_errors.count,
                     extraction_errors_sample=extraction_errors.sample,
+                    extraction_error_records=extraction_errors.records,
                 )
 
                 await conn.execute(
@@ -3862,7 +3863,7 @@ class MemoryEngine(MemoryEngineInterface):
                     row = await conn.fetchrow(
                         f"""
                         UPDATE {fq_table("async_operations")}
-                        SET status = 'completed', updated_at = NOW(), completed_at = NOW()
+                        SET status = 'completed', error_message = NULL, updated_at = NOW(), completed_at = NOW()
                         WHERE operation_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')
                         RETURNING operation_id
                         """,
@@ -3913,7 +3914,7 @@ class MemoryEngine(MemoryEngineInterface):
                     row = await conn.fetchrow(
                         f"""
                         UPDATE {fq_table("async_operations")}
-                        SET status = 'completed', updated_at = NOW(), completed_at = NOW()
+                        SET status = 'completed', error_message = NULL, updated_at = NOW(), completed_at = NOW()
                         WHERE operation_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')
                         RETURNING operation_id
                         """,
@@ -12214,7 +12215,9 @@ class MemoryEngine(MemoryEngineInterface):
         Args:
             bank_id: bank identifier
             query: Question to answer
-            budget: Budget level (currently unused, reserved for future)
+            budget: Budget level. It scales the configured iteration cap; the
+                reflect agent also guarantees enough rounds for each enabled
+                source lookup before the final synthesis pass.
             context: Additional context string to include in agent prompt
             max_tokens: Max tokens (currently unused, reserved for future)
             response_schema: Optional JSON Schema for structured output. When provided, a
@@ -17179,6 +17182,229 @@ class MemoryEngine(MemoryEngineInterface):
                 "operation_id": operation_id,
                 "bank_id": bank_id,
             }
+
+    async def repair_refresh_mental_model(
+        self,
+        bank_id: str,
+        operation_id: str,
+        *,
+        request_context: "RequestContext",
+        repair_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Recover a failed mental-model refresh without re-entering the tool loop.
+
+        Refresh failures are commonly caused by an oversized retrieval/tool trace or a
+        provider that cannot emit the required tool call.  Replaying the same operation
+        therefore repeats the failure.  This bounded processor reads the authoritative
+        failed operation and its mental model, asks the configured model for a compact
+        faithful document, validates/canonicalizes it, writes it through the normal
+        mental-model history path, and only then closes the original operation with an
+        explicit recovery receipt.  If the model is unavailable, the existing document
+        is preserved as a deterministic fallback; no source facts are deleted.
+        """
+        await self._authenticate_tenant(request_context)
+        operation = await self.get_operation_status(
+            bank_id,
+            operation_id,
+            request_context=request_context,
+            include_payload=True,
+        )
+        if operation.get("status") != "failed":
+            raise ValueError(
+                f"operation_not_failed:{operation.get('status') or 'not_found'}"
+            )
+        payload = operation.get("task_payload") or {}
+        mental_model_id = payload.get("mental_model_id") or (operation.get("result_metadata") or {}).get("mental_model_id")
+        if not mental_model_id:
+            raise ValueError("mental_model_id_missing")
+        if operation.get("operation_type") not in {"refresh_mental_model", "mental_model_refresh"}:
+            raise ValueError(f"unsupported_repair_operation:{operation.get('operation_type')}")
+
+        mental_model = await self.get_mental_model(
+            bank_id, str(mental_model_id), request_context=request_context
+        )
+        if not mental_model:
+            raise ValueError(f"mental_model_not_found:{mental_model_id}")
+
+        current_content = str(mental_model.get("content") or "").strip()
+        source_query = str(mental_model.get("source_query") or "").strip()
+        configured_budget = int(mental_model.get("max_tokens") or 1200)
+        target_tokens = max(600, min(configured_budget, 1200))
+        # The visible document target is intentionally compact, but reasoning
+        # models may spend most of a small completion budget on internal
+        # reasoning and return finish_reason=length before emitting Markdown.
+        # Keep the persisted document bounded below while giving the repair call
+        # enough transport budget to finish.  The post-call paragraph cap below
+        # remains the hard write boundary.
+        completion_cap = max(4096, target_tokens * 2)
+        input_content = current_content[:24000]
+        prompt = (
+            "请修复一个失败的 EP 心理模型刷新。只输出最终可保存的 Markdown 文档，"
+            f"不超过 {target_tokens} 个 token，不要解释过程，不要声称已执行任何工具。\n"
+            "必须忠实保留已有文档中的事实、规则、例子和限制；不得补造新事实。"
+            "如果已有内容为空，只能依据主题查询生成保守的空结构。\n\n"
+            f"主题查询：{source_query}\n"
+            f"现有文档：\n{input_content}"
+        )
+        candidate = ""
+        model_used = getattr(self._llm_config, "model", None) or "configured-llm"
+        usage_total = None
+        model_error: str | None = None
+        try:
+            raw, usage = await self._llm_config.call(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是 EP 的受约束文档修复器。输出 Markdown 正文，不输出 JSON、代码围栏或诊断说明。",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                scope="repair_refresh",
+                max_completion_tokens=completion_cap,
+                max_retries=1,
+                return_usage=True,
+            )
+            candidate = str(raw or "").strip()
+            usage_total = getattr(usage, "total_tokens", None)
+        except Exception as exc:
+            model_error = type(exc).__name__
+
+        fallback_used = False
+        if not candidate:
+            candidate = current_content
+            fallback_used = True
+        if not candidate:
+            raise ValueError("repair_candidate_empty")
+        # Keep the write bounded even if a provider ignores its output cap. Cut only at
+        # paragraph boundaries so the previous content remains recoverable in history.
+        max_chars = max(2400, target_tokens * 6)
+        if len(candidate) > max_chars:
+            paragraphs = [part.strip() for part in candidate.split("\n\n") if part.strip()]
+            kept: list[str] = []
+            size = 0
+            for paragraph in paragraphs:
+                extra = len(paragraph) + (2 if kept else 0)
+                if kept and size + extra > max_chars:
+                    break
+                kept.append(paragraph)
+                size += extra
+            candidate = "\n\n".join(kept) or candidate[:max_chars].rstrip()
+        from .reflect.structured_doc import canonical_document
+
+        document = canonical_document(candidate)
+        canonical_content = document.markdown.strip()
+        if not canonical_content:
+            raise ValueError("repair_candidate_empty_after_canonicalization")
+        repair_receipt = {
+            "status": "recovered",
+            "operation_id": operation_id,
+            "mental_model_id": str(mental_model_id),
+            "repair_id": repair_id,
+            "processor": "bounded_llm_compaction",
+            "model": model_used,
+            "target_tokens": target_tokens,
+            "completion_cap": completion_cap,
+            "fallback_used": fallback_used,
+            "model_error": model_error,
+            "usage_total_tokens": usage_total,
+            "candidate_fingerprint": hashlib.sha256(canonical_content.encode("utf-8")).hexdigest(),
+            "original_error": operation.get("error_message"),
+        }
+        reflect_response = dict(mental_model.get("reflect_response") or {})
+        reflect_response["repair_recovery"] = repair_receipt
+        updated = await self.update_mental_model(
+            bank_id,
+            str(mental_model_id),
+            content=canonical_content,
+            reflect_response=reflect_response,
+            refresh_completed=True,
+            structured_content=document.structure.model_dump(),
+            request_context=request_context,
+        )
+        if not updated:
+            raise ValueError(f"mental_model_update_failed:{mental_model_id}")
+        recovery_result = await self.mark_operation_recovered(
+            bank_id,
+            operation_id,
+            repair_receipt=repair_receipt,
+            request_context=request_context,
+        )
+        repair_receipt["superseded_operation_count"] = recovery_result.get("superseded_operation_count", 0)
+        return repair_receipt
+
+    async def mark_operation_recovered(
+        self,
+        bank_id: str,
+        operation_id: str,
+        *,
+        repair_receipt: dict[str, Any],
+        request_context: "RequestContext",
+    ) -> dict[str, Any]:
+        """Close a failed operation only after a validated repair write succeeds."""
+        await self._authenticate_tenant(request_context)
+        backend = await self._get_backend()
+        metadata = json.dumps({"recovery": repair_receipt}, default=_json_default)
+        async with acquire_with_retry(backend) as conn:
+            row = await conn.fetchrow(
+                f"""
+                UPDATE {fq_table("async_operations")}
+                SET status = 'completed',
+                    error_message = NULL,
+                    completed_at = NOW(),
+                    updated_at = NOW(),
+                    result_metadata = COALESCE(result_metadata, '{{}}'::jsonb) || $3::jsonb
+                WHERE operation_id = $1
+                  AND bank_id = $2
+                  AND status = 'failed'
+                RETURNING operation_id, status
+                """,
+                uuid.UUID(operation_id),
+                bank_id,
+                metadata,
+            )
+            superseded_count = 0
+            mental_model_id = repair_receipt.get("mental_model_id")
+            if row is not None and mental_model_id:
+                superseded = await conn.fetch(
+                    f"""
+                    UPDATE {fq_table("async_operations")}
+                    SET status = 'completed',
+                        error_message = NULL,
+                        completed_at = NOW(),
+                        updated_at = NOW(),
+                        result_metadata = COALESCE(result_metadata, '{{}}'::jsonb)
+                          || jsonb_build_object(
+                               'recovery',
+                               jsonb_build_object(
+                                 'status', 'superseded_by_recovery',
+                                 'superseded_by', $3::text,
+                                 'mental_model_id', $2::text,
+                                 'original_error', error_message
+                               )
+                             )
+                    WHERE bank_id = $1
+                      AND operation_type = 'refresh_mental_model'
+                      AND status = 'failed'
+                      AND operation_id <> $3::uuid
+                      AND result_metadata->>'mental_model_id' = $2::text
+                    RETURNING operation_id
+                    """,
+                    bank_id,
+                    str(mental_model_id),
+                    uuid.UUID(operation_id),
+                )
+                superseded_count = len(superseded)
+            if row is None:
+                existing = await conn.fetchrow(
+                    f"SELECT status, result_metadata FROM {fq_table('async_operations')} "
+                    "WHERE operation_id = $1 AND bank_id = $2",
+                    uuid.UUID(operation_id),
+                    bank_id,
+                )
+                if existing and existing["status"] == "completed":
+                    return {"status": "recovered", "operation_id": operation_id, "already_completed": True}
+                raise ValueError(f"operation_recovery_conflict:{operation_id}")
+        return {"status": "recovered", "operation_id": operation_id, "superseded_operation_count": superseded_count}
 
     async def retry_operation(
         self,

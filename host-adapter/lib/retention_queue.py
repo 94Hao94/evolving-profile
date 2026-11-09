@@ -12,10 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows fallback
-    fcntl = None
+from . import platform_lock as fcntl
 
 
 DEFAULT_STATE_PATH = Path.home() / ".evolving-profile/codex/state/retention-queue.json"

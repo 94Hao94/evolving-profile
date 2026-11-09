@@ -60,6 +60,13 @@ if (apiUrl) {
   env.EVOLVING_PROFILE_DATAPLANE_API_URL = apiUrl;
 }
 
+// The child runs inside console/standalone, not the repository root. Keep the
+// colocated preparation scripts discoverable without overriding operator bundles.
+const sourceRoot = path.resolve(__dirname, '..', '..');
+if (!env.EVOLVING_PROFILE_HOST_SOURCE_ROOT && fs.existsSync(path.join(sourceRoot, 'scripts', 'ep-host.py'))) {
+  env.EVOLVING_PROFILE_HOST_SOURCE_ROOT = sourceRoot;
+}
+
 console.log(`Starting Evolving Profile on http://${hostname}:${port}`);
 if (apiUrl) {
   console.log(`API URL: ${apiUrl}`);

@@ -52,7 +52,7 @@ export function ExecutionTopologyCanvas({ promptId, promptText, english, audit, 
   const branchSummaries = useMemo(() => {
     const branches = new Map<string, TopologyBranchSummary>();
     const events = audit?.history?.routeReceipt?.tool_events ?? [];
-    branches.set("user-memory-preference", audit?.guidance || guidanceFallback ? { status: guidanceItems.length ? (guidanceHostObserved ? "delivered" : "candidate_returned") : "not_observed", counts: { candidates: audit?.guidance?.candidateCount ?? guidanceFallback?.candidateCount ?? guidanceItems.length, returned: guidanceItems.length, delivered: guidanceHostObserved ? guidanceItems.length : null, tokens: 0 }, receipts: [], items: guidanceItems } : emptyBranch());
+    branches.set("user-memory-preference", audit?.guidance || guidanceFallback ? { status: guidanceItems.length ? (guidanceHostObserved ? "delivered" : "candidate_returned") : "not_observed", preparedCount:guidanceHostObserved?0:guidanceItems.length, counts: { candidates: audit?.guidance?.candidateCount ?? guidanceFallback?.candidateCount ?? guidanceItems.length, returned: guidanceItems.length, delivered: guidanceHostObserved ? guidanceItems.length : null, tokens: 0 }, receipts: [], items: guidanceItems } : emptyBranch());
     branches.set("user-memory-recall", summarizeToolEvents(events, ["user_recall", "recall"], audit?.history, english));
     branches.set("user-memory-research", summarizeToolEvents(events, ["user_research", "research", "read_research"], audit?.history, english));
     branches.set("user-memory-scenario-summary", summarizeToolEvents(events, ["search_scenario_summary", "search_scenario_contexts", "read_scenario_summary", "read_context_summary", "scenario_gate"], audit?.history, english));
@@ -107,16 +107,17 @@ export function ExecutionTopologyCanvas({ promptId, promptText, english, audit, 
       const counts=sumFlowCounts(children.map(n=>n.data.counts));
       const receipts=children.flatMap(n=>n.data.receipts);
       const items=children.flatMap(n=>n.data.items);
-      for(const n of result.nodes.filter(n=>n.id===packetId || n.id===root)) Object.assign(n.data,{counts,receipts,items,status:receipts.length?counts.delivered?"delivered":counts.returned?"candidate_returned":"observed":n.data.status});
+      const preparedCount=children.reduce((sum,n)=>sum+(n.data.preparedCount||0),0);
+      for(const n of result.nodes.filter(n=>n.id===packetId || n.id===root)) Object.assign(n.data,{counts,receipts,items,preparedCount,status:receipts.length?counts.delivered?"delivered":counts.returned?"candidate_returned":"observed":n.data.status});
       // An umbrella tool owns its result; do not lose it in child-stage sums
       // or add both the umbrella result and its stages a second time.
       const direct=branchSummaries.get(packetId) || branchSummaries.get(root);
-      if(direct?.receipts.length && ((direct.counts.returned ?? 0)>0 || !receipts.length)) for(const n of result.nodes.filter(n=>n.id===packetId || n.id===root)) Object.assign(n.data,direct);
+      if(direct?.receipts.length && ((direct.counts.returned ?? 0)>0 || !receipts.length)) for(const n of result.nodes.filter(n=>n.id===packetId || n.id===root)) Object.assign(n.data,direct,{preparedCount:direct.preparedCount??0});
     }
     const contextPackets=result.nodes.filter(n=>packets.includes(n.id));
     const counts=sumFlowCounts(contextPackets.map(n=>n.data.counts));
     const contextReceipts=contextPackets.flatMap(n=>n.data.receipts);
-    for(const n of result.nodes.filter(n=>n.id==="context" || n.id==="execution")) Object.assign(n.data,{counts,receipts:contextReceipts,items:contextPackets.flatMap(n=>n.data.items),status:counts.delivered?"delivered":counts.returned?"candidate_returned":contextReceipts.length?"observed":"not_observed"});
+    for(const n of result.nodes.filter(n=>n.id==="context" || n.id==="execution")) Object.assign(n.data,{counts,receipts:contextReceipts,items:contextPackets.flatMap(n=>n.data.items),preparedCount:contextPackets.reduce((sum,n)=>sum+(n.data.preparedCount||0),0),status:counts.delivered?"delivered":counts.returned?"candidate_returned":contextReceipts.length?"observed":"not_observed"});
     return result;
   }, [english,summaries,sourceScope,historyItems,guidanceItems,branchSummaries]);
   useEffect(() => { const positions: Record<string, { x: number; y: number }> = { prompt: { x: 40, y: 42 }, binding: { x: 250, y: 42 }, contract: { x: 470, y: 42 }, fork: { x: 690, y: 47 }, context: { x: 920, y: 42 }, execution: { x: 1150, y: 42 }, "user-root": { x: 40, y: 226 }, "user-memory-preference": { x: 300, y: 200 }, "user-memory-recall": { x: 490, y: 200 }, "user-memory-research": { x: 490, y: 270 }, "user-memory-scenario-summary": { x: 680, y: 200 }, "user-memory-read-source": { x: 680, y: 270 }, "user-packet": { x: 900, y: 226 }, "agent-root": { x: 40, y: 400 }, "agent-process-memory-observe-trajectory": { x: 330, y: 374 }, "agent-process-memory-process-retrieval": { x: 330, y: 444 }, "agent-process-memory-agent-research": { x: 330, y: 514 }, "agent-process-memory-agent-scenario-summary": { x: 560, y: 444 }, "agent-process-memory-compatibility-gate": { x: 700, y: 444 }, "agent-process-memory-guidance": { x: 820, y: 444 }, "agent-packet": { x: 1040, y: 400 }, "rag-root": { x: 40, y: 574 }, "external-rag-lexical": { x: 330, y: 548 }, "external-rag-vector": { x: 330, y: 618 }, "external-rag-fusion-rrf": { x: 560, y: 548 }, "external-rag-rerank": { x: 560, y: 618 }, "external-rag-jev-review": { x: 560, y: 688 }, "rag-packet": { x: 820, y: 574 } };

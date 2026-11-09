@@ -16,10 +16,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows hook fallback
-    fcntl = None
+from . import platform_lock as fcntl
 
 
 MAX_EVENTS = 80

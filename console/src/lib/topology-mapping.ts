@@ -8,6 +8,7 @@ import { enumUiText } from "./inline-i18n";
 // Map by actual tool identity, not by arbitrary words in the Prompt.
 const targets: Record<string, string> = {
   user_preference:"user-memory-preference", get_preference:"user-memory-preference",
+  refresh_runtime_guidance:"user-memory-preference",
   read_preference_unit:"user-memory-preference",
   user_recall:"user-memory-recall", recall:"user-memory-recall",
   user_research:"user-memory-research", research:"user-memory-research", read_research:"user-memory-research",

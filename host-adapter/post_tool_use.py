@@ -36,6 +36,8 @@ def _memory_text(response):
 
 
 def main():
+    from lib.host_integration.guidance import route_external_hook
+    if route_external_hook():return
     try:
         hook_input = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):

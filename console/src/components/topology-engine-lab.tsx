@@ -5,7 +5,7 @@ import { RelevanceAuditDetails } from "./recall-policy-settings";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TopologyNode } from "@/lib/topology-spec";
 import { defaultTopologyLayout, resolveTopologyLayout, validateTopologyLayout, topologyFailureView, TOPOLOGY_CANVAS, type TopologyLayout, type Anchor } from "@/lib/topology-layout";
-import { nodeMetric, nodePurpose, summarizeReceiptScopes } from "@/lib/topology-presentation";
+import { nodeMetric, nodePurpose, summarizeReceiptScopes, confirmedReturned } from "@/lib/topology-presentation";
 import { inlineUiText } from "@/lib/inline-i18n";
 import { SourceNavigationDetails } from "./source-navigation-details";
 import { ReturnedContentDetails } from "./returned-content-details";
@@ -273,7 +273,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
               <button
                 type="button"
                 aria-label={node ? `${english ? "Open receipt: " : "打开回执："}${label}` : label}
-                title={label}
+                title={node ? `${label}\n${nodeMetric(id,node.data,english) || ""}` : label}
                 className={`reference-unified-node ${node ? `reference-svg-node-${node.data.lane}` : "reference-label-node"} ${compact ? "is-compact" : ""}`}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -284,7 +284,9 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                 {node ? (
                   <>
                     <strong>{label}</strong>
-                    {nodeMetric(id,node.data,english) && <span>{nodeMetric(id,node.data,english)}</span>}
+                    {nodeMetric(id,node.data,english) && <span className={compact?"is-short-metric":"is-full-metric"}>{compact
+                      ? `${node.data.preparedCount&&!node.data.receipts.length?(english?"Prep":"准备"):(english?"Ret":"返")} ${node.data.preparedCount&&!node.data.receipts.length?node.data.preparedCount:confirmedReturned(node.data)??"—"} · ${english?"Recv":"收"} ${node.data.counts.delivered ?? "?"}`
+                      : nodeMetric(id,node.data,english)}</span>}
                   </>
                 ) : (
                   label
@@ -430,7 +432,7 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
             </button>
             <p className="topology-kicker">{english ? "RECEIPT DETAILS" : "回执详情"}</p>
             <h3>{selected.data.label}</h3>
-            <div className="topology-detail-status">{status(selected.data.status, english)}</div>
+            <div className="topology-detail-status">{selected.data.preparedCount&&!selected.data.receipts.length?(english?"Context prepared; receipt unconfirmed":"上下文已准备；接收未确认"):status(selected.data.status, english)}</div>
             <p className="topology-detail-section">{english ? "FUNCTION" : "功能说明"}</p>
             <p>{selected.data.description}</p>
             <p className="topology-detail-section">{english ? "LOGIC" : "逻辑说明"}</p>
@@ -465,10 +467,12 @@ export function TopologyEngineLab({ nodes, english = false }: Props) {
                   {english ? "Scanned candidates (overlap possible) " : "扫描候选累计（可重复） "}
                   {candidatesFor(selected)}
                   {english ? " · Return occurrences " : " · 累计返回 "}
-                  {selected.data.counts.returned ?? "—"}
-                  {english ? " · Delivery occurrences " : " · 累计送达 "}
-                  {selected.data.counts.delivered ?? "—"}
+                  {selected.data.preparedCount&&!selected.data.receipts.length?(english?"unconfirmed":"未确认"):confirmedReturned(selected.data)??"—"}
+                  {english ? " · Host-received occurrences " : " · 宿主接收累计 "}
+                  {selected.data.counts.delivered ?? (english?"unconfirmed":"未确认")}
                 </p>
+                {Boolean(selected.data.preparedCount)&&<p>{english?"Prepared context items (not confirmed tool returns): ":"已准备的上下文条目（不计为已确认工具返回）："}{selected.data.preparedCount}</p>}
+                <p>{english?"Host receipt evidence does not prove answer adoption. Unconfirmed is not zero; Hook-only bodies are prepared context, not a confirmed tool delivery.":"宿主接收证据不代表回答采用。未确认不是零；只有 Hook 入口的内容属于已准备上下文，不是已确认的工具送达。"}</p>
                 <p>
                   {english ? "Receipts " : "回执 "}
                   {selected.data.receipts.length}

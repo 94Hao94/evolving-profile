@@ -15,7 +15,7 @@ export function summarizeReceiptScopes(receipts:FlowReceipt[]) {
   const sum=(group:FlowReceipt[],field:"returned_count"|"delivered_count")=>group.every(receipt=>typeof receipt[field]==="number") ? group.reduce((total,receipt)=>total+(receipt[field] as number),0) : null;
   const group=(rows:FlowReceipt[])=>({calls:rows.length,returned:sum(rows,"returned_count"),delivered:sum(rows,"delivered_count")});
   const navigation=unique.filter(receipt=>typeof receipt.source_navigation_returned_count==="number");
-  return {candidatePack:group(unique.filter(receipt=>["user_preference","get_preference"].includes(receipt.stage))),unitReadback:group(unique.filter(receipt=>["read_preference_unit","read_agent_process_memory"].includes(receipt.stage))),all:group(unique),sourceNavigationReturned:navigation.length ? navigation.reduce((sum,receipt)=>sum+(receipt.source_navigation_returned_count || 0),0) : null};
+  return {candidatePack:group(unique.filter(receipt=>["user_preference","get_preference","refresh_runtime_guidance"].includes(receipt.stage))),unitReadback:group(unique.filter(receipt=>["read_preference_unit","read_agent_process_memory"].includes(receipt.stage))),all:group(unique),sourceNavigationReturned:navigation.length ? navigation.reduce((sum,receipt)=>sum+(receipt.source_navigation_returned_count || 0),0) : null};
 }
 
 const processRecords = new Set(["observe-trajectory", "capability-observation", "failure-events", "repair-mode", "reusable-process-strategy", "migration-revalidation"]);
@@ -26,6 +26,12 @@ export function nodePurpose(id: string): "description" | "record" | "retrieval" 
 }
 export function isContextBranch(id: string) {
   return nodePurpose(id)==="retrieval" || /agent-process-memory-guidance-(hint|recommend|scaffold|guard)$/.test(id);
+}
+export function hasContextEvidence(data:Pick<TopologyNodeData,"receipts"|"items"|"counts">) {
+  return Boolean(data.receipts.length||data.items.length||data.counts.candidates||data.counts.returned||data.counts.delivered);
+}
+export function confirmedReturned(data: TopologyNodeData) {
+  return data.counts.returned===null?null:Math.max(0,data.counts.returned-(data.preparedCount||0));
 }
 export function nodeMetric(id: string, data: TopologyNodeData, english = false): string | null {
   const purpose=nodePurpose(id);
@@ -45,8 +51,13 @@ export function nodeMetric(id: string, data: TopologyNodeData, english = false):
   const measured=data.receipts.some(r=>typeof r.candidate_count==="number");
   const candidate=measured || !data.receipts.length ? data.counts.candidates : "—";
   const navigation=summarizeReceiptScopes(data.receipts).sourceNavigationReturned;
-  return `${english?"Candidates":"候选"} ${candidate ?? "—"} · ${english?"Delivered":"送达"} ${data.counts.delivered ?? "—"}${navigation===null ? "" : ` · ${inlineUiText("原文导航返回数", english ? "en" : undefined)} ${navigation}`}`;
+  const preparedCount=data.preparedCount??(id==="user-memory-preference"&&!data.receipts.length&&data.counts.delivered===null?data.counts.returned||0:0);
+  const prepared=preparedCount>0&&!data.receipts.length;
+  const returns=prepared?`${english?"Prepared":"已准备"} ${preparedCount}`
+    :`${english?"Returned":"返回"} ${confirmedReturned(data)??"—"}${preparedCount?` · ${english?"Prepared":"已准备"} ${preparedCount}`:""}`;
+  const delivery=data.counts.delivered===null?(english?"— (unconfirmed)":"—（未确认）"):data.counts.delivered;
+  return `${english?"Candidates":"候选"} ${candidate ?? "—"} · ${returns}\n${english?"Delivered":"送达"} ${delivery}${navigation===null ? "" : ` · ${inlineUiText("原文导航返回数", english ? "en" : undefined)} ${navigation}`}`;
 }
 export function contextChildren(nodes: TopologyNode[], lane: string, root: string, packet: string) {
-  return nodes.filter(n=>n.data.lane===lane && n.id!==root && n.id!==packet && n.data.kind!=="lane" && isContextBranch(n.id));
+  return nodes.filter(n=>n.data.lane===lane && n.id!==root && n.id!==packet && n.data.kind!=="lane" && isContextBranch(n.id) && hasContextEvidence(n.data));
 }

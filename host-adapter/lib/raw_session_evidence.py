@@ -5,7 +5,7 @@ Raw line hashes are rechecked at readback. Assistant claims stay claims.
 """
 from __future__ import annotations
 
-import fcntl
+from . import platform_lock as fcntl
 import hashlib
 import json
 import re
