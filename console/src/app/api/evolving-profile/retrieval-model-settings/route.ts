@@ -59,7 +59,7 @@ async function discoverLocalModelCandidates() {
     const hasWeights = directFiles.some((file) => /^(model\.onnx|pytorch_model.*\.(bin|safetensors)|model.*\.(bin|safetensors|gguf))$/.test(file)) || await access(path.join(root, "onnx/model.onnx")).then(() => true).catch(() => false);
     if (hasConfig && hasTokenizer && hasWeights) {
       let config: any = {};
-      for (const name of ["config.json", "encoder/config.json"]) { try { config = JSON.parse(await readFile(path.join(root, name), "utf8")); break; } catch { /* inspect next known location */ } }
+      for (const name of ["config.json", "encoder/config.json"]) { try { config = JSON.parse(await readFile(path.join(/*turbopackIgnore: true*/ root, name), "utf8")); break; } catch { /* inspect next known location */ } }
       const label = String(config._name_or_path || path.basename(root));
       const haystack = `${root} ${label}`.toLowerCase();
       const kind = /rerank|cross.encoder|bge-reranker/.test(haystack) ? "reranker" : "embedding";

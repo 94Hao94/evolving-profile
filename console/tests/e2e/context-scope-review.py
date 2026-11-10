@@ -10,7 +10,7 @@ import sys
 from playwright.sync_api import sync_playwright
 
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:10001"
 FIXTURE = {
     "schema": "evolving-profile.runtime.v1",

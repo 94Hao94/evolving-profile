@@ -6,14 +6,13 @@ import tempfile
 import unittest
 
 
-SCRIPT_VALUE=os.environ.get('EP_LEGACY_ROLLBACK_SCRIPT','')
-BASELINE_VALUE=os.environ.get('EP_LEGACY_ROLLBACK_BASELINE','')
-SCRIPT=Path(SCRIPT_VALUE) if SCRIPT_VALUE.strip() else None
-BASELINE=Path(BASELINE_VALUE) if BASELINE_VALUE.strip() else None
+_script_value=os.environ.get('EP_LEGACY_ROLLBACK_SCRIPT','').strip()
+_baseline_value=os.environ.get('EP_LEGACY_ROLLBACK_BASELINE','').strip()
+SCRIPT=Path(_script_value) if _script_value else Path()
+BASELINE=Path(_baseline_value) if _baseline_value else Path()
+ROLLBACK_ENABLED=bool(_script_value and _baseline_value)
 
-
-@unittest.skipUnless(SCRIPT is not None and BASELINE is not None and SCRIPT.is_file() and BASELINE.is_dir(),
-    'Optional EP2.1 external rollback assets are not distributed; configure EP_LEGACY_ROLLBACK_SCRIPT and EP_LEGACY_ROLLBACK_BASELINE to run this historical drill')
+@unittest.skipUnless(ROLLBACK_ENABLED, 'legacy rollback drill requires explicit EP_LEGACY_ROLLBACK_SCRIPT and EP_LEGACY_ROLLBACK_BASELINE')
 class RollbackDrillTest(unittest.TestCase):
     def fixture(self, root:Path):
         for name in ('source','state','backup','runtime','launch','release'):

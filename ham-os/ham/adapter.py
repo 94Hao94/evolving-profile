@@ -24,9 +24,19 @@ def _now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-def flags(path=Path.home() / '.hindsight/memory-contract-v5.json'):
+def _memory_contract_path():
+    override = os.environ.get('HAM_MEMORY_CONTRACT')
+    if override:
+        return Path(override)
+    migrated = Path.home() / '.evolving-profile/memory-contract-v5.json'
+    if migrated.is_file():
+        return migrated
+    return Path.home() / '.hindsight/memory-contract-v5.json'
+
+def flags(path=None):
     try:
-        return json.loads(path.read_text()).get('memoryOS') or {}
+        contract = Path(path) if path is not None else _memory_contract_path()
+        return json.loads(contract.read_text()).get('memoryOS') or {}
     except Exception:
         return {}
 
@@ -36,7 +46,12 @@ def _id(value):
 
 
 def _capture_root():
-    return Path(os.environ.get('HAM_CAPTURE_STATE_DIR') or Path.home() / '.hindsight/memory-os/capture')
+    override = os.environ.get('HAM_CAPTURE_STATE_DIR')
+    if override:
+        return Path(override)
+    if (Path.home() / '.evolving-profile/memory-contract-v5.json').is_file():
+        return Path.home() / '.evolving-profile/memory-os/capture'
+    return Path.home() / '.hindsight/memory-os/capture'
 
 
 @contextmanager
@@ -184,7 +199,9 @@ def event_from_hook(hook_name: str, hook_input: dict[str, Any], origin_class='am
             order = conn.execute('INSERT INTO captures(identity_key,input_hash,envelope_json) VALUES(?,?,?)', (key, input_hash, '{}')).lastrowid
             payload = {
                 'schema': 'ham.event.v1', 'event_id': _id(key_data), 'idempotency_key': key,
-                'principal_id': 'ep-user', 'agent_id': 'codex', 'session_id': session,
+                'principal_id': 'liuzhongyang',
+                'agent_id': (os.environ.get('HINDSIGHT_AGENT_NAME') or os.environ.get('EVOLVING_PROFILE_AGENT_NAME') or 'codex').strip() or 'codex',
+                'session_id': session,
                 'project_id': hashlib.sha256(project.encode()).hexdigest()[:24],
                 'task_id': hashlib.sha256((session + '|' + project).encode()).hexdigest()[:24],
                 'sequence': source_sequence if source_sequence is not None else order,

@@ -100,7 +100,7 @@ def guidance_source_decision(item, *, review_data=None, review_state=None):
     return {'allowed':not bool(row),'record_id':mid,'review':row,'reason':row.get('status') if row else 'no_known_source_restriction',
             'registry_state':state}
 
-def fetch_policy_source(memory_id,bank='personal-memory'):
+def fetch_policy_source(memory_id,bank='ep-default-bank-v2-shadow-20260811'):
     base='http://127.0.0.1:12088'
     def get(path):
         with urllib.request.urlopen(base+path,timeout=5) as response:return json.loads(response.read())
@@ -137,7 +137,7 @@ def revalidate_model_section(model,section,*,source_reader=None,timeout=.75):
         return dict(result,reason='模型版本未审阅、来源链待复核或章节没有明确来源。')
     if source_reader is None:
         def source_reader(mid):
-            url='http://127.0.0.1:12088/v1/default/banks/personal-memory/memories/'+mid
+            url='http://127.0.0.1:12088/v1/default/banks/ep-default-bank-v2-shadow-20260811/memories/'+mid
             with urllib.request.urlopen(url,timeout=max(.1,timeout)) as response:return json.loads(response.read())
     try:
         for mid in ids:

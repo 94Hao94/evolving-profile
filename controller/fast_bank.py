@@ -22,7 +22,7 @@ from typing import Any, Iterable
 
 
 STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_STATE_ROOT", str(Path.home() / ".evolving-profile")))
-DEFAULT_SNAPSHOT = STATE_ROOT / "backups/v2-cutover-20260812T191145/personal-memory.memory_units.jsonl"
+DEFAULT_SNAPSHOT = STATE_ROOT / "backups/v2-cutover-20260812T191145/ep-default-bank-v2-shadow-20260811.memory_units.jsonl"
 DEFAULT_INDEX = STATE_ROOT / "control-plane/fast-memory-index.sqlite3"
 DEFAULT_COMMON = STATE_ROOT / "common-candidates.json"
 DEFAULT_POLICIES = STATE_ROOT / "directive-policy-index.json"

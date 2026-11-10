@@ -17,6 +17,7 @@ it('flags an actual old loaded reply even when disk has been upgraded',()=>{
 });
 it('keeps stale, anonymous, malformed and future replies out of a fresh-loaded claim',()=>{
  expect(summarizeRuntimeLoad({installed_mcp_sha256:hash,events:[event(hash,'2026-10-15T00:00:00Z')]},now).mcp_status).toBe('stale');
+ expect(summarizeRuntimeLoad({installed_mcp_sha256:hash,events:[event(hash,'2026-10-15T00:00:00Z')]},now).mcp_activity_state).toBe('no_recent_activity');
  for(const e of [{...event(),adapter_build_sha256:'v5.1'}, {...event(),binding_state:'unknown_check_id'},
    {...event(),tool_call_id:null},event(hash,'2026-10-17T00:00:00Z')])
    expect(summarizeRuntimeLoad({installed_mcp_sha256:hash,events:[e]},now).mcp_status).toBe('not_observed');
@@ -31,4 +32,9 @@ it('does not label a mutable disk build as the running server or browser build',
  expect(out.console_disk_build_id).toBe('disk-build-B');
  expect(out.console_running_build_status).toBe('not_measured');expect(out.console_client_build_status).toBe('not_measured');
  expect(out).not.toHaveProperty('console_build_id');
+});
+it('matches a fresh runtime endpoint probe to the disk build',()=>{
+ const out=summarizeRuntimeLoad({console_disk_build_id:'disk-build-B',console_runtime_probe:{build_id:'disk-build-B',at:'2026-10-16T07:59:00Z'},events:[]},now);
+ expect(out.console_running_build_status).toBe('matched');
+ expect(out.console_running_build_id).toBe('disk-build-B');
 });

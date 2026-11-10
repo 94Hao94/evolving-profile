@@ -13,7 +13,7 @@ from semantic_recall import LocalGuidanceEmbeddingClient, SemanticVectorCache
 def main() -> None:
     state_root=Path(os.environ.get('EVOLVING_PROFILE_STATE_ROOT',str(Path.home()/'.evolving-profile')))
     config=state_root/'guidance-v1'/'guidance-v1.json'
-    bank=os.environ.get('EVOLVING_PROFILE_GUIDANCE_BANK_ID','personal-memory')
+    bank=os.environ.get('EVOLVING_PROFILE_GUIDANCE_BANK_ID','ep-default-bank-v2-shadow-20260811')
     base=os.environ.get('EVOLVING_PROFILE_SOURCE_API_URL','http://127.0.0.1:12088')
     cache_path=state_root/'guidance-v1'/'semantic-vectors.json'
     repo=load_repository(config)

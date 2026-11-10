@@ -101,6 +101,18 @@ def plan_history(prompt, task=None):
         audit_text,
     ))) and not (quoted_transform and '不是翻译任务' not in current)
     historical = bool(re.search(r'以前|之前|过去|上次|上回|回顾|后来|当初|最近|近期|上周|上月|做过|干过|拍板|咱们定过', text))
+    # Historical cause/comparison prompts need more than one memory plane.
+    # Keep this lexical and conservative: it only selects mandatory evidence
+    # channels; it never decides relevance or truth.
+    historical_cause = historical and bool(re.search(
+        r'为什么|原因|缘由|差在哪|区别|差异|怎么会|为何|只能用|操作不了|不能操作|不行|失败|没调用|未调用|没生效|未生效',
+        text,
+    ))
+    agent_process_history = bool(re.search(
+        r'codex|trae|workbuddy|claude|computer\s*use|agent|助手|模型|mcp|api|gui|lark-cli|工具|调用',
+        text,
+        re.I,
+    ))
     # These are positive, transparent routing hints. Missing hints never veto
     # the Agent or turn uncertain relevance into "no memory exists".
     temporal = bool(re.search(r'最近|近期|过去|上周|上月|近.{0,5}[天周月年]|[0-9一二三四五六七八九十两]+[天周月年]', text))
@@ -144,14 +156,21 @@ def plan_history(prompt, task=None):
     missing_context = not context and bool(re.fullmatch(r'(?:那|你|就|可以|继续|开工|执行|好|啊|吧|！|!|，|,|。)+',current))
     if not context and re.search(r'第[一二三四五六七八九十0-9]+(?:份|个|项)(?:材料|文档|文件|方案)',current):
         missing_context = not bool(task.get('resolved_entities'))
-    route = 'skip' if skip else 'live_audit' if live_audit else 'get_preference' if preference_history else 'research' if complex_history else 'recall'
-    reason = ('当前用户禁止历史读取。' if not policy['history_allowed'] else '当前请求有明确的自足信息来源。') if skip else ('问题针对本轮工具调用、回执或链路状态；优先读取实时审计，不查询历史 Bank。' if live_audit else ('问题明确询问用户已记录的偏好，应调用 Get Preference 读取条件化条目。' if preference_history else ('跨时间或开放盘点，需要按范围检索并检查覆盖；可直接 Research。' if complex_history else '历史可能补充事实、旧决定或相关经验；候选由 Agent 结合完整上下文判断。')))
+    multi_route = (not skip) and historical_cause and (agent_process_history or live_audit)
+    route = 'skip' if skip else 'multi_route' if multi_route else 'live_audit' if live_audit else 'get_preference' if preference_history else 'research' if complex_history else 'recall'
+    reason = ('当前用户禁止历史读取。' if not policy['history_allowed'] else '当前请求有明确的自足信息来源。') if skip else (
+        '这是历史成因/失败/比较问题，同时涉及用户项目事实、Agent执行过程和当前链路；必须并行核对多个证据通道。' if multi_route else
+        '问题针对本轮工具调用、回执或链路状态；优先读取实时审计，不查询历史 Bank。' if live_audit else
+        '问题明确询问用户已记录的偏好，应调用 Get Preference 读取条件化条目。' if preference_history else
+        '跨时间或开放盘点，需要按范围检索并检查覆盖；可直接 Research。' if complex_history else
+        '历史可能补充事实、旧决定或相关经验；候选由 Agent 结合完整上下文判断。'
+    )
     if not skip and 'research' in policy['denied_tools'] and route == 'research':route='recall'
     if not skip and 'recall' in policy['denied_tools'] and route == 'recall':route='research' if 'research' not in policy['denied_tools'] else 'agent_decides'
     # Broad inventories and live audits go straight to the Agent's auditable
     # route.  A low-budget probe is useful only for a narrow recall question;
     # otherwise generic historical previews become anchoring noise.
-    minimum = ('skip' if skip else 'live_audit' if live_audit else
+    minimum = ('skip' if skip else 'agent_query' if multi_route else 'live_audit' if live_audit else
                'needs_context' if missing_context else
                'agent_query' if route in {'research','get_preference'} or 'recall' in policy['denied_tools']
                else 'recall_probe')
@@ -161,20 +180,35 @@ def plan_history(prompt, task=None):
         # The Agent already sees the whole task context. A generic time/tool
         # phrase is not a safe anchor for an automatic Bank preview.
         minimum='agent_query'
-    return {'schema':'evolving-profile.history-plan.v3','query':query,'decision':route,'recommended_route':route,
+    mandatory_tools=[]
+    if multi_route:
+        mandatory_tools.append('mcp__evolving_profile_controller__user_recall')
+        if agent_process_history:
+            mandatory_tools.append('mcp__evolving_profile_controller__agent_recall')
+        if live_audit:
+            mandatory_tools.append('mcp__evolving_profile_controller__audit_thread_history')
+    suggested_tools=[] if skip else [route] if route not in {'agent_decides','live_audit','multi_route'} else []
+    if multi_route:
+        suggested_tools=[tool.rsplit('__',1)[-1] for tool in mandatory_tools]
+    return {'schema':'evolving-profile.history-plan.v4','query':query,'decision':route,'recommended_route':route,
         'history_dependency':'none' if skip else 'complex' if complex_history else 'likely' if historical else 'possible',
         'minimum_action':minimum,'reason':reason,'memory_policy':policy,'agent_may_override':True,
+        'history_cause':historical_cause,'agent_process_history':agent_process_history,
+        'route_channels':mandatory_tools,'mandatory_history_tools':mandatory_tools,
+        'coverage_contract':{'channels_checked':mandatory_tools,'channels_skipped':[],
+                             'candidate_state':'not_retrieved','source_read_count':0,'answer_use':'not_measured'},
         'context_source':'bounded_task_context' if context else 'current_prompt_only',
         'required_slots':['time_range','activities','completion_state','sources'] if inventory else [],
-        'suggested_tools':[] if skip or live_audit else [route] if route != 'agent_decides' else [],
+        'suggested_tools':suggested_tools,
            'required_ep_tool': None if skip else 'mcp__evolving_profile_controller__user_preference' if route == 'get_preference' else 'mcp__evolving_profile_controller__user_research' if route == 'research' else 'mcp__evolving_profile_controller__user_recall' if route == 'recall' else 'mcp__evolving_profile_controller__audit_thread_history' if route == 'live_audit' else None,
         'allow_native_memory': bool(explicit_native_memory),
         'boundary':'routing_hint_not_fact_or_coverage_verdict',
         'focus_terms':focus_terms,
         'negative_focus_terms':negative_focus_terms,
         'candidate_policy': 'positive_anchor_overlap' if route == 'recall' else 'agent_query_only',
-        'fallback_route': 'research' if route == 'recall' else None,
-        'fallback_trigger': 'recall_empty_or_scope_insufficient' if route == 'recall' else None}
+        'fallback_route': 'research' if route == 'recall' else 'recall_low' if multi_route else None,
+        'fallback_channels':['mcp__evolving_profile_controller__user_recall'] if multi_route else [],
+        'fallback_trigger': 'recall_empty_or_scope_insufficient' if route == 'recall' else 'audit_unavailable_or_history_channel_not_run' if multi_route else None}
 
 
 @lru_cache(maxsize=1)

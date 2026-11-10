@@ -13,7 +13,7 @@ import { resolveConsoleOrigin } from "@/lib/console-origin";
 import { normalizeJevJudge } from "@/lib/jev-provider";
 import { parseModelEnvironment, resolveEffectiveEmbedding, maskRetrievalModels } from "@/lib/retrieval-model-identity";
 import {normalizeCoverageSettings} from "@/lib/scenario-coverage";
-import {readRuntimeLoadEvidence} from "@/lib/runtime-load-evidence.server";
+import {readRuntimeLoadEvidence,writeConsoleRuntimeProbe} from "@/lib/runtime-load-evidence.server";
 
 const ENV_PATH = EP_API_ENV;
 const PROFILE_PATH = epStatePath("codex.json");
@@ -72,6 +72,23 @@ async function serviceState(url: string) {
     return { url, status: response.ok ? "healthy" : "attention", detail: typeof detail === "string" ? detail : `HTTP ${response.status}` };
   } catch {
     return { url, status: "unavailable", detail: "unreachable" };
+  }
+}
+
+async function readHostCatalog() {
+  try {
+    const sourceRoot = process.env.EVOLVING_PROFILE_HOST_SOURCE_ROOT ?? path.resolve(process.cwd(), "..");
+    const registry = JSON.parse(await readFile(path.join(sourceRoot, "config", "host-integrations.v1.json"), "utf8"));
+    const profiles = Array.isArray(registry?.profiles) ? registry.profiles.map((profile: any) => ({
+      id: String(profile.id),
+      labels: profile.labels ?? { en: String(profile.id), "zh-CN": String(profile.id) },
+      documented: profile.documented ?? {},
+      transports: profile.transports ?? [],
+      source_parser: profile.source_parser ?? null,
+    })) : [];
+    return { revision: registry?.revision ?? null, profiles };
+  } catch {
+    return { revision: null, profiles: [] };
   }
 }
 
@@ -168,10 +185,10 @@ export async function GET(request?: Request) {
   try { contextAudit = JSON.parse(await readFile(CONTEXT_AUDIT_PATH, "utf8")); } catch { /* audit remains unavailable */ }
   const processMemory = await readProcessSnapshot(requestedBank).then(processMetadata).catch(()=>({status:"not_available_for_bank",version:"unavailable",bankId:null,record_count:0,by_kind:{},skill_candidates:0,profiles:0,revalidation_queue:0,updated_at:null,recent:[]}));
 
-  const [api, controller, localFiles, cloudReadback, backupJob, liveBankTotal] = await Promise.all([
+  const [api, controller, localFiles, cloudReadback, backupJob, liveBankTotal, hostCatalog] = await Promise.all([
     serviceState(`${DATAPLANE_URL}/health`),
     serviceState(`${process.env.EVOLVING_PROFILE_CONTROLLER_API_URL || "http://127.0.0.1:12079"}/health`),
-    flatFiles(path.join(String((backupSettings.local as any)?.root || epStatePath("backups/managed")), "daily")), wpsCloudReadback(), backupJobState(), liveBankRecordTotal(configuredBank),
+    flatFiles(path.join(String((backupSettings.local as any)?.root || epStatePath("backups/managed")), "daily")), wpsCloudReadback(), backupJobState(), liveBankRecordTotal(configuredBank), readHostCatalog(),
   ]);
   backupJob.schedule = scheduleLabel(backupSettings);
   const localBackup = summarizeLocalBackups(localFiles);
@@ -186,7 +203,7 @@ export async function GET(request?: Request) {
 
   return NextResponse.json({
     schema: "evolving-profile.runtime.v1",
-    runtimeLoad: await readRuntimeLoadEvidence(EP_STATE_ROOT),
+    runtimeLoad: await (async()=>{ await writeConsoleRuntimeProbe(EP_STATE_ROOT); return readRuntimeLoadEvidence(EP_STATE_ROOT); })(),
     release: releaseManifest,
     model: {
       provider: effectiveProvider.name || env.EVOLVING_PROFILE_API_LLM_PROVIDER || "not_configured",
@@ -201,7 +218,9 @@ export async function GET(request?: Request) {
       { name: "Console", url: resolveConsoleOrigin(request?.url ?? "http://127.0.0.1:9999", process.env.PORT), status: "healthy", detail: "current request origin" },
     ],
     hostIntegration: {
-      hosts: ["Codex", "Claude Code", "Hermes"],
+      hosts: hostCatalog.profiles.map((profile: any) => profile.labels?.["zh-CN"] ?? profile.labels?.en ?? profile.id),
+      profiles: hostCatalog.profiles,
+      revision: hostCatalog.revision,
       hookStages: ["SessionStart", "UserPromptSubmit", "PostToolUse", "PreCompact", "Stop"],
       mcpServer: "evolving-profile-controller-mcp",
       entry: "get_preference",

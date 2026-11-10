@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from evolving_profile_api.engine.repair_service import RepairConflictError, RepairService, load_repair_plan, save_repair_plan
@@ -114,6 +116,23 @@ def test_apply_rejects_changed_source_fingerprint_without_writing():
         service.apply(plan, current_source_fingerprint="new-source-hash", confirmed=True)
 
     assert plan.status == "ai_report"
+
+
+def test_fingerprint_ignores_transport_timestamps_and_json_encoding():
+    service = RepairService()
+    raw = {
+        "operation_id": "op-5", "bank_id": "bank-1", "operation_type": "refresh_mental_model",
+        "status": "failed", "error_message": "OutputTooLongError",
+        "result_metadata": json.dumps({"mental_model_id": "mm-1", "repair_recommended": True}),
+        "task_payload": json.dumps({"mental_model_id": "mm-1"}),
+        "updated_at": "2026-11-08T00:00:00Z", "retry_count": 3,
+    }
+    api = {**raw, "result_metadata": json.loads(raw["result_metadata"]),
+           "task_payload": json.loads(raw["task_payload"]),
+           "updated_at": "2026-11-08T00:01:00Z", "retry_count": 4,
+           "completed_at": None}
+    api.pop("bank_id")
+    assert service.fingerprint(raw) == service.fingerprint(api)
 
 
 def test_repair_plan_persists_across_service_instances(tmp_path, monkeypatch):

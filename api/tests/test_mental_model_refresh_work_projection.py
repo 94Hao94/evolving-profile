@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from evolving_profile_api.engine import memory_engine as engine_module
+from evolving_profile_api.engine.llm_interface import OutputTooLongError
 from evolving_profile_api.engine.memory_engine import MemoryEngine
 from evolving_profile_api.engine.response_models import ReflectResult
 
@@ -102,6 +103,45 @@ async def test_missing_usage_and_traces_remain_unknown(offline_refresh, monkeypa
     receipt = result["reflect_response"]["work"]
     assert receipt["reflect_usage"] is None
     assert receipt["reflect_llm_call_count"] is None
+
+
+async def test_oversized_refresh_retries_once_with_reduced_recall_budget(offline_refresh, monkeypatch):
+    state = offline_refresh
+    calls = []
+
+    async def reflect(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise OutputTooLongError("too long")
+        return ReflectResult(text="Updated", based_on={})
+
+    monkeypatch.setattr(state.engine, "reflect_async", reflect)
+    result = await state.engine.refresh_mental_model("bank", "model", request_context=None)
+
+    assert len(calls) == 2
+    assert calls[1]["recall_max_tokens_override"] < 4096
+    assert result["reflect_response"]["attempts"] == [
+        {
+            "input_estimate": result["reflect_response"]["attempts"][0]["input_estimate"],
+            "batch_size": None,
+            "recall_max_tokens": None,
+            "recall_chunks_max_tokens": None,
+            "model": result["reflect_response"]["attempts"][0]["model"],
+            "finish_reason": "length",
+            "retry_count": 0,
+            "config_version": result["reflect_response"]["attempts"][0]["config_version"],
+        },
+        {
+            "input_estimate": result["reflect_response"]["attempts"][1]["input_estimate"],
+            "batch_size": None,
+            "recall_max_tokens": result["reflect_response"]["attempts"][1]["recall_max_tokens"],
+            "recall_chunks_max_tokens": None,
+            "model": result["reflect_response"]["attempts"][1]["model"],
+            "finish_reason": "stop",
+            "retry_count": 1,
+            "config_version": result["reflect_response"]["attempts"][1]["config_version"],
+        },
+    ]
 
 
 async def test_full_refresh_keeps_running_and_does_not_advance_source_snapshot(offline_refresh):

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from lib.recall_relevance import apply_relevance_policy, resolve_min_relevance
+from .memory_envelope import normalize_memory_envelope
 
 
 _MUTATION_LOCKS = {}
@@ -129,6 +130,47 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": str(value.get("created_at") or _now()),
         "updated_at": str(value.get("updated_at") or _now()),
     })
+    # Every process-memory row now carries the same governance envelope used
+    # by the other EP memory families.  The existing process fields remain the
+    # content contract; this nested projection is additive and can be ignored
+    # by older readers.
+    process_kind = {
+        "episode": "experience", "pattern": "procedure", "skill": "procedure",
+        "process_observation": "observation", "capability_observation": "observation",
+        "trace": "evidence", "event": "evidence", "process_draft": "process",
+    }.get(kind, "process")
+    context = dict(value.get("primary_context") or {})
+    if context.get("project_key"):
+        scope = {"kind": "project", "id": context.get("project_key")}
+    elif context.get("task_id"):
+        scope = {"kind": "task", "id": context.get("task_id")}
+    elif context.get("session_id"):
+        scope = {"kind": "session", "id": context.get("session_id")}
+    else:
+        scope = {"kind": "agent"}
+    envelope = value.get("memory_envelope")
+    if envelope is None:
+        envelope = {
+            "kind": process_kind,
+            "scope": scope,
+            "audience": ["agent"],
+            "source_refs": source_trace_ids,
+            "source_type": "agent_process_memory",
+            "observed_at": value.get("updated_at"),
+            "verification_state": "verified" if value.get("task_verified") else "observed",
+            "confidence": 1.0 if value.get("task_verified") else None,
+            "host_id": (value.get("environment_fingerprint") or {}).get("host_id"),
+            "session_id": context.get("session_id"),
+            "task_id": context.get("task_id"),
+            "content_ref": value.get("process_memory_id"),
+            "outcome": {
+                "status": value.get("outcome"),
+                "maturity": value.get("maturity"),
+                "drift_status": value.get("drift_status"),
+            },
+            "retention_policy": {"mode": "governed_process_memory"},
+        }
+    value["memory_envelope"] = normalize_memory_envelope(envelope)
     return value
 
 
@@ -264,7 +306,18 @@ class ProcessMemoryStore:
                 pass
 
     def all(self) -> list[dict[str, Any]]:
-        return [project_task_outcome(row) for row in self._read().get("records") or []]
+        projected = []
+        for row in self._read().get("records") or []:
+            # Existing rows may predate the envelope or be intentionally
+            # incomplete quarantine fixtures.  Project valid legacy rows into
+            # the new envelope on read; preserve malformed rows for the old
+            # diagnostics path instead of making retrieval fail closed for the
+            # entire store.
+            try:
+                projected.append(normalize_record(row))
+            except (TypeError, ValueError):
+                projected.append(project_task_outcome(row))
+        return projected
 
     @staticmethod
     def _source_id_index(records: list[dict[str, Any]]) -> set[str]:

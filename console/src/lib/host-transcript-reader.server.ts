@@ -102,7 +102,7 @@ export function createHostTranscriptReader(roots:string[]) {
   async function read(row:any) {
     if(!UUID.test(row?.session_id||"")||typeof row.turn_id!=="string"||!row.turn_id)return {status:"invalid_binding",rows:[],bytes:0};
     const filename=await locate(row);if(!filename)return {status:"source_unavailable",rows:[],bytes:0};
-    const info=await stat(filename),file=await open(filename,"r");let meta:any,bytes=0;
+    const info=await stat(/*turbopackIgnore: true*/ filename),file=await open(/*turbopackIgnore: true*/ filename,"r");let meta:any,bytes=0;
     try {
       const head=Buffer.alloc(Math.min(info.size,128*1024));const {bytesRead}=await file.read(head,0,head.length,0);
       bytes+=bytesRead;
@@ -145,7 +145,7 @@ export function createHostTranscriptReader(roots:string[]) {
         if(info.size>MAX_SCAN&&result.end===null)result.limited=true;
       }
     }
-    const after=await stat(filename);
+    const after=await stat(/*turbopackIgnore: true*/ filename);
     if(after.ino!==info.ino||after.dev!==info.dev||after.size<info.size||after.size===info.size&&after.mtimeMs!==info.mtimeMs)
       return {status:"source_changed",rows:[],bytes,strategy};
     const complete=result.start!==null&&result.end!==null&&!result.limited;

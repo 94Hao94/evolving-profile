@@ -23,7 +23,7 @@ export async function runHostIntegration(action:string,input:object={}):Promise<
     args.push(action==='config-apply'?'--plan':'--receipt',path.join(EP_STATE_ROOT,'host-integrations',action==='config-apply'?'plans':'receipts',value.plan_id!+'.json'));
   }
   return await new Promise((resolve,reject)=>{
-    const child=spawn(python,args,{shell:false,stdio:['ignore','pipe','pipe']});
+    const child=spawn(/*turbopackIgnore: true*/ python,args,{shell:false,stdio:['ignore','pipe','pipe']});
     let out='',done=false;
     const finish=(error?:Error,data?:Record<string,any>)=>{if(done)return;done=true;clearTimeout(timer);error?reject(error):resolve({...data,configuration_write_enabled:writable});};
     const timer=setTimeout(()=>{child.kill('SIGTERM');finish(new Error('host_backend_timeout'));},20000);

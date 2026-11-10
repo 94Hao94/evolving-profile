@@ -13,6 +13,58 @@ from pathlib import Path
 from lib.content import extract_task_user_request
 
 
+# ``working_state`` is a bounded projection over the existing task-state,
+# checkpoint and scenario lanes.  It is intentionally not a new durable
+# memory bank: it expires with the task-state record and follows current
+# Prompt precedence.
+WORKING_STATE_FIELDS = (
+    "status", "phase", "goal", "next_action", "open_loops", "blocked_by",
+    "pending_decisions", "checkpoint", "deadline", "last_outcome", "feedback",
+)
+WORKING_STATE_LIST_FIELDS = {"open_loops", "blocked_by", "pending_decisions"}
+WORKING_STATE_STRING_FIELDS = {"status", "phase", "goal", "next_action", "deadline"}
+WORKING_STATE_OBJECT_FIELDS = {"checkpoint", "last_outcome", "feedback"}
+
+
+def _working_state_value(value: dict | None, *, objective: str | None = None) -> dict:
+    """Return a stable, JSON-safe working-state projection."""
+    source = dict(value or {})
+    result = {}
+    for field in WORKING_STATE_FIELDS:
+        if field not in source or source[field] is None:
+            continue
+        item = source[field]
+        if field in WORKING_STATE_LIST_FIELDS:
+            if not isinstance(item, (list, tuple)):
+                raise ValueError(f"working_state_{field}_must_be_array")
+            result[field] = [str(entry) for entry in item if str(entry).strip()]
+        elif field in WORKING_STATE_STRING_FIELDS:
+            result[field] = str(item).strip()
+        elif field in WORKING_STATE_OBJECT_FIELDS:
+            if not isinstance(item, dict):
+                raise ValueError(f"working_state_{field}_must_be_object")
+            result[field] = dict(item)
+    if objective and not result.get("goal"):
+        result["goal"] = objective
+    return result
+
+
+def _working_state_patch(previous: dict, patch: dict, objective: str | None = None) -> dict:
+    """Merge nested and convenience fields without creating duplicate stores."""
+    current = _working_state_value(previous.get("working_state"), objective=objective)
+    nested = patch.get("working_state")
+    if nested is not None:
+        if not isinstance(nested, dict):
+            raise ValueError("working_state_must_be_object")
+        current.update(_working_state_value(nested))
+    for field in WORKING_STATE_FIELDS:
+        if field in patch:
+            current.update(_working_state_value({field: patch[field]}))
+    if objective:
+        current["goal"] = objective
+    return current
+
+
 class TaskStateStore:
     def __init__(self, root: Path, max_age_seconds: int = 86400):
         self.root = Path(root)
@@ -86,6 +138,7 @@ class TaskStateStore:
             "expires_at_epoch": expires,
             "expires_at": datetime.fromtimestamp(expires, timezone.utc).isoformat(),
             "authority": "working_projection_current_prompt_wins",
+            "working_state_schema": "evolving-profile.working-state.v1",
         }
 
     def record(self, session_id: str, prompt: str, turn_id: str | None,
@@ -116,6 +169,10 @@ class TaskStateStore:
                 "continuation_context": context,
                 "source": "current_prompt" if not previous else "prior_active_task",
             }
+            value["working_state"] = _working_state_patch(
+                previous or {}, {}, objective=objective
+            )
+            value["working_state"].setdefault("status", "active")
             return self._write_unlocked(session_id, value)
 
     def update(self, session_id: str, patch: dict, turn_id: str | None = None,
@@ -135,6 +192,8 @@ class TaskStateStore:
                 "unresolved", "objects", "source_versions",
             )
             value = {**previous, **{key: patch[key] for key in allowed if key in patch}}
+            objective = str(value.get("current_objective") or "").strip() or None
+            value["working_state"] = _working_state_patch(previous, patch, objective=objective)
             value.update(
                 self._fresh_metadata(previous, update_reason),
                 turn_id=turn_id or previous.get("turn_id"),

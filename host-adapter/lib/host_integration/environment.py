@@ -127,7 +127,7 @@ def discover_hosts(registry, environment=None, overrides=None):
                  'adapter_revision':registry.get('sha256',registry.get('revision','unknown')),
                  'config_sha256':hashlib.sha256(json.dumps([s for s in stamps if s[0]=='config'],sort_keys=True).encode()).hexdigest(),
                  'config_fingerprint_kind':'candidate_metadata_not_file_content'}
-        row={'host_id':profile['id'],'labels':profile.get('labels',{}),'status':'limited' if limited else 'observed',
+        row={'host_id':profile['id'],'labels':profile.get('labels',{}),'transports':profile.get('transports',[]),'status':'limited' if limited else 'observed',
              'context':context,'installation':{'state':installation,'candidates':installed,'scope':'bounded_candidates'},
              'configuration':{'state':'present' if configs else 'absent' if profile.get('config',{}).get('paths',{}).get(environment['platform']) else 'unknown','candidates':configs},
              'readiness':readiness(profile,[],context),'limited':limited}

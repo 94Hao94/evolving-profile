@@ -1295,7 +1295,7 @@ def _path_scope_anchor_hit(anchor: str, candidate: str) -> bool:
 def path_artifact_scope_alignment(query: str, text: str) -> dict[str, Any]:
     """Keep absolute-path work attached to its named task/artifact scope.
 
-    A path such as ``.../示例影片项目`` is more specific than the parent
+    A path such as ``.../优优汽车队`` is more specific than the parent
     ``Codex`` directory.  Without this guard, broad semantic rescue admitted
     unrelated configuration, game and storage memories into a video-editing
     packet merely because all lived under Codex.  The fallback is intentionally

@@ -785,6 +785,67 @@ class TestReflectAgentMocked:
         mock_llm.call.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_short_budget_still_runs_the_forced_retrieval_sequence(self, mock_llm, mock_functions):
+        """A caller cap must not make the first final pass happen before source lookup.
+
+        Mental-model refreshes use the default low budget. With a deliberately
+        small operator iteration cap, the reflect loop still needs one round per
+        enabled source tool plus a final synthesis round. Before the regression
+        fix, ``max_iterations=1`` went straight to synthesis and raised
+        ``ReflectRetrievalUnavailableError`` even though the bank had sources.
+        """
+        mock_llm.call_with_tools.side_effect = [
+            LLMToolCallResult(
+                tool_calls=[
+                    LLMToolCall(
+                        id="mm-1",
+                        name="search_mental_models",
+                        arguments={"query": "test query"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMToolCallResult(
+                tool_calls=[
+                    LLMToolCall(
+                        id="obs-1",
+                        name="search_observations",
+                        arguments={"query": "test query"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMToolCallResult(
+                tool_calls=[
+                    LLMToolCall(
+                        id="recall-1",
+                        name="recall",
+                        arguments={"query": "test query"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        result = await run_reflect_agent(
+            llm_config=mock_llm,
+            bank_id="test-bank",
+            query="test query",
+            bank_profile={"name": "Test", "mission": "Testing"},
+            max_iterations=1,
+            has_mental_models=True,
+            include_observations=True,
+            include_recall=True,
+            **mock_functions,
+        )
+
+        assert result.text == "Fallback answer from final iteration"
+        assert mock_llm.call_with_tools.await_count == 3
+        mock_functions["search_mental_models_fn"].assert_awaited_once()
+        mock_functions["search_observations_fn"].assert_awaited_once()
+        mock_functions["recall_fn"].assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_wall_clock_timeout(self, mock_llm: MagicMock, mock_functions: dict[str, AsyncMock]) -> None:
         """Test that asyncio.wait_for can enforce a wall-clock timeout on run_reflect_agent."""
 

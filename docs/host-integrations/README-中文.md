@@ -3,7 +3,7 @@
 [English](README.md) · [注册表生成的支持矩阵](MATRIX-中文.md) · [Windows](WINDOWS-中文.md) · [验收状态](ACCEPTANCE.md)
 
 不同客户端共用EP核心，分别记录文档支持、配置、隔离协议检查和真实宿主证据。
-当前Codex入口保留；新宿主采用只读工具权限，自动捕获默认关闭。准备不等于实机认证。
+当前Codex入口保留；宿主状态按实际能力逐项记录，只有观察到真实宿主回执时才标为已启用。准备不等于全部实机认证。
 
 ## 先检查，不改客户端
 
@@ -24,7 +24,8 @@ WorkBuddy实际调用过。Windows入口见专项说明。
 
 - 豆包工作：官方文档支持HTTP/STDIO。本地任务优先准备本地STDIO命令、参数、环境变量；
   配置由界面管理，EP不编造本地配置路径。按需选择插件或使用说明；账号开放情况后续实测。
-- WorkBuddy：按官方`.workbuddy/mcp.json`配方先生成预览，Hook和原文仍需真实客户端核对。
+- Trae：官方文档支持 STDIO、SSE 和 Streamable HTTP。当前证据窗口已实测 STDIO、提问钩子和自动捕获；SSE/HTTP 在取得原生任务回执前仍只标为 documented。
+- WorkBuddy：按官方`.workbuddy/mcp.json`配方先生成预览；当前证据窗口已实测提问钩子、停止钩子和自动捕获，已运行的 MCP 子进程可能需要重连后加载新代码。
 - Claude命令行、桌面本地Code和普通Chat分开，不能互相替代配置或生命周期证明。
 - Hermes/其他MCP客户端先做显式能力核对；没有可靠格式或事件时保持未知，不自动接管捕获。
 

@@ -136,6 +136,20 @@ def test_api_health_and_ready_return_the_same_payload():
     assert health.json() == ready.json()
 
 
+def test_api_version_exposes_runtime_identity_and_worker_mode(monkeypatch):
+    monkeypatch.setenv("EVOLVING_PROFILE_BUILD_SHA", "api-sha")
+    monkeypatch.setenv("EVOLVING_PROFILE_CONFIG_GENERATION", "cfg-api")
+    client, _ = _api_client(_DB_UP)
+
+    body = client.get("/version").json()
+
+    assert body["runtime"]["build_sha"] == "api-sha"
+    assert body["runtime"]["config_generation"] == "cfg-api"
+    assert body["worker_mode"] in {"embedded", "external", "disabled"}
+    assert isinstance(body["features"]["worker_available"], bool)
+    assert body["worker_ids_source"] in {"live_health", "configured", "none"}
+
+
 def test_worker_health_and_ready_return_the_same_payload():
     client, _ = _worker_client(_DB_UP)
 

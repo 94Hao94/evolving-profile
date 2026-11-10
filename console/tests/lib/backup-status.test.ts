@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { summarizeLocalBackups, summarizeCloudBackups, isCloudBackupSet, parseCloudReadbackReceipt } from "@/lib/backup-status";
 
 describe("backup status summaries", () => {
+  it("does not count a data manifest as the encrypted data payload", () => {
+    const result=summarizeLocalBackups([
+      {name:"evolving-profile-db-20261026-180000.dump",bytes:700,modifiedMs:3000},
+      {name:"evolving-profile-config-20261026-180000.data-manifest.json",bytes:20,modifiedMs:3010},
+      {name:"evolving-profile-capture-20261026-180000.sqlite.gz.enc",bytes:10,modifiedMs:3020},
+    ]);
+    expect(result.artifacts.config).toBe(false);
+  });
   it("recognizes current EP cloud sets while keeping legacy sets readable", () => {
     expect(isCloudBackupSet("evolving-profile-backup-20260920-032504")).toBe(true);
     expect(isCloudBackupSet("hindsight-backup-20260916-031005")).toBe(true);
@@ -56,6 +64,17 @@ describe("backup status summaries", () => {
       errorCode: 0,
       completedAt: "2026-09-20T03:25:38.685Z",
     })).toMatchObject({ observed: true, fileId: "565532104620" });
+
+    expect(parseCloudReadbackReceipt({
+      observed: true,
+      fileName: "evolving-profile-backup-20260920-032504.zip",
+      fileId: "local-mirror:20260920-032504",
+      fileSize: 1577187069,
+      completeSize: 1577187069,
+      errorCode: 0,
+      transport: "wps-sync-folder-mirror",
+      remoteProviderReadback: "unavailable",
+    })).toMatchObject({ observed: true, verificationScope: "local_mirror" });
 
     expect(parseCloudReadbackReceipt({
       observed: true,

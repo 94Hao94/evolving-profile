@@ -53,7 +53,7 @@ async function localPromptList(request: NextRequest) {
     const candidates = selectPromptOccurrences([...raw, ...await readReplayPrompts()], ['codex-userpromptsubmit', 'codex_host_replay']);
     const originRows=await resolver.resolveRows(candidates,{pageOffset:cursor,pageLimit:limit,host,queryText:terms.join(' '),promptSource});
     const classified = originRows.filter(row =>
-      (host.toLowerCase() === 'all' || String(row.host_id || 'codex').toLowerCase() === host.toLowerCase()) &&
+      (host.toLowerCase() === 'all' || String(row.host_id || 'unknown').toLowerCase() === host.toLowerCase()) &&
       (!terms.length || terms.every(term => row.prompt_preview.includes(term))));
     const { rows, ...sourceProjection } = promptPopulationProjection(classified, promptSource);
     const [routeReceipts, guidanceReceipts] = await Promise.all([readJsonDirectory(MEMORY_ROUTE_RECEIPTS_PATH), readJsonDirectory(GUIDANCE_ENTRY_RECEIPTS_PATH)]);
@@ -64,7 +64,7 @@ async function localPromptList(request: NextRequest) {
         prompt_id: `${row.prompt_fingerprint}:${row.at}`,
         at: row.at,
         user_prompt: row.prompt_preview || "",
-        source: row.host_id || "codex",
+        source: row.host_id || "unknown",
         origin_kind: row.origin_kind,
         origin_status: row.origin_status,
         origin_evidence: row.origin_evidence,

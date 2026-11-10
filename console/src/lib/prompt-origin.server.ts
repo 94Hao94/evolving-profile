@@ -117,7 +117,7 @@ export class PromptOriginResolver {
       priorities.push({position,row,indexed,hint});
     }
     const terms=String(options.queryText || '').split(/\s+/).filter(Boolean),host=String(options.host || 'all').toLowerCase(),source=String(options.promptSource || 'natural').toLowerCase();
-    const eligible=priorities.filter(entry=>(host==='all' || String(entry.row.host_id || 'codex').toLowerCase()===host) && (!terms.length || terms.every(term=>entry.row.prompt_preview.includes(term))) &&
+    const eligible=priorities.filter(entry=>(host==='all' || String(entry.row.host_id || 'unknown').toLowerCase()===host) && (!terms.length || terms.every(term=>entry.row.prompt_preview.includes(term))) &&
       (!['natural','human'].includes(source) || entry.hint==='human' || entry.hint==='unknown' && !entry.row.transcript_path));
     const offset=Math.max(0,options.pageOffset || 0),limit=Math.max(1,Math.min(50,options.pageLimit || 20)),pagePositions=new Set(eligible.slice(offset,offset+limit).map(entry=>entry.position));
     for(const entry of priorities)entry.priority=pagePositions.has(entry.position)?(entry.indexed?-2:-1):entry.indexed?0:entry.hint==='human'?1:entry.hint==='unknown' && !entry.row.transcript_path?2:3;

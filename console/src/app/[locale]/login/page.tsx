@@ -20,7 +20,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
 
   // Validate returnTo to prevent open-redirect via crafted login links.
-  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+  const returnTo = sanitizeReturnTo(searchParams?.get("returnTo") ?? null);
 
   useEffect(() => {
     // Focus the input on mount

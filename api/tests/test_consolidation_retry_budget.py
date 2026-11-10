@@ -12,10 +12,23 @@ from evolving_profile_api.engine.consolidation.consolidator import _consolidate_
 from evolving_profile_api.engine.llm_interface import OutputTooLongError, ProviderRateLimitResetError
 from evolving_profile_api.engine.providers.openai_compatible_llm import ProviderResponseError
 
+@pytest.mark.asyncio
+async def test_short_concurrency_limit_defers_instead_of_poisoning_source_memories(mock_llm_config, mock_config):
+    class ConcurrencyLimit(Exception):
+        status_code = 429
+    mock_llm_config.call.side_effect = ConcurrencyLimit('concurrency allocated quota exceeded')
+    before=datetime.now(timezone.utc)
+    with pytest.raises(ProviderRateLimitResetError) as raised:
+        await _consolidate_batch_with_llm(llm_config=mock_llm_config,
+            memories=[{'id':'m1','text':'source fact'}],union_observations=[],union_source_facts={},config=mock_config)
+    assert raised.value.retry_at > before
+    assert (raised.value.retry_at-before).total_seconds() <= 90
+
 
 @pytest.fixture
 def mock_llm_config():
     llm = AsyncMock()
+    llm._provider_impl = None
     response = MagicMock()
     response.creates = []
     response.updates = []

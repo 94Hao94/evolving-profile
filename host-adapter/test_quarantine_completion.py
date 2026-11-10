@@ -29,6 +29,13 @@ def test_confirmed_completion_removes_only_bound_unchanged_quarantine(tmp_path):
     assert q.reconcile_quarantined_completion('bank-a','op-a',receipt,expected)==0
 
 
+def test_source_recovery_completion_accepts_replacement_operation_id(tmp_path):
+    q, expected = prepare(tmp_path)
+    receipt = {'status': 'completed', 'operation_id': 'op-recovery-a'}
+    assert q.reconcile_quarantined_recovery('bank-a', 'op-a', receipt, expected) == 1
+    assert [r['content'] for r in q.snapshot()['items']] == ['其他记忆库原文']
+
+
 def test_foreign_bank_duplicate_id_is_not_deleted(tmp_path):
     q,expected=prepare(tmp_path)
     with q._locked():

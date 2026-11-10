@@ -1,4 +1,11 @@
 import unittest
+import importlib.util
+from pathlib import Path
+
+
+ROOT=Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('ep_controller_receipt_contract',ROOT/'host-adapter/evolving_profile_controller_mcp.py')
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 
 
 def assert_bound_route_receipt(receipt):
@@ -17,6 +24,21 @@ def assert_bound_route_receipt(receipt):
 
 
 class RouteReceiptContractTest(unittest.TestCase):
+    def test_multi_route_coverage_exposes_skipped_and_unverified_channels(self):
+        receipt={
+            'history_plan': {'mandatory_history_tools':['user_recall','agent_recall','audit_thread_history']},
+            'tool_events':[{'tool':'agent_recall','returned_count':8,'source_read_count':0}],
+        }
+        module._route_receipt_counts(receipt)
+        self.assertEqual(receipt['coverage_contract']['candidate_state'],'candidate_unverified')
+        self.assertEqual(receipt['coverage_contract']['channels_checked'],['agent_recall'])
+        self.assertEqual(receipt['coverage_contract']['channels_skipped'],['user_recall','audit_thread_history'])
+
+    def test_empty_history_call_is_distinguished_from_not_retrieved(self):
+        receipt={'history_plan': {'mandatory_history_tools':['user_recall']}, 'tool_events':[{'tool':'user_recall','returned_count':0}]}
+        module._route_receipt_counts(receipt)
+        self.assertEqual(receipt['coverage_contract']['candidate_state'],'retrieved_no_candidate')
+
     def test_memory_check_and_history_tools_share_prompt_binding(self):
         assert_bound_route_receipt(
             {

@@ -23,7 +23,7 @@ import uuid
 from collections import defaultdict
 from contextlib import AsyncExitStack
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from fnmatch import fnmatchcase
 from itertools import combinations
@@ -3483,6 +3483,14 @@ async def _consolidate_batch_with_llm(
                 prompt_chars=len(system_prompt) + len(user_content),
             )
         except Exception as exc:
+            # Short concurrency throttles often carry no reset header. They
+            # must defer the whole task, not enter input bisection and stamp
+            # otherwise valid source memories as permanently failed.
+            if getattr(exc, "status_code", None) == 429:
+                raise ProviderRateLimitResetError(
+                    retry_at=datetime.now(timezone.utc) + timedelta(seconds=60),
+                    message="Consolidation provider throttled; defer task for 60 seconds without failing source memories",
+                ) from exc
             # One targeted, changed-input correction for a missing canonical
             # observation field or a valid target/source pairing. Conflicts/foreign IDs/source errors never enter
             # this lane, and truncated JSON is never repaired or partially used.

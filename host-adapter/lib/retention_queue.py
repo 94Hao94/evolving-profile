@@ -482,6 +482,61 @@ class RetentionQueue:
             self._write(state)
             return len(rows)
 
+    def reconcile_quarantined_recovery(
+        self, bank_id, quarantine_operation_id, recovery_receipt, expected_fingerprints
+    ):
+        """Remove a quarantine only after a fresh source-recovery write completes.
+
+        A recovered batch necessarily receives a new idempotency key, so the
+        original completion helper cannot be reused: it would accept only the
+        failed operation's ID.  This variant keeps the same CAS/fingerprint
+        guard while explicitly recording that the terminal receipt belongs to
+        a replacement operation.
+        """
+        if (
+            not bank_id
+            or not quarantine_operation_id
+            or not isinstance(recovery_receipt, dict)
+            or recovery_receipt.get("status") != "completed"
+            or not recovery_receipt.get("operation_id")
+            or not isinstance(expected_fingerprints, dict)
+            or not expected_fingerprints
+        ):
+            raise ValueError("quarantine_recovery_receipt_required")
+        with self._locked():
+            state = self._read()
+            rows = [
+                r
+                for r in state["items"]
+                if r.get("bank_id") == bank_id
+                and isinstance(r.get("retention_quarantine"), dict)
+                and r["retention_quarantine"].get("operation_id") == quarantine_operation_id
+            ]
+            if not rows and not any(r.get("id") in expected_fingerprints for r in state["items"]):
+                return 0
+            if (
+                {r["id"] for r in rows} != set(expected_fingerprints)
+                or len(rows) != len(expected_fingerprints)
+                or any(
+                    hashlib.sha256(json.dumps(r, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+                    != expected_fingerprints[r["id"]]
+                    for r in rows
+                )
+            ):
+                raise ValueError("quarantine_source_or_scope_changed")
+            state["items"] = [
+                r
+                for r in state["items"]
+                if not (
+                    r.get("bank_id") == bank_id
+                    and r.get("id") in expected_fingerprints
+                    and isinstance(r.get("retention_quarantine"), dict)
+                    and r["retention_quarantine"].get("operation_id") == quarantine_operation_id
+                )
+            ]
+            self._write(state)
+            return len(rows)
+
     def migrate_bank(self, old_bank_id: str, new_bank_id: str, requeue_submitted: bool = False):
         """Atomically move queued work and cursors to another bank."""
         if not old_bank_id or not new_bank_id or old_bank_id == new_bank_id:

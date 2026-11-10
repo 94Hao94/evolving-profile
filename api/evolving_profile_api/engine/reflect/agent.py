@@ -559,6 +559,32 @@ async def _run_reflect_agent_inner(
     # Build set of enabled tool names to guard against LLM hallucinating disabled tool calls
     enabled_tools: frozenset[str] = frozenset(t["function"]["name"] for t in tools if t.get("type") == "function")
 
+    # The hierarchical retrieval path is forced one source at a time before the
+    # model is allowed to synthesize.  A small operator iteration cap must not
+    # turn the first pass into a no-source final answer: the final iteration is
+    # deliberately tool-less, so it needs one round per enabled source tool plus
+    # one synthesis round.  This matters for mental-model refreshes, which use
+    # the low budget by default and may run with a reduced global cap.
+    forced_retrieval_sequence = tuple(
+        tool_name
+        for tool_name, enabled in (
+            ("search_mental_models", has_mental_models),
+            ("search_observations", include_observations),
+            ("recall", include_recall),
+        )
+        if enabled
+    )
+    minimum_iterations = len(forced_retrieval_sequence) + 1
+    if max_iterations < minimum_iterations:
+        logger.info(
+            "[REFLECT %s] Raising iteration floor from %d to %d so forced retrieval "
+            "completes before final synthesis",
+            reflect_id,
+            max_iterations,
+            minimum_iterations,
+        )
+        max_iterations = minimum_iterations
+
     # Build initial messages (directives are injected into system prompt at START and END)
     system_prompt = build_system_prompt_for_tools(
         bank_profile,
@@ -909,22 +935,13 @@ async def _run_reflect_agent_inner(
         # Call LLM with tools
         llm_start = time.time()
 
-        # Determine tool_choice for this iteration.
-        # Force the full hierarchical retrieval path (only for enabled tools) before allowing auto.
-        # Build the forced sequence from the tools that are actually enabled.
-        forced_sequence = []
-        if has_mental_models:
-            forced_sequence.append("search_mental_models")
-        if include_observations:
-            forced_sequence.append("search_observations")
-        if include_recall:
-            forced_sequence.append("recall")
-
+        # Determine tool_choice for this iteration. Force the full hierarchical
+        # retrieval path (only for enabled tools) before allowing auto.
         if stop_forcing_from_iteration is not None and iteration >= stop_forcing_from_iteration:
             # A fresh mental model already short-circuited the forced path.
             iter_tool_choice = LLM_TOOL_CHOICE_AUTO
-        elif iteration < len(forced_sequence):
-            iter_tool_choice = LLMToolChoice.named(forced_sequence[iteration])
+        elif iteration < len(forced_retrieval_sequence):
+            iter_tool_choice = LLMToolChoice.named(forced_retrieval_sequence[iteration])
         else:
             iter_tool_choice = LLM_TOOL_CHOICE_AUTO
 
@@ -935,7 +952,7 @@ async def _run_reflect_agent_inner(
         next_iter = iteration + 1
         if stop_forcing_from_iteration is not None and next_iter >= stop_forcing_from_iteration:
             next_is_auto = True
-        elif next_iter < len(forced_sequence):
+        elif next_iter < len(forced_retrieval_sequence):
             next_is_auto = False
         else:
             next_is_auto = True

@@ -5,18 +5,17 @@ export type ScenarioOperationalEvidence = {
   status: "observed" | "unavailable"; at: string | null;
   total: number | null; reviewed: number | null; failed: number | null;
   pending: number | null; notApplicable: number | null; protected: number | null;
-  waitingSource: number | null; aiReports: number | null; unknown: number | null;
+  waitingSource: number | null; unknown: number | null;
   failures: Array<{ id: string; code: string }>;
 };
 export function scenarioOperationalEvidence(snapshot: ScenarioSnapshot | null): ScenarioOperationalEvidence {
-  const empty: ScenarioOperationalEvidence = { status: "unavailable", at: null, total: null, reviewed: null, failed: null, pending: null, notApplicable: null, protected: null, waitingSource: null, aiReports: null, unknown: null, failures: [] };
+  const empty: ScenarioOperationalEvidence = { status: "unavailable", at: null, total: null, reviewed: null, failed: null, pending: null, notApplicable: null, protected: null, waitingSource: null, unknown: null, failures: [] };
   if (!snapshot || snapshot.index.status === "unavailable" || !Array.isArray(snapshot.index.sessions)) return empty;
   const rows = snapshot.index.sessions;
   if (rows.some(row => !row || typeof row !== "object" || (row.bank_id && row.bank_id !== snapshot.bankId))) return empty;
   const value = { ...empty, status: "observed" as const, at: typeof snapshot.index.updated_at === "string" ? snapshot.index.updated_at : null,
-    total: rows.length, reviewed: 0, failed: 0, pending: 0, notApplicable: 0, protected: 0, waitingSource: 0, aiReports: 0, unknown: 0 };
+    total: rows.length, reviewed: 0, failed: 0, pending: 0, notApplicable: 0, protected: 0, waitingSource: 0, unknown: 0 };
   for (const row of rows) {
-    const aiReportReady = (row as any).ai_report?.status === "ai_report_ready";
     switch (row.status) {
       case "model_reviewed": case "episode_directory_ready":
         if (projectSessionContextNode(row as any).automatedSourceCoverage?.status === "reviewed") value.reviewed++;
@@ -29,11 +28,9 @@ export function scenarioOperationalEvidence(snapshot: ScenarioSnapshot | null): 
         break;
       case "raw_available_summary_source_not_applicable": value.notApplicable++; break;
       case "raw_available_summary_protected": value.protected++; break;
-      case "raw_available_summary_waiting_source":
-        if (aiReportReady) value.aiReports++;
-        else value.waitingSource++;
-        break;
+      case "raw_available_summary_waiting_source": value.waitingSource++; break;
       case "raw_available_summary_pending": case "deterministic_projection_unreviewed": value.pending++; break;
+      case "raw_available_summary_ai_report": value.reviewed++; break;
       default: value.unknown++;
     }
   }

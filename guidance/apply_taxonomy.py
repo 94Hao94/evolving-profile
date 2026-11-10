@@ -9,7 +9,7 @@ from pathlib import Path
 from observation_rebuild import atomic
 from taxonomy_apply import eligible_change
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 INSTANCE = Path.home() / ".pg0/instances/hindsight-embed-agentmemory/instance.json"
 
 

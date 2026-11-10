@@ -13,6 +13,32 @@ def transcript(user, assistant="已完成。"):
 
 
 class RetentionWritePolicyTest(unittest.TestCase):
+    def test_legacy_role_header_provenance_is_recovered_for_retry(self):
+        raw = (
+            "[role: assistant; at: 2026-10-31T06:16:17.462Z; turn: t1; "
+            "raw_line_sha256: abc]\n旧版回执\n[assistant:end]\n\n"
+            "[role: user; at: 2026-10-31T07:13:10.890Z; turn: t2]\n"
+            "继续处理\n[user:end]"
+        )
+
+        rows = retention_policy.transcript_messages(raw)
+
+        self.assertEqual([row["role"] for row in rows], ["assistant", "user"])
+        self.assertEqual(rows[0]["source_record"]["turn"], "t1")
+        self.assertEqual(rows[0]["source_record"]["raw_line_sha256"], "abc")
+        self.assertEqual(rows[1]["content"], "继续处理")
+
+    def test_legacy_manual_recovery_header_without_end_marker_is_recovered(self):
+        raw = (
+            "[role: assistant; at: 2026-10-31T06:16:17.462Z; turn: t1]\n"
+            "旧版回执\n\n"
+            "[role: user; at: 2026-10-31T07:13:10.890Z; turn: t2]\n"
+            "继续处理"
+        )
+        rows = retention_policy.transcript_messages(raw)
+        self.assertEqual([row["role"] for row in rows], ["assistant", "user"])
+        self.assertEqual(rows[0]["content"], "旧版回执")
+
     def test_capture_fragments_keep_full_original_hash_length_and_quote_ranges(self):
         with tempfile.TemporaryDirectory() as root:
             q = RetentionQueue(Path(root) / "queue.json", threshold_tokens=300)

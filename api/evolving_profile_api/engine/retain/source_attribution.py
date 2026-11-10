@@ -28,10 +28,50 @@ def source_messages(chunk):
     except (ValueError, TypeError):
         pass
     rows = []
-    pattern = r"(?m)^(?:\[source_record: (\{[^\n]*\})\]\n)?\[role: (user|assistant)\]\n([\s\S]*?)\n\[\2:end\](?:\n|$)"
-    for match in re.finditer(pattern, chunk):
+    # Keep compatibility with legacy queue fragments whose provenance was
+    # embedded in ``[role: ...; key: value]`` rather than a separate
+    # source_record line.  Both forms are authoritative source envelopes.
+    pattern = (
+        r"(?m)^(?:\[source_record:\s*(\{[^\n]*\})\]\n)?"
+        r"\[role:\s*(user|assistant)(?:;\s*([^\]]*))?\]\n"
+        r"([\s\S]*?)\n\[\2:end\](?:\n|$)"
+    )
+    matches = list(re.finditer(pattern, chunk))
+    for match in matches:
         record = json.loads(match.group(1)) if match.group(1) else {}
-        rows.append({"role": match.group(2), "content": match.group(3), "source_record": record})
+        for part in (match.group(3) or "").split(";"):
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            key, value = key.strip(), value.strip()
+            if key and value and key not in record:
+                record[key] = value
+        rows.append({"role": match.group(2), "content": match.group(4), "source_record": record})
+    if rows:
+        return rows
+
+    # Compatibility with the older manual-recovery writer which omitted the
+    # role terminator and relied on the next role header as the boundary.
+    header = re.compile(
+        r"(?m)^(?:\[source_record:\s*(\{[^\n]*\})\]\n)?"
+        r"\[role:\s*(user|assistant)(?:;\s*([^\]]*))?\]\n"
+    )
+    headers = list(header.finditer(chunk))
+    for index, match in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(chunk)
+        body = chunk[match.end() : end].strip()
+        body = re.sub(r"\n\[(?:user|assistant):end\]\s*$", "", body).strip()
+        if not body:
+            continue
+        record = json.loads(match.group(1)) if match.group(1) else {}
+        for part in (match.group(3) or "").split(";"):
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            key, value = key.strip(), value.strip()
+            if key and value and key not in record:
+                record[key] = value
+        rows.append({"role": match.group(2), "content": body, "source_record": record})
     return rows
 
 

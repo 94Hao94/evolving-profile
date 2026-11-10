@@ -9,7 +9,13 @@ from evolving_profile_api.engine.retain.fact_extraction import (
     chunk_text,
     extract_facts_from_contents,
 )
-from evolving_profile_api.engine.retain.source_attribution import _text, iter_source_fragments, validate_write_policy, verify_attribution
+from evolving_profile_api.engine.retain.source_attribution import (
+    _text,
+    iter_source_fragments,
+    source_messages,
+    validate_write_policy,
+    verify_attribution,
+)
 from evolving_profile_api.engine.retain.types import RetainContent
 from tests.test_fact_extraction_retry import _make_config, _make_llm_config
 
@@ -32,6 +38,36 @@ def source(role, text, message_id, allowed=True, blocks=False):
         },
         "write_policy": {"version": 1, "knowledge_allowed": allowed},
     }
+
+
+def test_legacy_role_header_is_parsed_as_a_source_envelope():
+    chunk = (
+        "[role: assistant; at: 2026-10-31T06:16:17.462Z; turn: t1]\n"
+        "历史回执\n[assistant:end]\n\n"
+        "[role: user; at: 2026-10-31T07:13:10.890Z; turn: t2]\n"
+        "继续处理\n[user:end]"
+    )
+
+    rows = source_messages(chunk)
+
+    assert [row["role"] for row in rows] == ["assistant", "user"]
+    assert rows[0]["source_record"] == {
+        "at": "2026-10-31T06:16:17.462Z",
+        "turn": "t1",
+    }
+    assert rows[1]["content"] == "继续处理"
+
+
+def test_legacy_manual_recovery_header_without_end_marker_is_parsed():
+    chunk = (
+        "[role: assistant; at: 2026-10-31T06:16:17.462Z; turn: t1]\n"
+        "旧版回执\n\n"
+        "[role: user; at: 2026-10-31T07:13:10.890Z; turn: t2]\n"
+        "继续处理"
+    )
+    rows = source_messages(chunk)
+    assert [row["role"] for row in rows] == ["assistant", "user"]
+    assert rows[0]["content"] == "旧版回执"
 
 
 def witness(chunk, index, quote):

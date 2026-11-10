@@ -4,7 +4,7 @@ import asyncio,datetime as dt,json
 from pathlib import Path
 import asyncpg
 from observation_rebuild import atomic
-INSTANCE=Path.home()/'.pg0/instances/hindsight-embed-agentmemory/instance.json';BANK='personal-memory'
+INSTANCE=Path.home()/'.pg0/instances/hindsight-embed-agentmemory/instance.json';BANK='ep-default-bank-v2-shadow-20260811'
 async def main(before_path,output_path):
  before=json.loads(Path(before_path).read_text())['items'];cfg=json.loads(INSTANCE.read_text());db=await asyncpg.connect(user=cfg['username'],password=cfg['password'],database=cfg['database'],host='127.0.0.1',port=cfg['port'])
  try:

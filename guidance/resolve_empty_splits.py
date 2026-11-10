@@ -6,7 +6,7 @@ from pathlib import Path
 import urllib.parse,urllib.request
 from observation_rebuild import atomic
 
-API='http://127.0.0.1:8888';BANK='personal-memory'
+API='http://127.0.0.1:8888';BANK='ep-default-bank-v2-shadow-20260811'
 def get(mid):
  with urllib.request.urlopen(API+'/v1/default/banks/'+urllib.parse.quote(BANK,safe='')+'/memories/'+mid,timeout=20) as r:return json.loads(r.read())
 def patch(mid,body):

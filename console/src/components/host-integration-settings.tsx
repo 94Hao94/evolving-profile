@@ -44,6 +44,16 @@ export function HostIntegrationSettings({initialData}:{initialData?:HostIntegrat
       {report?.hosts.map(row=><article key={row.host_id} className="min-w-0 rounded-xl border bg-card p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{label(row)}</h3>
           <span className="rounded-md border bg-muted px-2 py-1 text-xs">{state(row.installation.state)}</span></div>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{locale.startsWith('zh') ? '传输' : 'Transports'}:</span>
+          {(row.transports?.length ? row.transports : ['unknown']).map((transport) => <span key={transport} className="rounded border px-2 py-0.5 font-mono">{transport}</span>)}
+          <span className="ml-2">{locale.startsWith('zh') ? '会话关联' : 'Session'}: {row.readiness.session_association?.state ?? 'unknown'}</span>
+          <span>{locale.startsWith('zh') ? '解析器' : 'Parser'}: {row.readiness.session_association?.parser ?? 'none'}</span>
+          <span>{locale.startsWith('zh') ? '回执' : 'Receipt'}: {row.readiness.session_association?.receipt ?? 'not_measured'}</span>
+          <span>{locale.startsWith('zh') ? '会话 ID' : 'Session ID'}: {row.readiness.session_association?.session_id ?? 'unknown'}</span>
+          <span>{locale.startsWith('zh') ? '原文' : 'Transcript'}: {row.readiness.session_association?.transcript ?? 'unknown'}</span>
+          {row.readiness.session_association?.transcript_path&&<span className="basis-full truncate" title={row.readiness.session_association.transcript_path}>{locale.startsWith('zh') ? '原文路径' : 'Transcript path'}: {row.readiness.session_association.transcript_path}</span>}
+        </div>
         <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">{Object.entries(row.readiness.capabilities).map(([id,cap])=><div key={id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-2 py-1.5">
           <dt>{t.has(`capabilities.${id}`)?t(`capabilities.${id}`):id}</dt><dd className="whitespace-nowrap text-xs text-muted-foreground">{state(capabilityState(cap))}</dd>
         </div>)}</dl>

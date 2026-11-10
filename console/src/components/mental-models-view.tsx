@@ -192,7 +192,7 @@ export function MentalModelsView() {
       throw new Error(t("toastRefreshTimeout"));
     } catch (error) {
       // Error toast handled by API client interceptor
-
+    
       throw error;
     } finally {
       setRefreshingIds((prev) => {
@@ -214,7 +214,7 @@ export function MentalModelsView() {
       setDeleteTarget(null);
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setDeleting(false);
@@ -232,7 +232,7 @@ export function MentalModelsView() {
       toast.success("Mental model content cleared");
     } catch (error) {
       // Error toast handled by API client interceptor
-
+    
       throw error;
     } finally {
       setClearing(false);
@@ -776,7 +776,7 @@ function CreateMentalModelDialog({
       onCreated();
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setCreating(false);
@@ -1253,7 +1253,7 @@ function UpdateMentalModelDialog({
       onUpdated(updated);
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setUpdating(false);

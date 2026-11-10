@@ -110,6 +110,51 @@ async def test_missing_witness_cannot_silently_store_world_claim():
 
 
 @pytest.mark.asyncio
+async def test_valid_source_witness_survives_non_string_fact_fields():
+    """A provider schema drift must not discard a provable source witness.
+
+    Some OpenAI-compatible models return ``what`` (or another descriptive
+    field) as an object/list even when they return a valid role/index/exact
+    quote.  The source bytes are the authority in this mode, so the parser
+    should retain the canonical witness instead of failing the whole chunk.
+    """
+    text = "以后提交前必须让我检查最终文件。"
+    facts, _ = await extract(
+        [{"role": "user", "content": text}],
+        [
+            {
+                "what": ["模型把事实字段错误地返回成列表"],
+                "when": {"date": "2026-10-08"},
+                "who": ["用户"],
+                "why": {"reason": "流程约束"},
+                "fact_type": "world",
+                "source_quote": text,
+                "source_role": "user",
+                "source_message_index": 0,
+            }
+        ],
+    )
+    assert len(facts) == 1
+    assert facts[0].fact == text
+    assert facts[0].metadata["source_quote"] == text
+
+
+@pytest.mark.asyncio
+async def test_invalid_source_witness_still_fails_closed_with_non_string_fields():
+    """Schema coercion must never turn an unproved claim into a memory."""
+    with pytest.raises(RuntimeError, match="source"):
+        await extract(
+            [{"role": "user", "content": "请解释这个方案。"}],
+            [
+                {
+                    "what": ["没有原文见证"],
+                    "fact_type": "world",
+                }
+            ],
+        )
+
+
+@pytest.mark.asyncio
 async def test_source_witness_survives_pipeline_fact_conversion():
     from evolving_profile_api.engine.retain.fact_extraction import extract_facts_from_contents
     from evolving_profile_api.engine.retain.types import RetainContent

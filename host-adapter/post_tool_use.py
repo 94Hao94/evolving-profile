@@ -48,7 +48,7 @@ def main():
         from receipts import record_host_tool_response
         observed = record_host_tool_response(
             Path.home() / '.evolving-profile/guidance-v1/receipts',
-            {**hook_input, 'host_id': os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex'},
+            {**hook_input, 'host_id': os.environ.get('HINDSIGHT_AGENT_NAME') or os.environ.get('EVOLVING_PROFILE_HOST_ID') or 'unknown'},
         )
         if observed.get('state') == 'receipt_mismatch':
             print('[Evolving Profile] guidance host receipt mismatch', file=sys.stderr)

@@ -1,7 +1,7 @@
 from playwright.sync_api import sync_playwright
 
 
-BASE = "http://localhost:10002/zh-CN/banks/personal-memory?view=flow"
+BASE = "http://localhost:10002/zh-CN/banks/ep-default-bank-v2-shadow-20260811?view=flow"
 SUMMARY = "标准层：项目乙预算已比较，要求保留税费口径。\n助手回复只表示会话记录，不是外部核验。"
 PROMPT = {
     "prompt_id": "episode-visual-fixture",
@@ -44,7 +44,7 @@ def install_api_fixtures(page):
             route.fulfill(json={"decision": "agent_decides", "recommended_route": "agent_decides",
                                 "reason": "fixture", "catalog_hints": []})
         elif url.endswith("/api/banks"):
-            route.fulfill(json={"banks": [{"bank_id": "personal-memory"}]})
+            route.fulfill(json={"banks": [{"bank_id": "ep-default-bank-v2-shadow-20260811"}]})
         elif url.endswith("/api/version"):
             route.fulfill(json={"api_version": "fixture", "features": {}})
         else:

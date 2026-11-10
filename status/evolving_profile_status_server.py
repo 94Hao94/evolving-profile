@@ -21,7 +21,7 @@ from topic_catalog import TopicCatalog,knowledge_review,redact_unreviewed_page
 from lib.memory_policy import classify_memory_policy
 API=os.environ.get('EVOLVING_PROFILE_API_URL','http://127.0.0.1:12088')
 CONTROLLER=os.environ.get('EVOLVING_PROFILE_CONTROLLER_URL','http://127.0.0.1:12079')
-BANK='personal-memory'
+BANK='ep-default-bank-v2-shadow-20260811'
 PAGE_FILE=STATE_ROOT/'control-plane/recall-observability.html'
 GUIDANCE_V1_SRC=ROOT/'guidance'
 GUIDANCE_V1_CONFIG=STATE_ROOT/'guidance-v1/guidance-v1.json'

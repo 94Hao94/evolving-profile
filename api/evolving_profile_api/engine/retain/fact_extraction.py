@@ -44,6 +44,16 @@ from .source_attribution import (
 )
 
 
+class RetainExtractionContractError(RuntimeError):
+    """All chunks failed the extraction contract; never treat this as empty success."""
+
+    error_code = "retain_extraction_contract_failed"
+
+    def __init__(self, message: str, *, records: list[dict[str, Any]] | None = None):
+        super().__init__(message)
+        self.records = records or []
+
+
 def _extract_map_entities(
     entity_obj: dict,
     fields: dict[str, MapField],
@@ -128,6 +138,42 @@ def _infer_temporal_date(fact_text: str, event_date: datetime | None) -> str | N
 
 def _sanitize_text(text: str | None) -> str | None:
     return sanitize_llm_output(text)
+
+
+def _coerce_fact_text(value: Any) -> str | None:
+    """Return a bounded textual value for a fact's descriptive fields.
+
+    ``skip_validation=True`` is intentional in the retain path: it lets us
+    classify provider/schema drift ourselves and keep the source witness when
+    one is present.  OpenAI-compatible models occasionally return ``what`` or
+    one of its companion fields as a list/object despite the string schema.
+    Calling ``str.join`` on that value used to raise before source attribution
+    ran, so a valid original quote was discarded as an ``all facts unusable``
+    failure.  Normalize only the descriptive fields; authority still comes
+    from :func:`verify_attribution` below.
+    """
+    if value is None or value == "" or value == [] or value == {}:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return None if not text or text.upper() == "N/A" else text
+    if isinstance(value, (list, tuple)):
+        parts = [part for item in value if (part := _coerce_fact_text(item))]
+        return "；".join(parts) if parts else None
+    if isinstance(value, dict):
+        # Prefer common wrappers emitted by lax JSON-mode models.  If none is
+        # available, keep a deterministic JSON representation instead of
+        # throwing away the field (or raising a TypeError during join).
+        for key in ("text", "content", "value", "description", "name"):
+            if key in value:
+                nested = _coerce_fact_text(value[key])
+                if nested:
+                    return nested
+        try:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
 
 
 def _coerce_entity_strings(v: Any) -> Any:
@@ -1598,6 +1644,7 @@ async def _extract_facts_from_chunk(
             # Lenient parsing of facts from raw JSON
             chunk_facts = []
             has_malformed_facts = False
+            source_attribution_errors: list[str] = []
 
             # Handle malformed LLM responses
             coerced_response_json = _coerce_fact_response(extraction_response_json)
@@ -1637,6 +1684,20 @@ async def _extract_facts_from_chunk(
                     has_malformed_facts = True
                     continue
 
+                # Verify the witness before interpreting any model-generated
+                # descriptive field.  In attribution mode the original source
+                # bytes are authoritative; a lax JSON shape must not make a
+                # valid source quote disappear before this check runs.
+                witness = None
+                if requires_attribution(metadata):
+                    try:
+                        witness = verify_attribution(chunk, llm_fact, metadata)
+                    except (RuntimeError, ValueError) as exc:
+                        source_attribution_errors.append(str(exc))
+                        logger.error("Source attribution rejected fact %s: %s", i, exc)
+                        has_malformed_facts = True
+                        continue
+
                 # Helper to get non-empty value
                 def get_value(field_name):
                     value = llm_fact.get(field_name)
@@ -1645,19 +1706,25 @@ async def _extract_facts_from_chunk(
                     return None
 
                 # NEW FORMAT: what, when, who, why (all required)
-                what = get_value("what")
-                when = get_value("when")
-                who = get_value("who")
-                why = get_value("why")
+                what = _coerce_fact_text(get_value("what"))
+                when = _coerce_fact_text(get_value("when"))
+                who = _coerce_fact_text(get_value("who"))
+                why = _coerce_fact_text(get_value("why"))
 
                 # Fallback to old format if new fields not present
                 if not what:
-                    what = get_value("factual_core")
+                    what = _coerce_fact_text(get_value("factual_core"))
                 if not what:
-                    what = get_value("text")
+                    what = _coerce_fact_text(get_value("text"))
+
+                combined_text: str | None = None
                 if not what:
-                    # In verbatim mode, 'what' is intentionally absent — text is backfilled from chunk
-                    if extraction_mode != "verbatim":
+                    if witness is not None:
+                        # A valid source witness is enough to retain the fact;
+                        # ``what`` is model metadata, not authority in this
+                        # mode.  Use the exact canonical source text below.
+                        combined_text = witness[0]
+                    elif extraction_mode != "verbatim":
                         logger.warning(f"Skipping fact {i}: missing 'what' field")
                         # Count it as malformed so the re-prompt below covers this case too.
                         # A model that emits well-formed JSON with the wrong field shape (no
@@ -1691,27 +1758,28 @@ async def _extract_facts_from_chunk(
                 # Build combined fact text from the 4 dimensions: what | when | who | why
                 # In verbatim mode, leave combined_text empty — _collapse_to_verbatim backfills it
                 fact_data = {}
-                if extraction_mode == "verbatim":
-                    combined_text = ""
-                else:
-                    combined_parts = [what]
+                if combined_text is None:
+                    if extraction_mode == "verbatim":
+                        combined_text = ""
+                    else:
+                        combined_parts = [what]
 
-                    if when:
-                        combined_parts.append(f"When: {when}")
+                        if when:
+                            combined_parts.append(f"When: {when}")
 
-                    if who:
-                        combined_parts.append(f"Involving: {who}")
+                        if who:
+                            combined_parts.append(f"Involving: {who}")
 
-                    if why:
-                        combined_parts.append(why)
+                        if why:
+                            combined_parts.append(why)
 
-                    combined_text = " | ".join(combined_parts)
+                        combined_text = " | ".join(combined_parts)
 
                 # Add temporal fields
                 # For events: occurred_start/occurred_end (when the event happened)
                 if fact_kind == "event":
-                    occurred_start = get_value("occurred_start")
-                    occurred_end = get_value("occurred_end")
+                    occurred_start = _coerce_fact_text(get_value("occurred_start"))
+                    occurred_end = _coerce_fact_text(get_value("occurred_end"))
 
                     # If LLM didn't set temporal fields, try to extract them from the fact text
                     if not occurred_start:
@@ -1825,7 +1893,6 @@ async def _extract_facts_from_chunk(
 
                 # Build Fact model instance
                 try:
-                    witness = verify_attribution(chunk, llm_fact, metadata)
                     if witness is not None:
                         combined_text, fact_type, fact_data["metadata"] = witness
                     fact = Fact(fact=combined_text, fact_type=fact_type, **fact_data)
@@ -1865,9 +1932,13 @@ async def _extract_facts_from_chunk(
             # (#3708). A model that legitimately returns `"facts": []` never lands here:
             # nothing was dropped, so has_malformed_facts stays False.
             if has_malformed_facts and not chunk_facts:
+                reason = "wrong shape or missing required fields"
+                if source_attribution_errors:
+                    unique_source_errors = list(dict.fromkeys(source_attribution_errors))[:3]
+                    reason = "invalid source attribution (" + "; ".join(unique_source_errors) + ")"
                 raise RuntimeError(
                     f"Fact extraction failed: all {len(raw_facts)} facts returned by the LLM were "
-                    f"unusable after {outer_attempts} attempts (wrong shape, missing required fields or invalid source attribution). "
+                    f"unusable after {outer_attempts} attempts ({reason}). "
                     f"Model '{llm_config.model}' may not honour the extraction schema — consider enabling "
                     f"EVOLVING_PROFILE_API_LLM_STRICT_SCHEMA_RETAIN or using a model with strict schema support."
                 )
@@ -2173,7 +2244,7 @@ async def _write_batch_extraction_errors(
     schema: str | None,
     errors: RetainExtractionErrors,
 ) -> None:
-    """Persist non-fatal Batch API extraction errors into operation result_metadata."""
+    """Persist Batch API extraction errors into operation result_metadata before return/raise."""
     if not pool or not operation_id or errors.count == 0:
         return
 
@@ -2196,7 +2267,9 @@ async def _write_batch_extraction_errors(
             WHERE operation_id = $1
             """,
             operation_id,
-            json.dumps(errors.to_dict()),
+            # Escape non-UTF-8 provider output (including lone surrogates) so
+            # failure evidence itself cannot make the metadata write fail.
+            json.dumps(errors.to_dict(), ensure_ascii=True),
         )
 
 
@@ -2439,7 +2512,7 @@ async def extract_facts_from_contents_batch_api(
         if not result:
             message = f"{custom_id}: missing batch result"
             logger.warning(message)
-            extraction_errors.add(message)
+            extraction_errors.add(message, code="batch_result_missing", raw_text=chunk_content)
             chunks_metadata.append(
                 ChunkMetadata(
                     chunk_text=chunk_content, fact_count=0, content_index=content_index, chunk_index=chunk_idx
@@ -2451,7 +2524,7 @@ async def extract_facts_from_contents_batch_api(
         if result.get("error"):
             message = f"{custom_id}: {result['error']}"
             logger.error(f"Error in {message}")
-            extraction_errors.add(message)
+            extraction_errors.add(message, code="batch_provider_error", raw_text=chunk_content)
             chunks_metadata.append(
                 ChunkMetadata(
                     chunk_text=chunk_content, fact_count=0, content_index=content_index, chunk_index=chunk_idx
@@ -2466,7 +2539,7 @@ async def extract_facts_from_contents_batch_api(
         if not choices:
             message = f"{custom_id}: no choices in response"
             logger.warning(message)
-            extraction_errors.add(message)
+            extraction_errors.add(message, code="response_choices_missing", raw_text=chunk_content)
             chunks_metadata.append(
                 ChunkMetadata(
                     chunk_text=chunk_content, fact_count=0, content_index=content_index, chunk_index=chunk_idx
@@ -2483,10 +2556,15 @@ async def extract_facts_from_contents_batch_api(
             # embedded control chars) so recoverable batch responses — e.g.
             # transient Gemini quirks — aren't dropped along with all their facts.
             extraction_response_json = parse_llm_json(content_str)
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
             message = f"{custom_id}: failed to parse JSON: {e}"
             logger.error(message)
-            extraction_errors.add(message)
+            extraction_errors.add(
+                message,
+                code="response_json_parse_failed",
+                raw_text=chunk_content,
+                candidate=content_str,
+            )
             chunks_metadata.append(
                 ChunkMetadata(
                     chunk_text=chunk_content, fact_count=0, content_index=content_index, chunk_index=chunk_idx
@@ -2499,7 +2577,12 @@ async def extract_facts_from_contents_batch_api(
         if extraction_response_json is None:
             message = f"{custom_id}: LLM returned non-dict JSON ({response_type_name})"
             logger.error(message)
-            extraction_errors.add(message)
+            extraction_errors.add(
+                message,
+                code="response_shape_invalid",
+                raw_text=chunk_content,
+                candidate=content_str,
+            )
             chunks_metadata.append(
                 ChunkMetadata(
                     chunk_text=chunk_content, fact_count=0, content_index=content_index, chunk_index=chunk_idx
@@ -2515,33 +2598,60 @@ async def extract_facts_from_contents_batch_api(
             if not isinstance(llm_fact, dict):
                 continue
 
+            # As in the streaming path, validate source authority before
+            # touching provider-generated descriptive fields.  Batch responses
+            # cannot be re-prompted individually, but a valid witness can still
+            # be retained safely when a model emits a list/object for ``what``.
+            witness = None
+            if requires_attribution(contents[content_index].metadata):
+                try:
+                    witness = verify_attribution(chunk_content, llm_fact, contents[content_index].metadata)
+                except (RuntimeError, ValueError) as exc:
+                    message = f"{custom_id}: invalid source attribution for fact {i}: {exc}"
+                    logger.error(message)
+                    extraction_errors.add(
+                        message,
+                        code="source_attribution_invalid",
+                        raw_text=chunk_content,
+                        candidate=json.dumps(llm_fact, ensure_ascii=False),
+                    )
+                    continue
+
             def get_value(field_name):
                 value = llm_fact.get(field_name)
                 if value and value != "" and value != [] and value != {} and str(value).upper() != "N/A":
                     return value
                 return None
 
-            what = get_value("what")
+            what = _coerce_fact_text(get_value("what"))
             if not what:
-                what = get_value("factual_core")
+                what = _coerce_fact_text(get_value("factual_core"))
             if not what:
-                what = get_value("text")
+                what = _coerce_fact_text(get_value("text"))
             if not what:
-                # Same schema-drift signal as the streaming path (#3708): a fact object
-                # carrying none of the text keys means the model ignored the schema.
-                # The batch API cannot re-prompt a single request, so record it on the
-                # operation instead — that is what extraction_errors is for, and
-                # EVOLVING_PROFILE_API_FAIL_ON_EXTRACTION_ERRORS can escalate it to a failure.
-                # A key that is present but empty/"N/A" stays a quiet skip.
-                if not any(key in llm_fact for key in ("what", "factual_core", "text")):
-                    message = f"{custom_id}: fact {i} has no 'what'/'factual_core'/'text' field"
-                    logger.warning(message)
-                    extraction_errors.add(message)
-                continue
+                if witness is not None:
+                    what = witness[0]
+                else:
+                    # Same schema-drift signal as the streaming path (#3708): a fact object
+                    # carrying none of the text keys means the model ignored the schema.
+                    # The batch API cannot re-prompt a single request, so record it on the
+                    # operation instead — that is what extraction_errors is for, and
+                    # EVOLVING_PROFILE_API_FAIL_ON_EXTRACTION_ERRORS can escalate it to a failure.
+                    # A key that is present but empty/"N/A" stays a quiet skip.
+                    if not any(key in llm_fact for key in ("what", "factual_core", "text")):
+                        message = f"{custom_id}: fact {i} has no 'what'/'factual_core'/'text' field"
+                        logger.warning(message)
+                        extraction_errors.add(
+                            message,
+                            code="fact_text_missing",
+                            raw_text=chunk_content,
+                            candidate=json.dumps(llm_fact, ensure_ascii=False),
+                        )
+                    continue
 
-            when = get_value("when")
-            who = get_value("who")
-            why = get_value("why")
+            when = _coerce_fact_text(get_value("when"))
+            who = _coerce_fact_text(get_value("who"))
+            why = _coerce_fact_text(get_value("why"))
 
             # Critical field: fact_type — only "assistant" maps to "experience", everything else is "world"
             # Critical field: fact_type — "assistant" maps to "experience", everything else is "world".
@@ -2572,8 +2682,8 @@ async def extract_facts_from_contents_batch_api(
                 fact_kind = "conversation"
 
             if fact_kind == "event":
-                occurred_start = get_value("occurred_start")
-                occurred_end = get_value("occurred_end")
+                occurred_start = _coerce_fact_text(get_value("occurred_start"))
+                occurred_end = _coerce_fact_text(get_value("occurred_end"))
 
                 if not occurred_start:
                     fact_data["occurred_start"] = _infer_temporal_date(combined_text, event_date)
@@ -2672,7 +2782,6 @@ async def extract_facts_from_contents_batch_api(
             fact_data["mentioned_at"] = event_date.isoformat() if event_date is not None else None
 
             try:
-                witness = verify_attribution(chunk_content, llm_fact, contents[content_index].metadata)
                 if witness is not None:
                     combined_text, fact_type, fact_data["metadata"] = witness
                 fact = Fact(fact=combined_text, fact_type=fact_type, **fact_data)
@@ -2680,7 +2789,12 @@ async def extract_facts_from_contents_batch_api(
             except Exception as e:
                 message = f"{custom_id}: failed to create Fact model for fact {i}: {e}"
                 logger.error(message)
-                extraction_errors.add(message)
+                extraction_errors.add(
+                    message,
+                    code="fact_model_invalid",
+                    raw_text=chunk_content,
+                    candidate=json.dumps(llm_fact, ensure_ascii=False),
+                )
                 continue
 
         all_facts_from_llm.extend(chunk_facts)
@@ -2749,6 +2863,21 @@ async def extract_facts_from_contents_batch_api(
     _inject_label_tags(extracted_facts, config)
 
     await _write_batch_extraction_errors(pool, operation_id, schema, extraction_errors)
+
+    # A batch response can contain no usable facts even though the transport
+    # itself completed.  Returning ``[]`` here lets the streaming writer create
+    # an empty document and mark the retain completed, which is indistinguishable
+    # from a legitimate "nothing to retain" response and loses the source from
+    # the memory path.  Preserve the bounded raw/candidate records above and
+    # fail the operation explicitly; partial success still returns its usable
+    # facts together with extraction-error metadata.
+    if not extracted_facts and extraction_errors.count:
+        raise RetainExtractionContractError(
+            "Fact extraction failed: zero usable facts after schema/source attribution contract failures "
+            "(error_code=retain_extraction_contract_failed); the source payload remains attached to the "
+            "operation for manual review",
+            records=extraction_errors.records,
+        )
 
     logger.info(f"Batch API extracted {len(extracted_facts)} facts from {len(all_chunks_info)} chunks")
 

@@ -163,18 +163,11 @@ def initialize_tracing(
     """
     global _tracer, _tracing_enabled, _provider
 
-    # Imported lazily: __version__ is defined at the end of evolving_profile_api/__init__.py,
-    # after the imports that pull in this module.
-    from evolving_profile_api import __version__
+    from evolving_profile_api.runtime_identity import runtime_resource_attributes
 
-    # Create resource with service information
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "service.version": __version__,
-            "deployment.environment.name": deployment_environment,
-        }
-    )
+    resource_attributes = runtime_resource_attributes(service_name)
+    resource_attributes["deployment.environment.name"] = deployment_environment
+    resource = Resource.create(resource_attributes)
 
     # Parse headers
     headers_dict = {}

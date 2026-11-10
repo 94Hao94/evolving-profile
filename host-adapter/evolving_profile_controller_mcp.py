@@ -15,6 +15,8 @@ import sys
 import uuid
 import datetime
 import tempfile
+import threading
+import time
 from lib import platform_lock as fcntl
 import urllib.parse
 import urllib.request
@@ -40,13 +42,30 @@ from lib.jev_judge import project_tool_review, review as jev_review, caller_view
 from lib.process_memory import ProcessMemoryStore, compute_intervention, OUTCOMES, INDEPENDENT_VERIFIERS
 from lib.recall_relevance import resolve_min_relevance, apply_relevance_policy, classify_candidate, adaptive_recall_hint
 from lib.process_memory_evaluation import evaluate_ab, transfer_gate, build_revalidation_queue
+from lib.personal_records import search as search_personal_record_index
 from runtime_settings import load_runtime_settings, module_enabled, route_policy
 
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 VERSION = "5.1.0-dev-memory-quality"
 ADAPTER_BUILD_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 CURRENT_TOOL_CALL = None
+_PARENT_PID = os.getppid()
+
+
+def _watch_parent_process() -> None:
+    """Exit an stdio MCP child when the host process that owns its pipes exits.
+
+    Desktop hosts normally close the child by closing stdio. Older sessions can
+    leave the Python child reparented to launchd when the host crashes or is
+    force-quit; keeping that child alive makes runtime evidence look mixed and
+    can retain stale modules. A small daemon watcher cleans up only after the
+    original parent PID changes, so it never interrupts a live host session.
+    """
+    while True:
+        time.sleep(5)
+        if os.getppid() != _PARENT_PID:
+            os._exit(0)
 
 PROCESS_DIMENSION_BY_KIND = {
     'trace': 'agent_process_trajectory',
@@ -569,12 +588,22 @@ EVIDENCE_DECISION_TOOL={'name':'record_evidence_decision','description':'记录�
     'sufficiency':{'type':'string','enum':['sufficient','insufficient','conflicted','unknown']},'conflicts':{'type':'array','items':{'type':'string'},'maxItems':8},
     'source_ids':{'type':'array','items':{'type':'string'},'maxItems':20},'next_action':{'type':'string'},'stop_reason':{'type':'string'}},
     'required':['check_id','need','chosen_route','sufficiency']},'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False}}
-TASK_STATE_TOOL={'name':'update_task_state','description':'由当前Agent更新会话级工作状态：目标、约束、已完成、未解决和当前对象。只作当前任务投影，不生成长期用户事实；当前Prompt始终优先。','inputSchema':{'type':'object','additionalProperties':False,'properties':{
+TASK_STATE_TOOL={'name':'update_task_state','description':'由当前Agent更新会话级工作状态：目标、约束、已完成、未解决、当前对象以及规范化 working_state（阶段、下一步、开放环、阻塞、检查点）。只作当前任务投影，不生成长期用户事实；当前Prompt始终优先。','inputSchema':{'type':'object','additionalProperties':False,'properties':{
     'session_id':{'type':'string','minLength':1},'turn_id':{'type':'string'},'check_id':{'type':'string'},'current_objective':{'type':'string'},'current_message':{'type':'string'},
     'expected_version':{'type':'integer','minimum':0},'update_reason':{'type':'string','maxLength':160},
     'constraints':{'type':'array','items':{'type':'string'},'maxItems':20},'completed':{'type':'array','items':{'type':'string'},'maxItems':30},
     'unresolved':{'type':'array','items':{'type':'string'},'maxItems':30},'objects':{'type':'array','items':{'type':'string'},'maxItems':20},
-    'source_versions':{'type':'object','additionalProperties':{'type':'string'}}},'required':['session_id']},'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False}}
+    'source_versions':{'type':'object','additionalProperties':{'type':'string'}},
+    'working_state':{'type':'object','additionalProperties':False,'properties':{
+        'status':{'type':'string'},'phase':{'type':'string'},'goal':{'type':'string'},'next_action':{'type':'string'},
+        'open_loops':{'type':'array','items':{'type':'string'},'maxItems':30},'blocked_by':{'type':'array','items':{'type':'string'},'maxItems':20},
+        'pending_decisions':{'type':'array','items':{'type':'string'},'maxItems':20},'checkpoint':{'type':'object'},
+        'deadline':{'type':'string'},'last_outcome':{'type':'object'},'feedback':{'type':'object'}
+    }},
+    'status':{'type':'string'},'phase':{'type':'string'},'goal':{'type':'string'},'next_action':{'type':'string'},
+    'open_loops':{'type':'array','items':{'type':'string'},'maxItems':30},'blocked_by':{'type':'array','items':{'type':'string'},'maxItems':20},
+    'pending_decisions':{'type':'array','items':{'type':'string'},'maxItems':20},'checkpoint':{'type':'object'},
+    'deadline':{'type':'string'},'last_outcome':{'type':'object'},'feedback':{'type':'object'}},'required':['session_id']},'annotations':{'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False}}
 CONTEXT_SUMMARY_TOOL = {
     'name': 'read_context_summary',
     'description': '读取EP的Session/Conversation或Project Context摘要。多主题Session首次只返回episode目录；指定episode_id后才返回该段compact/standard/full正文。摘要只用于情境导航和解开指代，不是Bank事实；深读前核验来源修订。',
@@ -628,6 +657,15 @@ EXTERNAL_RAG_TOOL = {
     'description': '只搜索Web配置的外部RAG目录，不读取EP Bank、Recall、Research或偏好；返回外部文件路径和片段定位。RAG关闭或未配置时明确返回disabled/root_unavailable。',
     'inputSchema': {'type':'object','additionalProperties':False,'properties': {'query': {'type':'string','minLength':1}, 'limit': {'type':'integer','minimum':1,'maximum':50,'default':8}}, 'required':['query']},
     'annotations': {'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
+}
+PERSONAL_RECORD_TOOL = {
+    'name':'personal_record_search',
+    'description':'按人名、电话、固定电话、邮箱、证件号、车牌或账号引用查询本地结构化个人记录索引。返回字段的source session/turn/transcript定位和relation_confidence；只有原文明确标签或结构化人物块才建立人物—字段绑定，多人共现但关系不明的记录保持unbound。只返回用户通过宿主提交并由EP本地索引的记录，不是全盘扫描，也不把候选当作外部核验事实。',
+    'inputSchema':{'type':'object','additionalProperties':False,'properties':{
+        'query':{'type':'string','minLength':1,'description':'人名、联系人、电话、邮箱、证件号或凭据引用的精确/部分查询词'},
+        'limit':{'type':'integer','minimum':1,'maximum':100,'default':20},
+        'check_id':{'type':'string'}},'required':['query']},
+    'annotations':{'readOnlyHint':True,'destructiveHint':False,'idempotentHint':True,'openWorldHint':False},
 }
 JEV_RISK_TOOL = {
     'name': 'review_operation_risk',
@@ -960,7 +998,10 @@ def _route_receipt_path(root, check_id, binding=None):
     """Use the existing ingress SHA256 identity for every route outcome."""
     identity = str(check_id or '').strip()
     if not identity: raise ValueError('route_receipt_check_id_required')
-    host=(binding or {}).get('host_id') or os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')
+    # The stdio controller is Codex's historical default entry point.  Keep
+    # that backward-compatible default when no host identity is supplied, but
+    # require explicit owner/install scope for every named non-Codex host.
+    host=(binding or {}).get('host_id') or os.environ.get('EVOLVING_PROFILE_HOST_ID') or os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex'
     if host!='codex':
         scope={key:(binding or {}).get(key) or os.environ.get(env) for key,env in
                (('owner_id','EVOLVING_PROFILE_OWNER_ID'),('installation_id','EVOLVING_PROFILE_INSTALLATION_ID'))}
@@ -997,6 +1038,36 @@ def _route_receipt_counts(receipt):
         receipt['source_navigation_returned_ids'] = list(dict.fromkeys(mid for event in navigation_events for mid in event.get('source_navigation_returned_ids') or []))
     receipt['delivery_state'] = ('failed' if failures == len(events) else 'partial_failure') if failures else (
         'returned' if receipt['returned_count'] > 0 else 'source_navigation_returned' if receipt.get('source_navigation_returned_count') else 'tool_called_empty' if events else 'not_started')
+    plan = receipt.get('history_plan') or {}
+    mandatory = list(plan.get('mandatory_history_tools') or [])
+    checked = []
+    for event in events:
+        tool = str(event.get('tool') or '')
+        if tool in {'user_recall','user_research','read_source','find_sources','agent_recall','agent_research','audit_thread_history'}:
+            checked.append(tool)
+    checked = list(dict.fromkeys(checked))
+    skipped = [tool for tool in mandatory if tool not in checked]
+    candidate_events = [event for event in events if event.get('tool') in {'user_recall','user_research','agent_recall','agent_research','recall','research'}]
+    source_reads = sum(int(event.get('source_read_count') or 0) for event in events)
+    returned = sum(int(event.get('returned_count') or 0) for event in candidate_events)
+    if not mandatory and not candidate_events:
+        candidate_state = 'not_required'
+    elif not candidate_events:
+        candidate_state = 'not_retrieved'
+    elif returned <= 0:
+        candidate_state = 'retrieved_no_candidate'
+    elif source_reads > 0:
+        candidate_state = 'source_read'
+    else:
+        candidate_state = 'candidate_unverified'
+    receipt['coverage_contract'] = {
+        'channels_checked': checked,
+        'channels_skipped': skipped,
+        'candidate_state': candidate_state,
+        'candidate_returned_count': returned,
+        'source_read_count': source_reads,
+        'answer_use': 'not_measured',
+    }
     return receipt
 
 def _begin_tool_call(params, message_id, *, started_at=None, bind_prompt=True):
@@ -1411,7 +1482,7 @@ def reply(message_id, result=None, error=None):
                                'scenario_decision':value.get('decision') if tool=='scenario_gate' else (value.get('scenario_followup') or {}).get('decision')})
                 receipt['tool_events']=events;receipt['updated_at']=datetime.datetime.now(datetime.timezone.utc).isoformat()
                 planned = receipt.get('recommended_route') or receipt.get('history_plan', {}).get('recommended_route')
-                required = bool(receipt.get('route_required')) or planned in {'recall', 'research'} or receipt.get('history_plan', {}).get('minimum_action') in {'recall_probe', 'agent_query'}
+                required = bool(receipt.get('route_required')) or planned in {'recall', 'research', 'multi_route'} or bool(receipt.get('history_plan', {}).get('mandatory_history_tools')) or receipt.get('history_plan', {}).get('minimum_action') in {'recall_probe', 'agent_query'}
                 receipt['route_required'] = required
                 _route_receipt_counts(receipt)
                 receipt['unresolved'] = [] if events else (['EP历史工具尚未调用；本地文件搜索或候选提示不计为历史核验'] if required else [])
@@ -1449,7 +1520,7 @@ def memory_check_route(args):
     except Exception:
         value={'schema':'evolving-profile.memory-check.v1','query':prompt,'decision':'unknown','recommended_route':'unknown','reason':'目录探针不可用；需要由Codex根据说明和当前证据决定。','matched_nodes':[],'confidence':0.0,'requires_receipt':True}
     value.update({'tool':'memory_check','bank_detail_read':False,'history_receipt_required':True,'adapter_version':VERSION,'check_id':str(args.get('check_id') or uuid.uuid4().hex)})
-    if os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')!='codex':
+    if (os.environ.get('EVOLVING_PROFILE_HOST_ID') or os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex')!='codex':
         binding=_prompt_binding_for_check_id(args.get('check_id'),datetime.datetime.now(datetime.timezone.utc).isoformat())
         value['prompt_binding']=binding
         value['identity_origin']='host' if binding.get('state')=='prompt_bound' else 'adapter_assigned'
@@ -1501,7 +1572,7 @@ def memory_check_declaration(args):
             if isinstance(row, dict): rows.append(row)
         except (ValueError, TypeError): pass
     if binding.get('state') != 'prompt_bound':
-        if os.environ.get('EVOLVING_PROFILE_HOST_ID','codex')!='codex':
+        if (os.environ.get('EVOLVING_PROFILE_HOST_ID') or os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex')!='codex':
             raise ValueError('new_host_requires_verified_current_binding')
         # A modern unknown may be a real legacy registration, never a new ID.
         import sqlite3
@@ -2330,6 +2401,9 @@ def governed_recall(args):
     return {"content": [{"type": "text", "text": json.dumps(content, ensure_ascii=False)}], "isError": False}
 
 
+if __name__ == "__main__":
+    threading.Thread(target=_watch_parent_process, name="ep-mcp-parent-watch", daemon=True).start()
+
 for line in (sys.stdin if __name__ == "__main__" else ()):
     try:
         CURRENT_TOOL_CALL = None
@@ -2343,7 +2417,7 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
         elif method == "notifications/initialized":
             continue
         elif method == "tools/list":
-            tools=[TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,JEV_RISK_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_RECALL_TOOL,AGENT_RESEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_WORKSPACE_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])
+            tools=[TOOL, RESEARCH_TOOL, RESEARCH_PAGE_TOOL, SOURCE_TOOL, FIND_SOURCES_TOOL, THREAD_AUDIT_TOOL, GUIDANCE_TOOL, CHECK_TOOL, GUIDANCE_UNIT_TOOL, MEMORY_INSTRUCTIONS_TOOL,CATALOG_LIST_TOOL,CATALOG_SEARCH_TOOL,CATALOG_READ_TOOL,EVIDENCE_DECISION_TOOL,TASK_STATE_TOOL,SCENARIO_SUMMARY_TOOL,SCENARIO_GATE_TOOL,SCENARIO_CONTEXT_SEARCH_TOOL,EXTERNAL_RAG_TOOL,PERSONAL_RECORD_TOOL,JEV_RISK_TOOL,AGENT_TRAJECTORY_TOOL,AGENT_DRAFT_TOOL,AGENT_PROMOTION_TOOL,AGENT_RECALL_TOOL,AGENT_RESEARCH_TOOL,AGENT_READ_TOOL,AGENT_CONTEXT_TOOL,AGENT_WORKSPACE_TOOL,AGENT_REVALIDATION_TOOL,AGENT_EVALUATION_TOOL,AGENT_ROLLOUT_TOOL,AGENT_CAPABILITY_TOOL] + ([PREFERENCE_TOOL, RUNTIME_GUIDANCE_TOOL] if PREFERENCE_TOOL and RUNTIME_GUIDANCE_TOOL else [])
             from lib.host_integration.policy import governed_mode,filter_tools
             reply(message_id, {'tools':filter_tools(tools) if governed_mode() else tools})
         elif method == "tools/call":
@@ -2415,6 +2489,10 @@ for line in (sys.stdin if __name__ == "__main__" else ()):
                 reply(message_id, read_context_summary(params.get('arguments') or {}))
             elif params.get('name') == 'scenario_gate':
                 reply(message_id, scenario_gate(params.get('arguments') or {}))
+            elif params.get('name') == 'personal_record_search':
+                args = params.get('arguments') or {}
+                value = search_personal_record_index(str(args.get('query') or ''), limit=int(args.get('limit') or 20))
+                reply(message_id, {'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}], 'isError':False})
             elif params.get('name') == 'rag_search':
                 reply(message_id, {'content':[{'type':'text','text':json.dumps(search_external_rag(str((params.get('arguments') or {}).get('query') or ''), limit=int((params.get('arguments') or {}).get('limit') or 8),min_relevance=(params.get('arguments') or {}).get('minimum_relevance')),ensure_ascii=False)}],'isError':False})
             elif params.get('name') == 'review_operation_risk':

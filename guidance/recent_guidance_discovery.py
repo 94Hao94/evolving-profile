@@ -16,7 +16,7 @@ from typing import Iterable
 
 
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 INSTANCE = Path.home() / ".pg0/instances/hindsight-embed-agentmemory/instance.json"
 ROLE_BLOCK = re.compile(r"\[role:\s*user\]\s*(.*?)\s*\[user:end\]", re.S | re.I)
 SIGNAL = re.compile(r"(?:必须|一定要|以后|不要|不能|禁止|要求|偏好|喜欢|优先|记住|每次|务必|严禁|只要|除非|不再|先.+再)")

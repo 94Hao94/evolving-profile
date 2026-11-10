@@ -27,6 +27,28 @@ from evolving_profile_api.worker.poller import WorkerPoller
 logger = logging.getLogger(__name__)
 
 
+def test_retain_extraction_error_envelope_is_bounded_and_hashable():
+    """Failed batch evidence keeps a bounded preview plus a stable locator."""
+    from evolving_profile_api.engine.operation_metadata import RetainExtractionErrors
+
+    errors = RetainExtractionErrors()
+    raw = "原文" * 5000
+    candidate = "候选" * 5000
+    for index in range(10):
+        errors.add(f"bad-{index}", code="parse_failed", raw_text=raw, candidate=candidate)
+
+    payload = errors.to_dict()
+    assert payload["extraction_errors_count"] == 10
+    assert len(payload["extraction_error_records"]) == 5
+    record = payload["extraction_error_records"][0]
+    assert len(record["raw_text"]) == 4000
+    assert record["raw_text_length"] == len(raw)
+    assert len(record["candidate"]) == 4000
+    assert record["candidate_length"] == len(candidate)
+    assert len(record["raw_text_sha256"]) == 64
+    assert len(record["candidate_sha256"]) == 64
+
+
 @pytest.fixture
 def mock_llm_config():
     """Create a mock LLM config with batch API support."""
@@ -285,7 +307,7 @@ async def test_batch_api_accepts_top_level_fact_list(mock_llm_config, test_conte
 
 @pytest.mark.asyncio
 async def test_batch_api_rejects_top_level_non_fact_list(mock_llm_config, test_contents, hindsight_config):
-    """Batch extraction records malformed top-level lists instead of crashing."""
+    """All-invalid batch output must fail instead of becoming empty success."""
     batch_id = "batch_malformed_list"
     mock_llm_config._provider_impl.supports_batch_api = AsyncMock(return_value=True)
     mock_llm_config._provider_impl.submit_batch = AsyncMock(return_value={"batch_id": batch_id})
@@ -306,20 +328,20 @@ async def test_batch_api_rejects_top_level_non_fact_list(mock_llm_config, test_c
         ]
     )
 
-    facts, chunks, usage = await extract_facts_from_contents_batch_api(
-        contents=[test_contents[0]],
-        llm_config=mock_llm_config,
-        agent_name="test_agent",
-        config=hindsight_config,
-        pool=None,
-        operation_id=None,
-        schema=None,
-    )
+    from evolving_profile_api.engine.retain.fact_extraction import RetainExtractionContractError
 
-    assert facts == []
-    assert len(chunks) == 1
-    assert chunks[0].fact_count == 0
-    assert usage.total_tokens == 0
+    with pytest.raises(RetainExtractionContractError) as exc_info:
+        await extract_facts_from_contents_batch_api(
+            contents=[test_contents[0]],
+            llm_config=mock_llm_config,
+            agent_name="test_agent",
+            config=hindsight_config,
+            pool=None,
+            operation_id=None,
+            schema=None,
+        )
+    assert exc_info.value.records[0]["code"] == "response_shape_invalid"
+    assert exc_info.value.records[0]["raw_text"] == test_contents[0].content
 
 
 @pytest.mark.asyncio
@@ -375,18 +397,21 @@ async def test_batch_api_records_schema_drifted_facts_as_extraction_errors(
         "evolving_profile_api.engine.retain.fact_extraction._write_batch_extraction_errors",
         side_effect=_capture,
     ):
-        facts, chunks, _usage = await extract_facts_from_contents_batch_api(
-            contents=[test_contents[0]],
-            llm_config=mock_llm_config,
-            agent_name="test_agent",
-            config=hindsight_config,
-            pool=None,
-            operation_id=None,
-            schema=None,
-        )
+        from evolving_profile_api.engine.retain.fact_extraction import RetainExtractionContractError
 
-    assert facts == []
-    assert chunks[0].fact_count == 0
+        with pytest.raises(RetainExtractionContractError) as exc_info:
+            await extract_facts_from_contents_batch_api(
+                contents=[test_contents[0]],
+                llm_config=mock_llm_config,
+                agent_name="test_agent",
+                config=hindsight_config,
+                pool=None,
+                operation_id=None,
+                schema=None,
+            )
+
+    assert exc_info.value.records[0]["code"] == "fact_text_missing"
+    assert exc_info.value.records[0]["raw_text"] == test_contents[0].content
     assert len(recorded) == 1
     # Only the fact with no text key at all is an error; the empty 'what' is not.
     assert recorded[0].count == 1
@@ -463,8 +488,7 @@ async def test_batch_api_recovers_fenced_and_control_char_json(mock_llm_config, 
 
 @pytest.mark.asyncio
 async def test_batch_api_unparseable_json_still_records_error(mock_llm_config, test_contents, hindsight_config):
-    """#2701: genuinely unparseable content (not recoverable by parse_llm_json)
-    must preserve the existing behavior — record the error, fact_count=0, no crash."""
+    """#2701: genuinely unparseable content must fail with raw evidence."""
     batch_id = "batch_unparseable_json"
 
     # Not JSON at all, and not recoverable by fence-stripping or control-char scrubbing.
@@ -492,20 +516,20 @@ async def test_batch_api_unparseable_json_still_records_error(mock_llm_config, t
         ]
     )
 
-    facts, chunks, usage = await extract_facts_from_contents_batch_api(
-        contents=[test_contents[0]],
-        llm_config=mock_llm_config,
-        agent_name="test_agent",
-        config=hindsight_config,
-        pool=None,
-        operation_id=None,
-        schema=None,
-    )
+    from evolving_profile_api.engine.retain.fact_extraction import RetainExtractionContractError
 
-    assert facts == []
-    assert len(chunks) == 1
-    assert chunks[0].fact_count == 0
-    assert usage.total_tokens == 0
+    with pytest.raises(RetainExtractionContractError) as exc_info:
+        await extract_facts_from_contents_batch_api(
+            contents=[test_contents[0]],
+            llm_config=mock_llm_config,
+            agent_name="test_agent",
+            config=hindsight_config,
+            pool=None,
+            operation_id=None,
+            schema=None,
+        )
+    assert exc_info.value.records[0]["code"] == "response_json_parse_failed"
+    assert exc_info.value.records[0]["raw_text"] == test_contents[0].content
 
 
 @pytest.mark.asyncio

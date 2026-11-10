@@ -12,7 +12,7 @@ def fetch(url, offset):
     with urllib.request.urlopen(url + '&offset=' + str(offset), timeout=30) as response:
         return json.load(response)
 
-parser=argparse.ArgumentParser(); parser.add_argument('--bank', default='personal-memory'); parser.add_argument('--index', default=os.path.expanduser('~/.evolving-profile/context/context-index.json')); parser.add_argument('--output', default=os.path.expanduser('~/.evolving-profile/context/context-bank-associations.json')); args=parser.parse_args()
+parser=argparse.ArgumentParser(); parser.add_argument('--bank', default='ep-default-bank-v2-shadow-20260811'); parser.add_argument('--index', default=os.path.expanduser('~/.evolving-profile/context/context-index.json')); parser.add_argument('--output', default=os.path.expanduser('~/.evolving-profile/context/context-bank-associations.json')); args=parser.parse_args()
 index=json.loads(Path(args.index).read_text()); sessions={str(x.get('session_id')):x for x in index.get('sessions',[]) if x.get('session_id')}; projects={str(x.get('project_key')):x for x in index.get('projects',[]) if x.get('project_key')}
 base='http://127.0.0.1:12088/v1/default/banks/'+urllib.parse.quote(args.bank,safe='')+'/memories/list?limit=1000'
 with urllib.request.urlopen(base+'&offset=0',timeout=30) as response: first=json.load(response)

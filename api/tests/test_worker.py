@@ -1297,6 +1297,83 @@ class TestWorkerRecovery:
         assert recovered_count == 0
 
     @pytest.mark.asyncio
+    async def test_recover_own_tasks_reclaims_unowned_processing_rows(self, pool, backend, clean_operations):
+        """Rows stuck 'processing' with worker_id NULL must not stay stuck forever.
+
+        A claim always records worker_id, so a committed processing row with
+        NULL ownership belongs to no worker and the owner-scoped reclaim can
+        never match it. It has to be returned to pending by the startup sweep.
+        """
+        from evolving_profile_api.worker import WorkerPoller
+
+        bank_id = f"test-worker-{uuid.uuid4().hex[:8]}"
+        await _ensure_bank(pool, bank_id)
+
+        op_id = uuid.uuid4()
+        payload = json.dumps({"type": "test_task", "bank_id": bank_id})
+        await pool.execute(
+            """
+            INSERT INTO async_operations
+                (operation_id, bank_id, operation_type, status, task_payload,
+                 worker_id, retry_count, claimed_at)
+            VALUES ($1, $2, 'test', 'processing', $3::jsonb, NULL, 0, now())
+            """,
+            op_id,
+            bank_id,
+            payload,
+        )
+
+        poller = WorkerPoller(
+            backend=backend,
+            worker_id="sweeping-worker",
+            executor=lambda x: None,
+        )
+        recovered = await poller.recover_own_tasks()
+        assert recovered == 1
+
+        row = await pool.fetchrow(
+            "SELECT status, worker_id, retry_count FROM async_operations WHERE operation_id = $1",
+            op_id,
+        )
+        assert row["status"] == "pending"
+        assert row["worker_id"] is None
+        assert row["retry_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_recover_own_tasks_fails_unowned_row_without_payload(self, pool, backend, clean_operations):
+        """An unowned processing row with no payload is unclaimable, so fail it explicitly."""
+        from evolving_profile_api.worker import WorkerPoller
+
+        bank_id = f"test-worker-{uuid.uuid4().hex[:8]}"
+        await _ensure_bank(pool, bank_id)
+
+        op_id = uuid.uuid4()
+        await pool.execute(
+            """
+            INSERT INTO async_operations
+                (operation_id, bank_id, operation_type, status, task_payload,
+                 worker_id, claimed_at)
+            VALUES ($1, $2, 'consolidation', 'processing', NULL, NULL, now())
+            """,
+            op_id,
+            bank_id,
+        )
+
+        poller = WorkerPoller(
+            backend=backend,
+            worker_id="sweeping-worker",
+            executor=lambda x: None,
+        )
+        await poller.recover_own_tasks()
+
+        row = await pool.fetchrow(
+            "SELECT status, error_message FROM async_operations WHERE operation_id = $1",
+            op_id,
+        )
+        assert row["status"] == "failed"
+        assert "without task_payload" in (row["error_message"] or "")
+
+    @pytest.mark.asyncio
     async def test_recover_own_tasks_increments_retry_count(self, pool, backend, clean_operations):
         """Test that crash recovery increments retry_count."""
         from evolving_profile_api.worker import WorkerPoller
@@ -4945,3 +5022,139 @@ class TestTerminalOperationRetention:
             'ALTER SESSION SET CURRENT_SCHEMA = "APP_USER"',
         ]
         assert backend._default_schema == "APP_USER"
+
+class TestWorkerLeases:
+    @pytest.mark.asyncio
+    async def test_batch_recovery_only_reclaims_expired_or_legacy_stale_leases(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        class BatchConn(_CompletionConn):
+            def __init__(self):
+                super().__init__("UPDATE 1")
+                self.fetch_calls = []
+
+            async def fetch(self, query, *args):
+                self.fetch_calls.append((query, args))
+                return [{
+                    "operation_id": "op-batch",
+                    "task_payload": {"type": "batch_retain"},
+                    "result_metadata": {"batch_id": "provider-batch"},
+                }]
+
+        conn = BatchConn()
+        poller = WorkerPoller(backend=_CompletionBackend(conn), worker_id="w-new", executor=AsyncMock())
+
+        recovered = await poller._recover_batch_operations(schema=None)
+
+        assert recovered == 1
+        fetch_query, fetch_args = conn.fetch_calls[0]
+        update_query, update_args = conn.execute_calls[0]
+        assert "lease_expires_at <= now()" in fetch_query
+        assert "claimed_at <= now()" in fetch_query
+        assert "lease_expires_at <= now()" in update_query
+        assert update_args[0] == "op-batch"
+
+    @pytest.mark.asyncio
+    async def test_batch_recovery_counts_only_rows_actually_reset(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        class BatchConn(_CompletionConn):
+            async def fetch(self, query, *args):
+                return [{
+                    "operation_id": "op-raced",
+                    "task_payload": {"type": "batch_retain"},
+                    "result_metadata": {"batch_id": "provider-batch"},
+                }]
+
+        conn = BatchConn("UPDATE 0")
+        poller = WorkerPoller(backend=_CompletionBackend(conn), worker_id="w-new", executor=AsyncMock())
+
+        recovered = await poller._recover_batch_operations(schema=None)
+
+        assert recovered == 0
+
+    @pytest.mark.asyncio
+    async def test_periodic_reclaim_runs_when_interval_is_due(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        poller = WorkerPoller(backend=MagicMock(), worker_id="w-test", executor=AsyncMock(), reclaim_interval_seconds=10)
+        poller._get_schemas = AsyncMock(return_value=[None])
+        poller.reclaim_expired_tasks = AsyncMock(return_value=1)
+        poller._last_reclaim_at = 0
+
+        reclaimed = await poller._reclaim_expired_if_due(now=11)
+
+        assert reclaimed == 1
+        poller.reclaim_expired_tasks.assert_awaited_once_with(None)
+
+    @pytest.mark.asyncio
+    async def test_periodic_reclaim_skips_before_interval(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        poller = WorkerPoller(backend=MagicMock(), worker_id="w-test", executor=AsyncMock(), reclaim_interval_seconds=10)
+        poller._get_schemas = AsyncMock(return_value=[None])
+        poller.reclaim_expired_tasks = AsyncMock(return_value=1)
+        poller._last_reclaim_at = 5
+
+        reclaimed = await poller._reclaim_expired_if_due(now=14)
+
+        assert reclaimed == 0
+        poller.reclaim_expired_tasks.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_mark_completed_fences_with_lease_and_claim_version(self):
+        poller, conn = TestWorkerMarkCompleted()._make_poller("UPDATE 0")
+
+        await poller._mark_completed("op-1", schema=None, lease_id="lease-1", claim_version=3)
+
+        query, args = conn.execute_calls[0]
+        assert "lease_id = $3" in query
+        assert "claim_version = $4" in query
+        assert args == ("op-1", "w-test", "lease-1", 3)
+        poller._maybe_update_parent_operation.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_legacy_terminal_write_is_fenced_from_leased_rows(self):
+        poller, conn = TestWorkerMarkCompleted()._make_poller("UPDATE 0")
+
+        await poller._mark_completed("op-legacy", schema=None)
+
+        query, args = conn.execute_calls[0]
+        assert "lease_id IS NULL" in query
+        assert args == ("op-legacy",)
+        poller._maybe_update_parent_operation.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_refreshes_only_the_current_lease(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        conn = _CompletionConn("UPDATE 1")
+        poller = WorkerPoller(backend=_CompletionBackend(conn), worker_id="w-test", executor=AsyncMock())
+
+        refreshed = await poller.heartbeat("op-1", schema=None, lease_id="lease-1", claim_version=3)
+
+        assert refreshed is True
+        query, args = conn.execute_calls[0]
+        assert "lease_id = $4" in query
+        assert "claim_version = $5" in query
+        assert args[0] == "op-1"
+        assert args[2:] == ("w-test", "lease-1", 3)
+
+    @pytest.mark.asyncio
+    async def test_reclaim_expired_processing_tasks_uses_lease_expiry(self):
+        from evolving_profile_api.worker import WorkerPoller
+
+        class ReclaimConn(_CompletionConn):
+            async def fetch(self, query, *args):
+                self.execute_calls.append((query, args))
+                return []
+
+        conn = ReclaimConn("UPDATE 1")
+        poller = WorkerPoller(backend=_CompletionBackend(conn), worker_id="w-new", executor=AsyncMock())
+
+        reclaimed = await poller.reclaim_expired_tasks(schema=None)
+
+        assert reclaimed == 1
+        queries = [query for query, _args in conn.execute_calls]
+        assert any("lease_expires_at <= now()" in query for query in queries)
+        assert any("status = 'processing'" in query for query in queries)
