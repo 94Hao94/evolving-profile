@@ -8,7 +8,7 @@
 - 宿主边界：Codex 的 MCP stdio/prompt hook、Trae 的 MCP stdio/prompt hook/automatic capture、WorkBuddy 的 prompt hook/stop hook/automatic capture 保留实测标记；Claude Desktop 真实客户端验收仍暂缓；未实测能力保持 `documented`、`partial`、`unverified` 或 `not_measured`。
 - 隐私边界：公开发行树不包含个人记录 JSON、历史 transcript、本机运行回执、API Key 或 credential 值。
 - 验证：个人记录回归 6 项通过；发布前继续执行包扫描、关键 source/runtime/release 哈希一致性和相应 Python/Console 检查。
-- GitHub 状态：本次分支和 PR 提交后，以远端读回的 commit、PR、tag 和 Release 状态为准；不把本地提交写成已合并。
+- GitHub 状态：个人 fork `release/5.2.0` 已推送，当前远端提交为 `342e4edd2abfabe8c8652c6d9583ec18bb831ab5`；上游贡献 PR [#9](https://github.com/94Hao94/evolving-profile/pull/9) 已创建并保持 OPEN，尚未合并；没有移动旧 Tag，也没有创建 GitHub Release。
 
 
 ### 2026-10-31：5.1.4 AI 自动修复与队列闭环（本地准备）
