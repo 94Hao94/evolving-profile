@@ -113,7 +113,7 @@ DEFAULT_MENTAL_MODEL_CACHE = STATE_ROOT / "control-plane/mental-model-cache.json
 # vector/LLM operation. It is never an authority source and every row still
 # crosses the normal Controller/Hook admission and time-governance gates.
 DEFAULT_FAST_MEMORY_INDEX = STATE_ROOT / "control-plane/fast-memory-index.sqlite3"
-DEFAULT_FAST_MEMORY_SNAPSHOT = STATE_ROOT / "backups/v2-cutover-20260812T191145/personal-memory.memory_units.jsonl"
+DEFAULT_FAST_MEMORY_SNAPSHOT = STATE_ROOT / "backups/v2-cutover-20260812T191145/ep-default-bank-v2-shadow-20260811.memory_units.jsonl"
 # Direct user policies are a small auditable retrieval sidecar. They are not a
 # second memory bank: each row points to its source Hindsight fact and remains
 # explicitly provisional until independent later evidence upgrades it.
@@ -2793,7 +2793,7 @@ def evolution_evidence_alignment(query: str, text: str) -> dict[str, Any]:
     # only when it itself records a completed/active change.
     narrative_prefixes = (
         "助手解释", "助理解释", "助手建议", "助理建议", "助手澄清", "助理澄清",
-        "示例用户询问", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
+        "张三询问", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
         "用户认为", "用户担忧", "用户偏好", "用户决定", "用户设定", "回答用户",
         "对用户当前场景的判断", "当前问题",
     )
@@ -5876,7 +5876,7 @@ def qualify_stable_mental_model(query: str, item: dict[str, Any], *, task_contex
     # The cognition model can contain a generic-looking “冲突与未决项”
     # section.  It remains a learning/teaching framework and must not enter a
     # delivery or acceptance question merely because both mention a boundary.
-    if (str(metadata.get("mental_model_id") or "") == "ep-user-cognition-learning"
+    if (str(metadata.get("mental_model_id") or "") == "liuzhongyang-cognition-learning"
             and not any(term in compact_query for term in ("学习", "复习", "背诵", "术语", "知识", "讲解", "教学", "训练", "因果"))):
         return False, {
             "reason": "认知学习模型只用于学习、解释和训练问题；当前交付/验收任务不采用其通用未决项。",
@@ -9183,6 +9183,16 @@ class ControllerHandler(BaseHTTPRequestHandler):
                 code, _, body = self.app.upstream("GET", "/health", None, dict(self.headers.items()), 3)
                 upstream = json.loads(body.decode("utf-8")) if body else {}
                 healthy = code == 200 and upstream.get("status") == "healthy"
+                # A brief API restart must not leave the controller's public
+                # health projection permanently degraded.  Only clear the
+                # stale error when the last failure is the transport-level
+                # connection-refused probe that this endpoint itself records;
+                # real planner/execution failures remain visible until their
+                # normal successful path updates the state.
+                snapshot = self.app.status.snapshot()
+                last_error = str(snapshot.get("last_error") or "")
+                if healthy and snapshot.get("functional_status") == "degraded" and "ConnectionRefusedError" in last_error:
+                    self.app.status.update(functional_status="healthy", last_error=None, last_error_at=None)
                 self.send_json(200 if healthy else 503, {
                     "status": "healthy" if healthy else "degraded",
                     "controller": "memory-query-controller",

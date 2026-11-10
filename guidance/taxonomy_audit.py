@@ -15,7 +15,7 @@ from hashlib import sha256
 from rebuild import taxonomy_suspicion
 from observation_rebuild import atomic, call_qwen as _unused, load_env
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 API = "http://127.0.0.1:8888"
 
 

@@ -5,7 +5,7 @@ READ_TOOLS=frozenset({'memory_check','user_preference','refresh_runtime_guidance
     'read_preference_unit','read_memory_instructions','user_recall','user_research','read_research',
     'read_source','find_sources','catalog_list','catalog_search','catalog_read',
     'search_scenario_summary','read_scenario_summary','scenario_gate','agent_recall','agent_research',
-    'read_agent_process_memory','rag_search'})
+    'read_agent_process_memory','rag_search','personal_record_search'})
 
 
 def governed_mode():

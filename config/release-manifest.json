@@ -1,12 +1,11 @@
 {
   "product": "Evolving Profile",
-  "product_version": "5.1.4",
-  "release_channel": "candidate",
-  "build_id": "ep514-ai-repair",
+  "product_version": "5.2.0",
+  "release_channel": "contribution",
+  "build_id": "ep52-personal-records-and-host-matrix",
   "schema_versions": {
     "runtime_settings": "1",
     "backup_settings": "1",
-    "retrieval_models": "1",
-    "topology_layout": "1"
+    "retrieval_models": "1"
   }
 }

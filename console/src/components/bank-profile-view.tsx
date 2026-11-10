@@ -208,7 +208,7 @@ export function BankProfileView({ hideReflectFields = false }: { hideReflectFiel
       router.push("/");
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setIsDeleting(false);
@@ -227,7 +227,7 @@ export function BankProfileView({ hideReflectFields = false }: { hideReflectFiel
       });
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setIsClearingObservations(false);
@@ -245,7 +245,7 @@ export function BankProfileView({ hideReflectFields = false }: { hideReflectFiel
       setDirectiveDeleteTarget(null);
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setDeletingDirective(false);
@@ -657,7 +657,7 @@ function DispositionEditDialog({
       await onSaved();
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setSaving(false);
@@ -750,7 +750,7 @@ function MissionEditDialog({
       await onSaved();
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setSaving(false);
@@ -859,7 +859,7 @@ function DirectiveFormDialog({
       }
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setSubmitting(false);

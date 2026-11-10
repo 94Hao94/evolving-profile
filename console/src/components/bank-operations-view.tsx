@@ -370,7 +370,7 @@ export function BankOperationsView() {
       await loadOperations();
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setCancellingOpId(null);
@@ -386,7 +386,7 @@ export function BankOperationsView() {
       await loadOperations();
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setRetryingOpId(null);
@@ -405,7 +405,7 @@ export function BankOperationsView() {
     } catch (error) {
       console.error("Error loading operation details:", error);
       setSelectedOperation({ error: t("operationDetailsLoadError") });
-
+    
       throw error;
     } finally {
       setLoadingDetails(false);
@@ -425,7 +425,7 @@ export function BankOperationsView() {
       setPayloadLoadedFor(opId);
     } catch (error) {
       console.error("Error loading raw payload:", error);
-
+    
       throw error;
     } finally {
       setLoadingPayload(false);

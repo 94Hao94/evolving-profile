@@ -221,30 +221,16 @@ guarantee that every old memory is correct or every future task will improve.
 
 ## Maturity at a glance
 
-**5.1.4 is the current candidate release; platform-specific validation boundaries remain explicit.**
+**5.2.0 is the current contribution release; platform-specific validation boundaries remain explicit.**
 
-The 5.1.4 release adds a source-fingerprinted AI repair path: failed operations can be diagnosed, repaired, or converted into an auditable AI report without a manual-review gate. It also reconciles visible scenario queues with executable worker jobs, expands source-envelope handling, and keeps report-only outcomes separate from successful publication.
+EP 5.2.0 adds source-bound personal records and a host-aware compatibility matrix. Names, phones, landlines, email addresses, national IDs, vehicle plates, organization, role, address and credential references are typed locally; explicit labels and structured person blocks create relations, while ambiguous co-occurrence remains `unbound`. It also carries the latest multi-route evidence receipts, source readback boundaries, runtime parity checks, and the Codex/Trae/WorkBuddy host status distinctions described above.
 
-Product version comes from [VERSION](VERSION); channel/build metadata comes from
-the checked [release manifest](config/release-manifest.json). The current candidate
-documentation and code are on the [`release/5.1.4` branch](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.1.4).
-The immutable [`v5.1.4` tag](https://github.com/ccygod/evolving-profile-2.2/releases/tag/v5.1.4)
-is the earlier candidate baseline; a GitHub Release with downloadable assets has not
-been created. Publication and contribution status are separate.
+Product version is read from [`VERSION`](VERSION). This contribution line is on the
+[`release/5.2.0` branch](https://github.com/ccygod/evolving-profile-2.2/tree/release/5.2.0);
+there is no claim that the branch is merged upstream until the PR is read back.
 
-| Area | Current evidence | Still needs validation |
-| --- | --- | --- |
-| User/agent memory, five-dimensional preferences, scenario/source navigation and observable topology | Existing implementation; macOS/Codex is the main exercised integration | Whole-history accuracy, universal answer benefit and every model/task combination |
-| Host integrations management page | Implemented; real local Console clicks, Chinese/English, scroll and responsive checks | Native target-client acceptance is separate from this page |
-| Governed stdio and optional authenticated HTTP | Isolated EP-side protocol/policy tests; new profiles default to read-only | Actual client receipt/use, remote/TLS operation and every lazy tool dependency branch |
-| Claude CLI, local desktop Code and ordinary desktop Chat | Separate recipes and preparation profiles | Each actual surface's lifecycle, source capture, binding and end-to-end calls |
-| Hermes, WorkBuddy and Doubao Work | Capability profiles, discovery, previews, guidance and diagnostics prepared | Native task/session evidence; no equal-validation claim with Codex |
-| Windows native / WSL / remote | Separate modes, Unicode/UTF-8/path/lock preparation and manual CI definition | Actual Windows/PowerShell execution; WSL success is not native-Windows certification |
-| External RAG / JEV / local models | Existing optional modules and configuration | Operator's actual files, keys, models, index compatibility and measured benefit |
-
-“Detected”, “configured”, “EP protocol verified”, “host received” and “answer
-adopted” are different claims. Missing evidence stays unknown, not zero or success.
-See [candidate scope and acceptance](docs/RELEASE-NOTES-5.1.4.md).
+The package is sanitized and re-initializable. Personal records, private transcripts,
+API keys, local runtime receipts and Bank data are excluded. See the [5.2.0 release notes](docs/RELEASE-NOTES-5.2.0.md) and [release ledger](docs/RELEASE-LEDGER.md) for the exact verification boundary.
 
 ## Personalization beyond a list of likes
 
@@ -391,15 +377,15 @@ statuses are not erased merely to make a dashboard green.
 **Installing this candidate?** Start with [candidate setup](docs/CANDIDATE-SETUP.md).
 **Agent reading this repository:** installation alone is not usage; read
 [the Agent operating guide](docs/AGENT-USAGE.md) before choosing memory tools.
-This checkout is the 5.1.4 candidate line. The product version is read from
-[VERSION](VERSION), and the current documentation branch is `release/5.1.4`;
+This checkout is the 5.2.0 contribution line. The product version is read from
+[VERSION](VERSION), and the current documentation branch is `release/5.2.0`;
 the older immutable `v5.1.4` tag is not the source for this documentation build.
 
 ### First-run acceptance path
 
 For a complete local run, treat these as separate gates:
 
-1. **Build:** run the installer and confirm it reports `EP 5.1.4` from `VERSION`.
+1. **Build:** run the installer and confirm it reports `EP 5.2.0` from `VERSION`.
 2. **API:** start port `8888` and require `curl --fail http://127.0.0.1:8888/health`.
 3. **Controller:** start port `12079` and require `curl --fail http://127.0.0.1:12079/v1/status`.
 4. **Console:** start port `9999`, open the selected language route, create or select your own Bank, and click through the health/configuration pages.
@@ -423,7 +409,7 @@ macOS scheduler, cloud-backup boundary, upgrade and rollback steps are in
 ### 1. Install and build
 
 ```bash
-git clone --branch release/5.1.4 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
+git clone --branch release/5.2.0 --single-branch https://github.com/ccygod/evolving-profile-2.2.git
 cd evolving-profile-2.2
 ./scripts/install-ep51.sh --mode local --no-launch
 ```
@@ -431,7 +417,7 @@ cd evolving-profile-2.2
 The installer filename is retained for the 5.1 release line; it reads `VERSION`.
 This command intentionally uses the current candidate branch so it includes the
 latest verified documentation and fixes. Before running it, confirm `VERSION` is
-`5.1.4` and record the commit shown by `git rev-parse HEAD`.
+`5.2.0` and record the commit shown by `git rev-parse HEAD`.
 
 This runs preflight and a release text-source scan, installs base dependencies,
 builds the SDK **before** the Console and writes a local launch manifest.
@@ -496,7 +482,7 @@ your own credentials are still required.
 | **Doubao Work** | Review the actual plugin setup, select it for this task and follow the operating guide; do not claim a Skill guarantees every-turn execution. |
 
 Repository provenance: `https://github.com/ccygod/evolving-profile-2.2`.
-Use the current `release/5.1.4` branch or a named verified archive; do not silently
+Use the current `release/5.2.0` branch or a named verified archive; do not silently
 substitute the older `v5.1.4` tag without comparing its commit and manifest.
 **[Copy the full per-host prompts, including Hermes](docs/AGENT-SETUP.md).**
 They specify backup/merge, absolute paths, real health/UI/tool/capture acceptance,
@@ -560,7 +546,7 @@ the same configuration.** Verify the effective profile before claiming changes a
   to all interfaces. This candidate does not silently change that default or authorize public exposure.
 
 Product version: [`VERSION`](VERSION). Current release status, actual checks,
-dependency risks and known limits belong in the [candidate notes](docs/RELEASE-NOTES-5.1.4.md)
+dependency risks and known limits belong in the [5.2.0 notes](docs/RELEASE-NOTES-5.2.0.md)
 and [release ledger](docs/RELEASE-LEDGER.md), not in a permanently duplicated badge.
 See the [dependency risk disposition](docs/DEPENDENCY-RISKS.md) for the distinct
 production-classified and full-workspace audit results and retained RC risks.
@@ -578,7 +564,7 @@ ownership, Git commit identity and upstream acknowledgment remain distinct.
 - [Local setup and rollback](docs/LOCAL-SETUP.md) · [API configuration](api/README.md)
 - [Deployment](docs/DEPLOYMENT.md) · [Host setup](docs/HOST-SETUP.md) · [Agent requests](docs/AGENT-SETUP.md)
 - [Agent operating guide](docs/AGENT-USAGE.md) · [Candidate setup](docs/CANDIDATE-SETUP.md)
-- [Changelog](CHANGELOG-5.1.md) · [Current candidate notes](docs/RELEASE-NOTES-5.1.4.md)
+- [Changelog](CHANGELOG-5.2.md) · [Current contribution notes](docs/RELEASE-NOTES-5.2.0.md)
 - [Source-of-truth map](config/source-of-truth.json) · [Security policy](SECURITY.md)
 
 ## Built on Hindsight

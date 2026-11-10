@@ -10,7 +10,7 @@ import uuid
 
 from observation_rebuild import atomic
 
-BANK="personal-memory"
+BANK="ep-default-bank-v2-shadow-20260811"
 INSTANCE=Path.home()/'.pg0/instances/hindsight-embed-agentmemory/instance.json'
 
 

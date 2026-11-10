@@ -23,7 +23,7 @@ from evidence_workspace import discover, search, read_page, source_witness, reco
 from source_safety import mask_text, mask_value
 
 CONTROLLER = os.environ.get("EVOLVING_PROFILE_CONTROLLER_URL", "http://127.0.0.1:12079")
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 VERSION = "1.5.0-route-intelligence"
 GUIDANCE_V1_CONFIG = os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json"))
 CHECK_TOOL = {

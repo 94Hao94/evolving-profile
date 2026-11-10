@@ -24,6 +24,18 @@ from pydantic import BaseModel, ConfigDict, Field
 from .response_models import LLMCallTrace, TokenUsage
 from .search.tags import TagGroup, TagsMatch
 
+
+def split_refresh_batches(items: list[Any], *, max_batch_size: int) -> list[list[Any]]:
+    """Split refresh inputs into bounded, order-preserving batches.
+
+    Refresh recovery uses this same primitive for source/fact batches. Keeping the
+    operation pure makes the bound easy to test and prevents an oversized batch
+    from being retried unchanged.
+    """
+    if max_batch_size <= 0:
+        raise ValueError("max_batch_size must be positive")
+    return [items[start : start + max_batch_size] for start in range(0, len(items), max_batch_size)]
+
 RefreshMode = Literal["full", "delta"]
 
 ModeFallbackReason = Literal[

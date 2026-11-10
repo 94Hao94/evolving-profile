@@ -1,6 +1,7 @@
 "use client";
 
 import { ActionButton } from "@/components/ui/action-button";
+import { sourceConsolidationProgress } from "@/lib/consolidation-progress";
 
 import { useState, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -263,7 +264,7 @@ function ProgressRow({
   doneColor: string;
 }) {
   const ratio = total > 0 ? done / total : 0;
-  const percent = Math.round(ratio * 100);
+  const percent = ratio >= 1 ? 100 : Math.floor(ratio * 1000) / 10;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between">
@@ -833,7 +834,7 @@ export function BankStatsView() {
 
   const toggleSeries = (k: FactKey) => setEnabledSeries((prev) => ({ ...prev, [k]: !prev[k] }));
 
-  const consolidatedDone = Math.max(0, stats.total_nodes - stats.pending_consolidation);
+  const { done: consolidatedDone, total: consolidationTotal } = sourceConsolidationProgress(stats);
 
   const factLabel: Record<FactKey, string> = {
     world: t("world"),
@@ -921,7 +922,7 @@ export function BankStatsView() {
             done={consolidatedDone}
             pending={stats.pending_consolidation}
             failed={stats.failed_consolidation ?? 0}
-            total={stats.total_nodes}
+            total={consolidationTotal}
             lastConsolidatedAt={stats.last_consolidated_at}
           />
           <EvolvingModelsCard {...evolvingModels} />

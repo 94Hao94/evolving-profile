@@ -2,6 +2,7 @@
 const digest=(v:unknown):v is string=>typeof v==='string' && /^[0-9a-f]{64}$/.test(v);
 export function summarizeRuntimeLoad(input:any,now=Date.now()) {
  const disk=digest(input?.installed_mcp_sha256)?input.installed_mcp_sha256:null;
+ const consoleDisk=typeof input?.console_disk_build_id==='string'?input.console_disk_build_id:null;
  const events:any[]=[];const seen=new Set<string>();
  for(const e of Array.isArray(input?.events)?input.events:[]) {
   const at=Date.parse(e?.at);
@@ -15,11 +16,18 @@ export function summarizeRuntimeLoad(input:any,now=Date.now()) {
  const hashes=new Set(recent.map(e=>e.adapter_build_sha256));
  const mcp_status=!disk?'installed_unknown':!events.length?'not_observed':!recent.length?'stale'
    :hashes.size>1?'mixed_observations':hashes.has(disk)?'recent_reply_matches':'reconnect_required';
+ const mcp_activity_state=!events.length?'no_observation':recent.length?'recent_activity':'no_recent_activity';
+ const probe=input?.console_runtime_probe;
+ const probeAt=Date.parse(probe?.at);
+ const probeFresh=Number.isFinite(probeAt) && now-probeAt<=15*60*1000;
+ const consoleRunning=probe?.build_id && consoleDisk && probe?.build_id===consoleDisk && probeFresh
+   ? 'matched' : probe?.build_id ? 'mismatch' : 'not_measured';
  return {saved_config_status:digest(input?.saved_config_sha256)?'saved':'unknown',
    saved_config_sha256:digest(input?.saved_config_sha256)?input.saved_config_sha256:null,
    saved_config_at:input?.saved_config_at || null,installed_mcp_sha256:disk,
    console_disk_build_id:typeof input?.console_disk_build_id==='string'?input.console_disk_build_id:null,
-   console_running_build_status:'not_measured',console_client_build_status:'not_measured',
-   mcp_status,observed_reply_count:recent.length,latest_observation_at:events[0]?.at || null,
+   console_running_build_status:consoleRunning,console_running_build_id:probe?.build_id || null,
+   console_runtime_probe_at:probe?.at || null,console_client_build_status:'not_measured',
+   mcp_status,mcp_activity_state,observed_reply_count:recent.length,latest_observation_at:events[0]?.at || null,
    observations:events.slice(0,8),configuration_applied:'not_measured',all_connections_verified:false};
 }

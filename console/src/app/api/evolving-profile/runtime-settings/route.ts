@@ -36,7 +36,7 @@ const defaults = {
 
 async function effectiveDefaults() {
   try {
-    const env = Object.fromEntries((await readFile(envPath, "utf8")).split("\n").filter((line) => line && !line.startsWith("#") && line.includes("=")).map((line) => { const index = line.indexOf("="); return [line.slice(0, index), line.slice(index + 1)]; }));
+    const env = Object.fromEntries((await readFile(/*turbopackIgnore: true*/ envPath, "utf8")).split("\n").filter((line) => line && !line.startsWith("#") && line.includes("=")).map((line) => { const index = line.indexOf("="); return [line.slice(0, index), line.slice(index + 1)]; }));
     return merge(defaults, { retrieval_models: { embedding: { provider: env.EVOLVING_PROFILE_API_EMBEDDINGS_PROVIDER || "onnx", model: env.EVOLVING_PROFILE_API_EMBEDDINGS_ONNX_MODEL_ID || "intfloat/multilingual-e5-small", dimensions: Number(env.EVOLVING_PROFILE_API_EMBEDDINGS_ONNX_DIMENSIONS || 384), max_tokens: Number(env.EVOLVING_PROFILE_API_EMBEDDINGS_ONNX_MAX_TOKENS || 512) }, reranker: { provider: env.EVOLVING_PROFILE_API_RERANKER_PROVIDER === "rrf" ? "local" : env.EVOLVING_PROFILE_API_RERANKER_PROVIDER || "local", model: env.EVOLVING_PROFILE_API_RERANKER_LOCAL_MODEL || "BAAI/bge-reranker-base" } }, providers: { primary: { name: env.EVOLVING_PROFILE_API_LLM_BASE_URL?.includes("127.0.0.1:3211") ? "Coding Plan" : env.EVOLVING_PROFILE_API_LLM_PROVIDER || "", base_url: env.EVOLVING_PROFILE_API_LLM_BASE_URL || "", model: env.EVOLVING_PROFILE_API_LLM_MODEL || "", api_key: env.EVOLVING_PROFILE_API_LLM_API_KEY || "" } } });
   } catch { return merge(defaults, {}); }
 }

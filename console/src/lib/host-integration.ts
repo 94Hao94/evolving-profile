@@ -1,7 +1,7 @@
 export type HostCapability={state?:string;evidence_kind?:string;stale?:boolean;observed_at?:string};
-export type HostRow={host_id:string;labels?:Record<string,string>;status:string;
+export type HostRow={host_id:string;labels?:Record<string,string>;transports?:string[];status:string;
   installation:{state:string;candidates:Record<string,unknown>[]};configuration:{state:string;candidates:Record<string,unknown>[]};
-  readiness:{capabilities:Record<string,HostCapability>;host_verified:boolean;capture_enabled:boolean};
+  readiness:{capabilities:Record<string,HostCapability>;host_verified:boolean;capture_enabled:boolean;session_association?:{state?:string;parser?:string|null;session_id?:string;installation_id?:string;transcript?:string;transcript_path?:string;receipt?:string;receipt_kind?:string;receipt_at?:string}};
   context?:Record<string,unknown>};
 export type HostIntegrationReport={schema:string;hosts:HostRow[];environment?:Record<string,unknown>;
   configuration_write_enabled?:boolean;dependencies?:Record<string,unknown>};

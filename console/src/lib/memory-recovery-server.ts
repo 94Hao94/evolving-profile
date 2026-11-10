@@ -77,7 +77,7 @@ export async function runMemoryRecoveryCLI(input: RecoveryInput, options: CLIOpt
   const value = validateRecoveryInput(input);
   const paths = await runtimePaths(options);
   return await new Promise((resolve, reject) => {
-    const child = spawn(paths.pythonPath, [paths.scriptPath, "--state-root", paths.stateRoot], { shell: false, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(/*turbopackIgnore: true*/ paths.pythonPath, [paths.scriptPath, "--state-root", paths.stateRoot], { shell: false, stdio: ["pipe", "pipe", "pipe"] });
     let output = ""; let done = false;
     const finish = (error?: Error, result?: Record<string, any>) => {
       if (done) return; done = true; clearTimeout(timer);
@@ -108,7 +108,7 @@ export async function runMemoryRecoveryCLI(input: RecoveryInput, options: CLIOpt
 export async function launchRecoveryWorker(job: { job_id?: unknown; status?: unknown }, options: CLIOptions = {}) {
   if (typeof job.job_id !== "string" || !UUID.test(job.job_id) || !["queued", "running"].includes(String(job.status))) return;
   const paths = await runtimePaths(options);
-  const child = spawn(paths.pythonPath, [paths.scriptPath, "--state-root", paths.stateRoot, "--run-job", job.job_id], { detached: true, stdio: "ignore", shell: false });
+  const child = spawn(/*turbopackIgnore: true*/ paths.pythonPath, [paths.scriptPath, "--state-root", paths.stateRoot, "--run-job", job.job_id], { detached: true, stdio: "ignore", shell: false });
   await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", () => reject(new MemoryRecoveryError("recovery_worker_start_failed"))); });
   child.unref();
 }

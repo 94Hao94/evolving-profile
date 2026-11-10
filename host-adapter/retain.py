@@ -307,6 +307,22 @@ def main():
     if exclusion:
         debug_log(config, f"Retention held by {exclusion}; local evidence preserved")
         return
+    # Build a separate local exact-match index for user-supplied person/contact
+    # records before semantic Bank retention.  The original transcript remains
+    # authoritative; this additive index only makes explicit lookups such as
+    # a person's phone/email/identity record reliable and source-linked.
+    try:
+        from lib.personal_records import record_messages
+        personal = record_messages(
+            allowed_source_messages,
+            session_id=session_id,
+            turn_id=str(hook_input.get('turn_id') or ''),
+            host_id=os.environ.get('EVOLVING_PROFILE_HOST_ID') or os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex',
+            transcript_path=transcript_path,
+        )
+        debug_log(config, 'Personal record index:', personal)
+    except Exception as error:
+        debug_log(config, 'Personal record index unavailable:', type(error).__name__)
     try:
         process_capture = capture_native_process_on_stop(hook_input, config, bank_id, source_turns)
         debug_log(config, 'Native process capture:', process_capture)
@@ -374,7 +390,7 @@ def main():
             project=project, content=turn_transcript or '',
             write_policy=turn['write_policy'],
             messages=json.loads(structured_transcript) if structured_transcript else [],
-            metadata={'source':'codex-hook-token-batch', 'origin_agent':(os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex')[:40], 'session_id':session_id,
+            metadata={'source':'codex-hook-token-batch', 'session_id':session_id,
                       'project':project, 'priority_tail':str(_priority_short_task(turn_transcript, config)).lower()},
         ) or captured
     if captured:

@@ -165,6 +165,23 @@ def response_navigation(response):
     return rows
 
 
+def response_evidence_chain(response):
+    """Return an adapter-produced chain receipt without deriving model use."""
+    if not isinstance(response, dict) or response.get('isError'):
+        return None
+    for block in response.get('content') or []:
+        if not isinstance(block, dict) or block.get('type') != 'text':
+            continue
+        try:
+            value = json.loads(block.get('text', ''))
+        except (ValueError, TypeError):
+            continue
+        chain = value.get('evidence_chain') if isinstance(value, dict) else None
+        if isinstance(chain, dict) and chain.get('schema') == 'ep.evidence_chain_receipt.v1':
+            return chain
+    return None
+
+
 def _load_ingress_identity(session, hook_invocation_id, prompt_fingerprint=None, ingress_path=None):
     """Resolve a Controller row that omitted turn_id to one native ingress.
 
@@ -263,6 +280,12 @@ def read_turn_contributions(traces, checks_path, capture_path, limit=4000, deadl
                 continue
             seen.add((key, call))
             response = resolve_tool_response(source, capture_path)
+            chain = response_evidence_chain(response)
+            if chain is not None:
+                entry['mcp'].setdefault('evidence_chains', []).append(
+                    {'call_id': call, 'event_id': event.get('event_id'), 'receipt': chain}
+                )
+                entry['mcp']['evidence_chain'] = chain
             navigation = response_navigation(response)
             if navigation:
                 entry['mcp'].setdefault('source_navigation', [])

@@ -18,16 +18,16 @@ import urllib.request
 from observation_rebuild import atomic
 
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 API = "http://127.0.0.1:8888"
 RELEASED_AT = "2026-09-10T07:57:00+00:00"
 CONFIRMATION = "ROLLBACK_GUIDANCE_V1_DATA"
 MODEL_IDS = [
-    "ep-user-ai-operating-system",
-    "ep-user-work-project-architecture",
-    "ep-user-business-architecture",
-    "ep-user-cognition-learning",
-    "ep-user-collaboration-delivery",
+    "liuzhongyang-ai-operating-system",
+    "liuzhongyang-work-project-architecture",
+    "liuzhongyang-business-architecture",
+    "liuzhongyang-cognition-learning",
+    "liuzhongyang-collaboration-delivery",
 ]
 INSTANCE = Path.home() / ".pg0/instances/hindsight-embed-agentmemory/instance.json"
 

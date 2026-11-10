@@ -16,7 +16,7 @@ from rebuild import validate_observation_classification
 
 
 STATE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_STATE_ROOT", str(Path.home() / ".evolving-profile")))
-BANK = os.environ.get("EVOLVING_PROFILE_BANK_ID", "personal-memory")
+BANK = os.environ.get("EVOLVING_PROFILE_BANK_ID", "ep-default-bank-v2-shadow-20260811")
 API = os.environ.get("EVOLVING_PROFILE_SOURCE_API_URL", "http://127.0.0.1:12088").rstrip("/")
 ENV_PATH = Path(os.environ.get("EVOLVING_PROFILE_PROFILE_ENV", str(STATE_ROOT / "profiles/evolving-profile-api.env")))
 

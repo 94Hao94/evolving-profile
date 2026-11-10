@@ -52,6 +52,7 @@ class LivenessResponse(BaseModel):
     status: Literal["alive"] = Field(description='Always "alive" — reaching this handler is the check')
     version: str = Field(description="Hindsight version this process is running")
     uptime_seconds: float = Field(description="Seconds since the process started")
+    runtime: dict[str, str] = Field(description="Deployment and process identity metadata")
 
 
 class WorkerLivenessResponse(LivenessResponse):
@@ -88,8 +89,14 @@ def liveness_response() -> LivenessResponse:
     # module-level import here would make this module unusable from anything the
     # engine itself imports.
     from evolving_profile_api import __version__
+    from evolving_profile_api.runtime_identity import get_runtime_identity
 
-    return LivenessResponse(status="alive", version=__version__, uptime_seconds=uptime_seconds())
+    return LivenessResponse(
+        status="alive",
+        version=__version__,
+        uptime_seconds=uptime_seconds(),
+        runtime=get_runtime_identity(),
+    )
 
 
 def worker_liveness_response(
@@ -101,11 +108,13 @@ def worker_liveness_response(
     """Build the worker liveness payload without touching any dependency."""
     # Lazy for the same reason as liveness_response() above.
     from evolving_profile_api import __version__
+    from evolving_profile_api.runtime_identity import get_runtime_identity
 
     return WorkerLivenessResponse(
         status="alive",
         version=__version__,
         uptime_seconds=uptime_seconds(),
+        runtime=get_runtime_identity(),
         worker_id=worker_id,
         is_shutdown=is_shutdown,
         seconds_since_last_poll=seconds_since_last_poll,

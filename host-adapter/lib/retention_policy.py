@@ -179,17 +179,53 @@ def transcript_messages(content):
     except (ValueError, TypeError):
         pass
     rows = []
-    for match in re.finditer(
-        r"(?m)^(?:\[source_record: (\{[^\n]*\})\]\n)?\[role: (user|assistant)\]\n([\s\S]*?)\n\[\2:end\](?:\n|$)",
-        content,
-    ):
-        rows.append(
-            {
-                "role": match.group(2),
-                "content": match.group(3),
-                "source_record": json.loads(match.group(1)) if match.group(1) else {},
-            }
-        )
+    # Older queue fragments included provenance directly in the role header,
+    # for example ``[role: assistant; at: ...; turn: ...]``.  Treat that
+    # header as the same source envelope as the newer preceding
+    # ``[source_record: {...}]`` line; otherwise a retry loses every message
+    # and the API rejects the batch with ``knowledge_write_source_messages_missing``.
+    pattern = (
+        r"(?m)^(?:\[source_record:\s*(\{[^\n]*\})\]\n)?"
+        r"\[role:\s*(user|assistant)(?:;\s*([^\]]*))?\]\n"
+        r"([\s\S]*?)\n\[\2:end\](?:\n|$)"
+    )
+    matches = list(re.finditer(pattern, content))
+    for match in matches:
+        record = json.loads(match.group(1)) if match.group(1) else {}
+        for part in (match.group(3) or "").split(";"):
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            key, value = key.strip(), value.strip()
+            if key and value and key not in record:
+                record[key] = value
+        rows.append({"role": match.group(2), "content": match.group(4), "source_record": record})
+    if rows:
+        return rows
+
+    # A short-lived manual-recovery writer emitted role headers without the
+    # ``[role:end]`` terminator.  Its bytes are still bounded by the next role
+    # header, so recover that legacy shape without relaxing the normal parser.
+    header = re.compile(
+        r"(?m)^(?:\[source_record:\s*(\{[^\n]*\})\]\n)?"
+        r"\[role:\s*(user|assistant)(?:;\s*([^\]]*))?\]\n"
+    )
+    headers = list(header.finditer(content))
+    for index, match in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(content)
+        body = content[match.end() : end].strip()
+        body = re.sub(r"\n\[(?:user|assistant):end\]\s*$", "", body).strip()
+        if not body:
+            continue
+        record = json.loads(match.group(1)) if match.group(1) else {}
+        for part in (match.group(3) or "").split(";"):
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            key, value = key.strip(), value.strip()
+            if key and value and key not in record:
+                record[key] = value
+        rows.append({"role": match.group(2), "content": body, "source_record": record})
     return rows
 
 

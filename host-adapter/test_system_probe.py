@@ -59,6 +59,21 @@ class SystemProbeTests(unittest.TestCase):
         self.assertEqual(plan['minimum_action'],'live_audit')
         self.assertEqual(plan['suggested_tools'],[])
 
+    def test_historical_cause_and_tool_comparison_use_parallel_memory_routes(self):
+        plan = plan_history('那为什么我以前让 Codex 操作飞书就操作不了，非得用 Computer Use？它和你差在哪？')
+        self.assertEqual(plan['recommended_route'], 'multi_route')
+        self.assertEqual(plan['minimum_action'], 'agent_query')
+        self.assertIn('mcp__evolving_profile_controller__user_recall', plan['mandatory_history_tools'])
+        self.assertIn('mcp__evolving_profile_controller__agent_recall', plan['mandatory_history_tools'])
+        self.assertEqual(plan['coverage_contract']['candidate_state'], 'not_retrieved')
+
+    def test_history_cause_plus_live_audit_keeps_both_channels(self):
+        plan = plan_history('刚才检查工具回执时，为什么以前 Codex 操作不了飞书，和 Computer Use 差在哪？')
+        self.assertEqual(plan['recommended_route'], 'multi_route')
+        self.assertIn('mcp__evolving_profile_controller__user_recall', plan['mandatory_history_tools'])
+        self.assertIn('mcp__evolving_profile_controller__agent_recall', plan['mandatory_history_tools'])
+        self.assertIn('mcp__evolving_profile_controller__audit_thread_history', plan['mandatory_history_tools'])
+
     def test_defect_report_about_missing_history_calls_is_live_audit(self):
         prompts = (
             '应该调用 recall、research，但它没有调用；把测试做好后再停工。',

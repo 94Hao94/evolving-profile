@@ -370,7 +370,7 @@ export function WebhooksView() {
       await loadWebhooks();
     } catch (error) {
       // Error toast shown by API client interceptor
-
+    
       throw error;
     } finally {
       setCreating(false);
@@ -386,7 +386,7 @@ export function WebhooksView() {
       await loadWebhooks();
     } catch (error) {
       // Error toast shown by API client interceptor
-
+    
       throw error;
     } finally {
       setDeletingId(null);
@@ -420,7 +420,7 @@ export function WebhooksView() {
       await loadWebhooks();
     } catch (error) {
       // Error toast shown by API client interceptor
-
+    
       throw error;
     } finally {
       setSaving(false);
@@ -440,7 +440,7 @@ export function WebhooksView() {
       setDeliveriesDialogOpen(true);
     } catch (error) {
       console.error("Error loading deliveries:", error);
-
+    
       throw error;
     } finally {
       setLoadingDeliveries(false);
@@ -461,7 +461,7 @@ export function WebhooksView() {
       setDeliveriesCursor(data.next_cursor ?? null);
     } catch (error) {
       console.error("Error loading more deliveries:", error);
-
+    
       throw error;
     } finally {
       setLoadingMoreDeliveries(false);

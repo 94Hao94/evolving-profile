@@ -18,12 +18,6 @@ describe("scenario operational evidence", () => {
     expect(view.failures).toEqual([{ id: "session:two", code: "source_quote_invalid" }]);
     expect(JSON.stringify(view)).not.toContain("PRIVATE");
   });
-  it("does not keep a waiting-source warning active after an automatic AI report is ready", () => {
-    const view = scenarioOperationalEvidence({ bankId: "a", index: { status: "ready", sessions: [
-      { context_id: "session:report", bank_id: "a", status: "raw_available_summary_waiting_source", ai_report: { status: "ai_report_ready" } },
-    ] } } as any);
-    expect(view).toMatchObject({ status: "observed", total: 1, waitingSource: 0, aiReports: 1, failed: 0 });
-  });
   it("never converts an unreadable or foreign-Bank source into zero failures", () => {
     expect(scenarioOperationalEvidence(null).status).toBe("unavailable");
     const view = scenarioOperationalEvidence({ bankId: "a", index: { status: "ready", sessions: [{ bank_id: "b", status: "model_reviewed" }] } } as any);

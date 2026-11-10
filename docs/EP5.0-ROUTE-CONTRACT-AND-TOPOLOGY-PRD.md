@@ -1,7 +1,7 @@
 # EP5.0 路由契约、命名统一与执行拓扑验收 PRD
 
-**状态：** 执行基线
-**适用版本：** EP5.0 运行态
+**状态：** 执行基线  
+**适用版本：** EP5.0 运行态  
 **范围：** User Memory、Agent Process Memory、External RAG、Flow API、链路页、MCP/Hook 回执和发布一致性
 
 ## 1. 目标

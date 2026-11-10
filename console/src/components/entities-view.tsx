@@ -91,7 +91,7 @@ export function EntitiesView() {
       setSelectedEntity(result);
     } catch (error) {
       // Error toast is shown automatically by the API client interceptor
-
+    
       throw error;
     } finally {
       setLoadingDetail(false);

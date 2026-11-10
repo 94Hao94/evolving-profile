@@ -68,7 +68,7 @@ def create_worker_app(poller: WorkerPoller, memory):
 
     # Initialize OpenTelemetry metrics
     try:
-        prometheus_reader = initialize_metrics(service_name="hindsight-worker", service_version="1.0.0")
+        prometheus_reader = initialize_metrics(service_name="hindsight-worker")
         create_metrics_collector()
         app.state.prometheus_reader = prometheus_reader
         logger.info("Metrics initialized - available at /metrics endpoint")
@@ -153,10 +153,13 @@ def create_worker_app(poller: WorkerPoller, memory):
     )
     async def root():
         """Return basic worker info."""
+        from ..runtime_identity import get_runtime_identity
+
         return {
             "service": "hindsight-worker",
             "worker_id": poller.worker_id,
             "is_shutdown": poller.is_shutdown,
+            "runtime": get_runtime_identity(),
         }
 
     return app

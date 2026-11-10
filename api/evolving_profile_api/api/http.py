@@ -59,8 +59,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from evolving_profile_api import MemoryEngine
 from evolving_profile_api.config import RETAIN_EXTRACTION_MODES
 from evolving_profile_api.config_resolver import BankConfigPersistenceConflictError
+from evolving_profile_api.engine.repair_service import (
+    RepairConflictError,
+    RepairService,
+    load_repair_plan,
+    save_repair_plan,
+)
 from evolving_profile_api.engine.retain.entity_labels import LabelGroup, _migrate_label_group
-from evolving_profile_api.engine.repair_service import RepairConflictError, RepairPlan, RepairService, load_repair_plan, save_repair_plan
 
 
 def _migrate_entity_labels_input(value: Any) -> Any:
@@ -327,6 +332,28 @@ class RecallRequest(BaseModel):
     )
 
     query: str
+    # EP host adapters send these bounded audit fields alongside the semantic
+    # query.  They deliberately do not affect ranking; keeping them in the
+    # request model prevents the HTTP compatibility middleware from reporting
+    # them as silently ignored body parameters and lets the audited("recall")
+    # decorator retain the exact prompt provenance when audit logging is on.
+    # ``full_prompt`` is the resolved context used to build ``query`` while
+    # ``raw_user_prompt`` is the user's unexpanded turn.
+    raw_user_prompt: str | None = Field(
+        default=None,
+        max_length=48000,
+        description="Optional bounded audit copy of the raw user turn; not used for retrieval ranking.",
+    )
+    full_prompt: str | None = Field(
+        default=None,
+        max_length=48000,
+        description="Optional bounded resolved prompt context; not used for retrieval ranking.",
+    )
+    full_prompt_source: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Optional provenance label for full_prompt; not used for retrieval ranking.",
+    )
     types: list[str] | None = Field(
         default=None,
         description="List of fact types to recall: 'world', 'experience', 'observation'. Defaults to all fact types if not specified.",
@@ -3654,6 +3681,10 @@ class FeaturesInfo(BaseModel):
     observations: bool = Field(description="Whether observations (auto-consolidation) are enabled")
     mcp: bool = Field(description="Whether MCP (Model Context Protocol) server is enabled")
     worker: bool = Field(description="Whether the background worker is enabled")
+    worker_available: bool = Field(
+        default=False,
+        description="Whether a worker is operationally available for this API instance",
+    )
     bank_config_api: bool = Field(description="Whether per-bank configuration API is enabled")
     bank_llm_health: bool = Field(description="Whether the per-bank LLM connectivity probe is enabled")
     file_upload_api: bool = Field(description="Whether file upload/conversion API is enabled")
@@ -3664,6 +3695,17 @@ class FeaturesInfo(BaseModel):
     store_document_text: bool = Field(
         description="Whether raw source text is persisted. When false, document/chunk source text is not stored."
     )
+
+
+class RuntimeIdentity(BaseModel):
+    """Build and process identity shared with health and telemetry."""
+
+    version: str
+    build_sha: str
+    source_root: str
+    config_generation: str
+    instance_id: str
+    started_at: str
 
 
 class VersionResponse(BaseModel):
@@ -3677,6 +3719,7 @@ class VersionResponse(BaseModel):
                     "observations": False,
                     "mcp": True,
                     "worker": True,
+                    "worker_available": True,
                     "bank_config_api": False,
                     "bank_llm_health": True,
                     "file_upload_api": True,
@@ -3692,6 +3735,14 @@ class VersionResponse(BaseModel):
 
     api_version: str = Field(description="API version string")
     features: FeaturesInfo = Field(description="Enabled feature flags")
+    runtime: RuntimeIdentity = Field(description="Deployment and process identity")
+    worker_mode: Literal["embedded", "external", "disabled"] = Field(
+        description="Whether this API embeds a worker, delegates to an external worker, or has no worker"
+    )
+    active_worker_ids: list[str] = Field(default_factory=list, description="Worker IDs explicitly advertised to this API")
+    worker_ids_source: Literal["live_health", "configured", "none"] = Field(
+        description="How active_worker_ids were obtained; configured does not claim a live health check"
+    )
 
 
 # =========================================================================
@@ -3933,7 +3984,7 @@ def create_app(
 
         # Initialize OpenTelemetry metrics
         try:
-            prometheus_reader = initialize_metrics(service_name="evolving-profile-api", service_version="1.0.0")
+            prometheus_reader = initialize_metrics(service_name="evolving-profile-api")
             create_metrics_collector()
             app.state.prometheus_reader = prometheus_reader
             logging.info("Metrics initialized - available at /metrics endpoint")
@@ -4450,14 +4501,36 @@ def _register_routes(app: FastAPI):
         """
         from evolving_profile_api import __version__
         from evolving_profile_api.config import _get_raw_config
+        from evolving_profile_api.runtime_identity import get_runtime_identity
 
         config = _get_raw_config()
+        worker_mode_override = os.getenv("EVOLVING_PROFILE_API_WORKER_MODE")
+        if worker_mode_override in {"embedded", "external", "disabled"}:
+            worker_mode = worker_mode_override
+        elif config.worker_enabled:
+            worker_mode = "embedded"
+        elif config.worker_http_port:
+            worker_mode = "external"
+        else:
+            worker_mode = "disabled"
+        active_worker_ids = [
+            worker_id.strip()
+            for worker_id in os.getenv("EVOLVING_PROFILE_API_ACTIVE_WORKER_IDS", "").split(",")
+            if worker_id.strip()
+        ]
+        worker_ids_source = "live_health" if active_worker_ids else "none"
+        if not active_worker_ids and worker_mode == "external":
+            configured_worker_id = os.getenv("EVOLVING_PROFILE_API_EXTERNAL_WORKER_ID") or getattr(config, "worker_id", None)
+            if configured_worker_id:
+                active_worker_ids = [str(configured_worker_id)]
+                worker_ids_source = "configured"
         return VersionResponse(
             api_version=__version__,
             features=FeaturesInfo(
                 observations=config.enable_observations,
                 mcp=config.mcp_enabled,
                 worker=config.worker_enabled,
+                worker_available=worker_mode != "disabled" and bool(active_worker_ids),
                 bank_config_api=config.enable_bank_config_api,
                 bank_llm_health=config.enable_bank_llm_health,
                 file_upload_api=config.enable_file_upload_api,
@@ -4467,6 +4540,10 @@ def _register_routes(app: FastAPI):
                 llm_trace=config.llm_trace_enabled,
                 store_document_text=config.store_document_text,
             ),
+            runtime=RuntimeIdentity(**get_runtime_identity()),
+            worker_mode=worker_mode,
+            active_worker_ids=active_worker_ids,
+            worker_ids_source=worker_ids_source,
         )
 
     @app.get(

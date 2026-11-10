@@ -63,7 +63,7 @@ from .db.ops_postgresql import pg_search_vector_expr
 from .db.postgresql import PostgreSQLBackend
 from .db.postgresql import apply_session_settings as _apply_session_settings
 from .db_budget import budgeted_operation
-from .llm_interface import ProviderContentPolicyError, ProviderRateLimitResetError
+from .llm_interface import OutputTooLongError, ProviderContentPolicyError, ProviderRateLimitResetError
 from .llm_trace import (
     LLMRequestEntry,
     LLMRequestListResponse,
@@ -3048,6 +3048,14 @@ class MemoryEngine(MemoryEngineInterface):
             # row except the prose error_message (#3274).
             await self._write_refresh_failure_metadata(task_dict.get("operation_id"), e)
             raise
+        except (OutputTooLongError, TimeoutError) as e:
+            # These failures are deterministic for the current input/window. Do
+            # not let the worker replay the same oversized or timed-out refresh;
+            # leave a structured repair receipt for the bounded compaction path.
+            await self._write_refresh_repair_recommendation(
+                task_dict.get("operation_id"), type(e).__name__, str(e)
+            )
+            raise
         if refreshed is None:
             raise ValueError(f"Mental model {mental_model_id} not found in bank {bank_id}")
 
@@ -3216,6 +3224,19 @@ class MemoryEngine(MemoryEngineInterface):
                     # Conversion failures won't improve on retry (missing OCR, corrupted file, etc.)
                     logger.error(f"Not retrying task {task_type} (non-retryable), marking as failed")
                     if operation_id:
+                        await self._mark_operation_failed(operation_id, error_message, error_traceback)
+                elif task_type == "refresh_mental_model" and isinstance(e, (OutputTooLongError, TimeoutError)):
+                    # Replaying the same source window cannot fix a provider
+                    # length/timeout failure. Preserve the failed row and route
+                    # it to bounded repair instead of spending worker retries.
+                    logger.error(
+                        f"Not retrying task {task_type} ({type(e).__name__}); "
+                        "bounded repair is available"
+                    )
+                    if operation_id:
+                        await self._write_refresh_repair_recommendation(
+                            operation_id, type(e).__name__, error_message
+                        )
                         await self._mark_operation_failed(operation_id, error_message, error_traceback)
                 elif _is_non_retryable_task_error(e):
                     # Non-retryable: deterministic task failures (integrity violations,
@@ -3779,6 +3800,9 @@ class MemoryEngine(MemoryEngineInterface):
                 metadata["work"] = MentalModelRefreshWork.model_validate(work).model_dump(mode="json")
             except ValueError:
                 logger.warning("Ignoring malformed refresh work receipt for %s", operation_id)
+        attempts = reflect_response.get("attempts")
+        if isinstance(attempts, list):
+            metadata["attempts"] = attempts
         try:
             backend = await self._get_backend()
             async with acquire_with_retry(backend) as conn:
@@ -3826,6 +3850,35 @@ class MemoryEngine(MemoryEngineInterface):
             # Best-effort, and the operation still fails with its error_message —
             # this only costs the machine-readable half of the record.
             logger.warning(f"Failed to write refresh failure metadata for {operation_id}: {e}")
+
+    async def _write_refresh_repair_recommendation(
+        self, operation_id: str | None, error_type: str, detail: str
+    ) -> None:
+        """Record a bounded-repair route for deterministic refresh failures."""
+        if not operation_id:
+            return
+        metadata = {
+            "repair_recommended": True,
+            "repair_strategy": "bounded_llm_compaction",
+            "repair_reason": error_type,
+            "repair_detail": str(detail)[:1000],
+            "retry_suppressed": True,
+        }
+        try:
+            backend = await self._get_backend()
+            async with acquire_with_retry(backend) as conn:
+                await conn.execute(
+                    f"""
+                    UPDATE {fq_table('async_operations')}
+                    SET result_metadata = COALESCE(result_metadata, '{{}}'::jsonb) || $2::jsonb,
+                        updated_at = now()
+                    WHERE operation_id = $1
+                    """,
+                    uuid.UUID(operation_id),
+                    json.dumps(metadata),
+                )
+        except Exception as e:
+            logger.warning(f"Failed to write refresh repair recommendation for {operation_id}: {e}")
 
     async def _mark_operation_completed_and_fire_webhook(
         self,
@@ -14115,7 +14168,48 @@ class MemoryEngine(MemoryEngineInterface):
             watermark=processed_watermark,
         )
 
-        reflect_result = await self.reflect_async(**reflect_kwargs)
+        # Oversized refresh inputs are recovered once with a smaller recall batch.
+        # Retrying the original payload indefinitely only reproduces the provider
+        # length failure and can leave the operation burning worker retries.
+        refresh_attempts: list[dict[str, Any]] = []
+        base_recall_max_tokens = recall_max_tokens_override
+        base_recall_chunks_max_tokens = recall_chunks_max_tokens_override
+        for retry_count in range(2):
+            attempt_kwargs = dict(reflect_kwargs)
+            if retry_count:
+                current_budget = base_recall_max_tokens or DEFAULT_RECALL_MAX_TOKENS
+                reduced_budget = max(1000, int(current_budget * 0.5))
+                attempt_kwargs["recall_max_tokens_override"] = reduced_budget
+                if base_recall_chunks_max_tokens is not None:
+                    attempt_kwargs["recall_chunks_max_tokens_override"] = max(
+                        1000, int(base_recall_chunks_max_tokens * 0.5)
+                    )
+            input_estimate = len(source_query) + len(refresh_context)
+            attempt_metadata = {
+                "input_estimate": input_estimate,
+                # No source/fact child batches are materialized by the current
+                # reflect loop, so the actual batch size is unknown. Keep this
+                # distinct from the recall token budgets below.
+                "batch_size": None,
+                "recall_max_tokens": attempt_kwargs.get("recall_max_tokens_override"),
+                "recall_chunks_max_tokens": attempt_kwargs.get("recall_chunks_max_tokens_override"),
+                "model": getattr(getattr(self, "_reflect_llm_config", None), "model", None),
+                "finish_reason": None,
+                "retry_count": retry_count,
+                "config_version": getattr(get_config(), "config_generation", None),
+            }
+            try:
+                reflect_result = await self.reflect_async(**attempt_kwargs)
+                attempt_metadata["finish_reason"] = getattr(reflect_result, "finish_reason", "stop")
+                refresh_attempts.append(attempt_metadata)
+                break
+            except OutputTooLongError:
+                attempt_metadata["finish_reason"] = "length"
+                refresh_attempts.append(attempt_metadata)
+                if retry_count:
+                    raise
+        else:  # pragma: no cover - the loop either returns or re-raises
+            raise RuntimeError("refresh reflect attempts exhausted")
 
         # Build reflect_response payload to store
         # based_on contains MemoryFact objects for most types, but plain dicts for directives
@@ -14162,6 +14256,45 @@ class MemoryEngine(MemoryEngineInterface):
         delta_supporting_facts: list[dict[str, Any]] = []
         for _facts in based_on_serialized_payload.values():
             delta_supporting_facts.extend(_facts)
+
+        # Persist a deterministic source-slice receipt even while the current
+        # reflect call remains one LLM execution. The receipt gives the future
+        # parent/child orchestration a stable source boundary without changing
+        # this refresh's behavior or silently dropping an oversized source.
+        from .refresh_batch import plan_refresh_subbatches
+
+        refresh_source_rows = [
+            {
+                "source_id": str(fact.get("id") or ""),
+                "token_estimate": max(1, len(str(fact.get("text") or "")) // 4),
+            }
+            for facts_for_type in based_on_serialized_payload.values()
+            for fact in facts_for_type
+            if isinstance(fact, dict) and fact.get("id")
+        ]
+        source_batch_limit = int(trigger_data.get("source_batch_max_tokens") or 2000)
+        try:
+            source_slices = [slice_.to_dict() for slice_ in plan_refresh_subbatches(
+                refresh_source_rows, max_tokens=source_batch_limit
+            )]
+            source_batch_receipt = {
+                "schema": "ep.refresh-source-batches.v1",
+                "status": "planned",
+                "max_tokens": source_batch_limit,
+                "total_source_count": len(refresh_source_rows),
+                "total_sub_batches": len(source_slices),
+                "children": source_slices,
+            }
+        except (TypeError, ValueError) as exc:
+            source_batch_receipt = {
+                "schema": "ep.refresh-source-batches.v1",
+                "status": "incomplete",
+                "max_tokens": source_batch_limit,
+                "total_source_count": len(refresh_source_rows),
+                "total_sub_batches": 0,
+                "children": [],
+                "error": type(exc).__name__,
+            }
 
         # Retracted grounding: facts the stored document still cites that no longer
         # exist. Derived here rather than passed in by whatever removed them, because
@@ -14227,6 +14360,8 @@ class MemoryEngine(MemoryEngineInterface):
             "text": reflect_result.text,
             "based_on": based_on_serialized_payload,
             "mental_models": [],  # Mental models are included in based_on["mental-models"]
+            "attempts": refresh_attempts,
+            "source_batches": source_batch_receipt,
         }
 
         warnings: list[str] = []

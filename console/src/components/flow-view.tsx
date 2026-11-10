@@ -76,6 +76,18 @@ type RouteDecision = {
   catalog_hints?: CatalogHint[];
   agent_may_override?: boolean;
 };
+type HostOption = { id: string; labels?: Record<string, string> };
+const FALLBACK_HOST_OPTIONS: HostOption[] = [
+  { id: "codex", labels: { en: "Codex", "zh-CN": "Codex" } },
+  { id: "trae", labels: { en: "Trae", "zh-CN": "Trae" } },
+  { id: "claude_code_cli", labels: { en: "Claude Code CLI", "zh-CN": "Claude Code 命令行" } },
+  { id: "claude_code_desktop_local", labels: { en: "Claude desktop · local Code", "zh-CN": "Claude 桌面端·本地 Code" } },
+  { id: "claude_desktop_chat", labels: { en: "Claude Desktop · Chat", "zh-CN": "Claude 桌面端·普通聊天" } },
+  { id: "hermes", labels: { en: "Hermes", "zh-CN": "Hermes" } },
+  { id: "workbuddy", labels: { en: "Tencent WorkBuddy", "zh-CN": "腾讯 WorkBuddy" } },
+  { id: "doubao_work", labels: { en: "Doubao Work", "zh-CN": "豆包工作任务" } },
+  { id: "generic_mcp", labels: { en: "Other MCP client", "zh-CN": "其他 MCP 客户端" } },
+];
 const FLOW_COPY = {
   zh: {
     intro: "左侧选择用户 Prompt，中间查看本轮路径，右侧查看节点真实回执。",
@@ -499,6 +511,7 @@ export function FlowView() {
   const [cursor, setCursor] = useState(0);
   const [query, setQuery] = useState("");
   const [host, setHost] = useState("all");
+  const [hostOptions, setHostOptions] = useState<HostOption[]>(FALLBACK_HOST_OPTIONS);
   const [promptSource,setPromptSource]=useState("natural");
   const [sourceCounts,setSourceCounts]=useState<PromptSourceCounts>({natural:null,audit:null});
   const [hasMore, setHasMore] = useState(false);
@@ -514,6 +527,18 @@ export function FlowView() {
   // as a real injection for the newly selected prompt.
   const currentRow = selectedDetail?.prompt_id === selected?.prompt_id ? selectedDetail : null;
   const navigation = mapMode === "latest" ? latestNavigation : currentRow?.navigation_map;
+  useEffect(() => {
+    const abort = new AbortController();
+    fetch("/api/evolving-profile/host-catalog", { cache: "no-store", signal: abort.signal })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (Array.isArray(payload.profiles) && payload.profiles.length) {
+          setHostOptions(payload.profiles);
+        }
+      })
+      .catch(() => undefined);
+    return () => abort.abort();
+  }, []);
   useEffect(() => {
     if (!mapOpen) return;
     const abort = new AbortController();
@@ -717,7 +742,7 @@ export function FlowView() {
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">{english ? "Flow" : inlineUiText("链路")}</h1>
                 <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-300">
-                  {english ? "EP 5.1 development" : inlineUiText("EP 5.1 开发态")}
+                  {english ? "EP 5.2 contribution" : inlineUiText("EP 5.2 贡献版")}
                 </span>
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">{english ? "Observable evidence path from prompt to answer" : inlineUiText("从 Prompt 到回答的可观测证据图")}</p>
@@ -742,10 +767,11 @@ export function FlowView() {
               className="bg-transparent font-medium text-foreground outline-none"
             >
               <option value="all">{english ? "All" : inlineUiText("全部")}</option>
-              <option value="codex">Codex</option>
-              <option value="hermes">Hermes</option>
-              <option value="claude-code">{inlineUiText("Claude Code")}</option>
-              <option value="codex-cli">{inlineUiText("Codex CLI")}</option>
+              {hostOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.labels?.[locale] ?? option.labels?.[locale.startsWith("zh") ? "zh-CN" : "en"] ?? option.id}
+                </option>
+              ))}
             </select>
           </label>
           <PromptSourceSummary counts={sourceCounts}>
@@ -1303,7 +1329,7 @@ export function FlowView() {
                 </button>)}
               </div>
             </section>
-            {browseTopic && <NavigationTopicBrowser topicId={browseTopic} bankId={params.bankId} />}
+            {browseTopic && params?.bankId && <NavigationTopicBrowser topicId={browseTopic} bankId={params.bankId} />}
             <section className="border-t pt-4">
               <h3 className="font-semibold">{inlineUiText("L1 · 目录预览")}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{navigation.bank?.hierarchy_coverage?.leaf_count ? `${navigation.bank.hierarchy_coverage.leaf_count} 个具体主题覆盖已归组记录。` : inlineUiText("此快照尚无全库分层目录。")} {inlineUiText("名称索引")} {navigation.bank?.searchable_entity_count ?? "—"} {inlineUiText("项；另保留")} {navigation.bank?.entity_count ?? "—"} {inlineUiText("个实体详情预览。点击上方领域进入最新 L1，可查看来源与原文。")}</p>

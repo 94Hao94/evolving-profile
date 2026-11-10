@@ -5,6 +5,7 @@ These dataclasses define the structure of result_metadata for different operatio
 The metadata is exposed in the API for debugging purposes and may change without notice.
 """
 
+import hashlib
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping
 
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
     from .mental_model_refresh import RefreshFailureReason, RefreshOperationOutcome
 
 MAX_EXTRACTION_ERROR_SAMPLES = 5
+MAX_EXTRACTION_ERROR_RECORDS = 5
+MAX_EXTRACTION_ERROR_RAW_CHARS = 4000
 
 
 @dataclass
@@ -59,6 +62,36 @@ class BatchRetainChildMetadata:
 
 
 @dataclass
+class RefreshParentMetadata:
+    """Metadata for a source-sliced refresh parent operation."""
+
+    mental_model_id: str
+    total_source_count: int
+    total_token_estimate: int
+    num_sub_batches: int
+    is_parent: bool = True
+    schema: str = "ep.refresh-parent-metadata.v1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class RefreshChildMetadata:
+    """Metadata for one source-sliced refresh child operation."""
+
+    parent_operation_id: str
+    sub_batch_index: int
+    total_sub_batches: int
+    source_ids: list[str]
+    token_estimate: int
+    schema: str = "ep.refresh-child-metadata.v1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class RetainMetadata:
     """Metadata for regular retain operations (non-batched, deprecated async path)."""
 
@@ -75,12 +108,36 @@ class RetainExtractionErrors:
 
     count: int = 0
     sample: list[str] = field(default_factory=list)
+    records: list[dict[str, Any]] = field(default_factory=list)
 
-    def add(self, message: str) -> None:
+    def add(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        raw_text: str | None = None,
+        candidate: str | None = None,
+    ) -> None:
         """Record one extraction error while keeping the stored sample bounded."""
         self.count += 1
         if len(self.sample) < MAX_EXTRACTION_ERROR_SAMPLES:
             self.sample.append(message[:500])
+        if code or raw_text is not None or candidate is not None:
+            record: dict[str, Any] = {"message": message[:500]}
+            if code:
+                record["code"] = code
+            if raw_text is not None:
+                raw_value = raw_text if isinstance(raw_text, str) else str(raw_text)
+                record["raw_text"] = raw_value[:MAX_EXTRACTION_ERROR_RAW_CHARS]
+                record["raw_text_length"] = len(raw_value)
+                record["raw_text_sha256"] = hashlib.sha256(raw_value.encode()).hexdigest()
+            if candidate is not None:
+                candidate_value = candidate if isinstance(candidate, str) else str(candidate)
+                record["candidate"] = candidate_value[:MAX_EXTRACTION_ERROR_RAW_CHARS]
+                record["candidate_length"] = len(candidate_value)
+                record["candidate_sha256"] = hashlib.sha256(candidate_value.encode()).hexdigest()
+            if len(self.records) < MAX_EXTRACTION_ERROR_RECORDS:
+                self.records.append(record)
 
     def merge_metadata(self, metadata: Mapping[str, Any]) -> None:
         """Merge errors already present on an operation result_metadata object."""
@@ -94,11 +151,19 @@ class RetainExtractionErrors:
                 if isinstance(entry, str) and len(self.sample) < MAX_EXTRACTION_ERROR_SAMPLES:
                     self.sample.append(entry[:500])
 
+        records = metadata.get("extraction_error_records") or []
+        if isinstance(records, list):
+            for record in records:
+                if isinstance(record, dict) and len(self.records) < MAX_EXTRACTION_ERROR_RECORDS:
+                    self.records.append(dict(record))
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to the public result_metadata field shape."""
         data: dict[str, Any] = {"extraction_errors_count": self.count}
         if self.sample:
             data["extraction_errors_sample"] = self.sample
+        if self.records:
+            data["extraction_error_records"] = self.records[:MAX_EXTRACTION_ERROR_RECORDS]
         return data
 
 
@@ -109,6 +174,7 @@ class RetainOutcomeMetadata:
     unit_ids_count: int
     extraction_errors_count: int = 0
     extraction_errors_sample: list[str] = field(default_factory=list)
+    extraction_error_records: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON serialization, omitting empty optional samples."""
@@ -118,6 +184,8 @@ class RetainOutcomeMetadata:
         }
         if self.extraction_errors_sample:
             data["extraction_errors_sample"] = self.extraction_errors_sample[:MAX_EXTRACTION_ERROR_SAMPLES]
+        if self.extraction_error_records:
+            data["extraction_error_records"] = self.extraction_error_records[:MAX_EXTRACTION_ERROR_RECORDS]
         return data
 
 
@@ -139,6 +207,7 @@ class RetainOutcomeAggregate:
             unit_ids_count=self.unit_ids_count,
             extraction_errors_count=self.extraction_errors.count,
             extraction_errors_sample=self.extraction_errors.sample,
+            extraction_error_records=self.extraction_errors.records,
         )
 
 

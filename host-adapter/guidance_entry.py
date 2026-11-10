@@ -21,8 +21,8 @@ from task_state import TaskStateStore
 from lib.memory_policy import classify_memory_policy
 from entry_navigation import build_navigation_map
 
-GUIDANCE_SRC = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC", str(Path(__file__).resolve().parents[1] / "guidance")))
-GUIDANCE_CONFIG = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG", str(Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json")))
+GUIDANCE_SRC = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_SRC") or Path(__file__).resolve().parents[1] / "guidance")
+GUIDANCE_CONFIG = Path(os.environ.get("EVOLVING_PROFILE_GUIDANCE_CONFIG") or Path.home() / ".evolving-profile/guidance-v1/guidance-v1.json")
 RECEIPT_ROOT = Path.home() / ".evolving-profile/audit/guidance-entry-receipts"
 MAX_TOKENS = 5000
 MAX_CANDIDATES = 6
@@ -240,7 +240,8 @@ def _task_state_context(task_state: dict, session_id: str, budget: int) -> str:
     """Bound a duplicate task preview without cutting the manual/map or JSON."""
     start, end = '\n<evolving_profile_task_state>\n', '\n</evolving_profile_task_state>'
     fields = ('current_objective','current_message','continuation','continuation_context','source','authority','version',
-              'update_reason','expires_at','constraints','completed','unresolved','objects','source_versions')
+              'update_reason','expires_at','constraints','completed','unresolved','objects','source_versions',
+              'working_state_schema','working_state')
     block = {key:task_state[key] for key in fields if task_state.get(key) is not None}
 
     def render(value):
@@ -347,7 +348,7 @@ def run_entry_check(hook_input: dict, prompt: str, *, memory_policy: str = "allo
                     "current_objective", "current_message", "continuation",
                     "continuation_context", "source", "authority", "version",
                     "update_reason", "expires_at", "constraints", "completed",
-                    "unresolved", "objects", "source_versions",
+                    "unresolved", "objects", "source_versions", "working_state_schema", "working_state",
                 )
             }
         except OSError:
@@ -366,7 +367,7 @@ def run_entry_check(hook_input: dict, prompt: str, *, memory_policy: str = "allo
                 "current_objective", "current_message", "continuation",
                 "continuation_context", "source", "authority", "version",
                 "update_reason", "expires_at", "constraints", "completed",
-                "unresolved", "objects", "source_versions",
+                "unresolved", "objects", "source_versions", "working_state_schema", "working_state",
             )
         }
         context += "\n<evolving_profile_task_state>\n" + json.dumps(task_block, ensure_ascii=False) + "\n</evolving_profile_task_state>"

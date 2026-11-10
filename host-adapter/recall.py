@@ -399,7 +399,7 @@ def emit_bounded_system_probe(hook_input, prompt, config, invocation_id):
             debug_log(config,'Memory access guard route receipt unavailable: '+type(error).__name__)
     identity={'session_id':hook_input.get('session_id'),'turn_id':hook_input.get('turn_id'),
               'hook_invocation_id':invocation_id}
-    route={k:plan[k] for k in ('recommended_route','history_dependency','minimum_action','reason','required_slots','context_source','candidate_policy','fallback_route','fallback_trigger','required_ep_tool','allow_native_memory')}
+    route={k:plan[k] for k in ('recommended_route','history_dependency','minimum_action','reason','required_slots','context_source','candidate_policy','fallback_route','fallback_trigger','required_ep_tool','allow_native_memory','history_cause','agent_process_history','route_channels','mandatory_history_tools','coverage_contract','fallback_channels') if k in plan}
     route['check_id']=invocation_id
     route_context='<evolving_profile_memory_route>\n'+json.dumps(route,ensure_ascii=False).replace('<','\\u003c')+'\n</evolving_profile_memory_route>'
     output=route_context+'\n'+context
@@ -417,12 +417,12 @@ def emit_bounded_system_probe(hook_input, prompt, config, invocation_id):
         'injected_items':probe['items'],'packet_delivery':{'state':'hook_stdout_write_completed'},
         'context_sha256':hashlib.sha256(_with_entry_guidance(output).encode()).hexdigest()}
     receipt.update({
-        'route_required': plan.get('recommended_route') in {'recall', 'research'},
+        'route_required': bool(plan.get('mandatory_history_tools')) or plan.get('recommended_route') in {'recall', 'research', 'multi_route'},
         'route_started': False,
         'tool_called': False,
         'returned_count': 0,
-        'delivery_state': 'not_started' if plan.get('recommended_route') in {'recall', 'research'} else 'not_required',
-        'unresolved': ['EP历史工具尚未调用；本地文件搜索或候选提示不计为历史核验'] if plan.get('recommended_route') in {'recall', 'research'} else [],
+        'delivery_state': 'not_started' if (plan.get('mandatory_history_tools') or plan.get('recommended_route') in {'recall', 'research', 'multi_route'}) else 'not_required',
+        'unresolved': ['EP历史工具尚未调用；本地文件搜索或候选提示不计为历史核验'] if (plan.get('mandatory_history_tools') or plan.get('recommended_route') in {'recall', 'research', 'multi_route'}) else [],
     })
     from evidence_workspace import _save
     lane='diagnostic' if is_shadow_replay() or hook_input.get('memory_prompt_origin')=='test_probe' else 'production'
@@ -440,7 +440,7 @@ def route_requires_ep_history(prompt: str, task: dict | None = None) -> bool:
     """
     from system_probe import plan_history
     plan = plan_history(prompt, task or {})
-    return plan.get('minimum_action') in {'recall_probe', 'agent_query', 'live_audit'} or plan.get('recommended_route') in {'recall', 'research', 'live_audit'}
+    return bool(plan.get('mandatory_history_tools')) or plan.get('minimum_action') in {'recall_probe', 'agent_query', 'live_audit'} or plan.get('recommended_route') in {'recall', 'research', 'live_audit', 'multi_route'}
 
 
 def publish_injection(context: str, payload: dict, config: dict) -> bool:
@@ -611,7 +611,7 @@ def is_shadow_replay() -> bool:
 
 
 SHADOW_REPLAY_FIXTURE_ROOT = Path(HAM_SOURCE_ROOT) / "tests" / "fixtures" / "hindsight-replay"
-LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path(os.environ.get("EVOLVING_PROFILE_LEGACY_REPLAY_FIXTURES", str(Path(__file__).resolve().parent / "fixtures/hindsight-replay")))
+LEGACY_SHADOW_REPLAY_FIXTURE_ROOT = Path("/Users/example/Documents/Codex/2026-07-11/ag/hindsight-memory-os/tests/fixtures/hindsight-replay")
 
 
 def allow_shadow_fixture_transcript(transcript_path: str) -> bool:
@@ -1423,7 +1423,14 @@ def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, 
             "turn_id": turn_id,
             "task_id": str(task_id) if task_id else None,
             "hook_invocation_id": hook_invocation_id,
-            "host_id": os.environ.get("HINDSIGHT_AGENT_NAME") or "codex",
+            # Codex does not always inject EVOLVING_PROFILE_HOST_ID into a
+            # fresh session. Prefer the explicit host marker, then the bridge
+            # marker used by Trae/WorkBuddy, and only then use Codex's built-in
+            # default. This keeps ordinary new Codex prompts attributable
+            # without collapsing named non-Codex hosts into Codex.
+            "host_id": os.environ.get("EVOLVING_PROFILE_HOST_ID")
+                or os.environ.get("HINDSIGHT_AGENT_NAME")
+                or "codex",
             "cwd": str(cwd or ''),
             "transcript_path": str(transcript_path) if transcript_path else None,
             "model": str(model) if model else None,
@@ -1432,11 +1439,31 @@ def record_prompt_ingress(config: dict, prompt: str, session_id: str, cwd: str, 
             "project_key": hashlib.sha256(str(cwd or "").encode("utf-8")).hexdigest()[:16] if cwd else "",
             "prompt_preview": normalized[:600],
             "prompt_fingerprint": hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16],
-            "source": "codex-userpromptsubmit",
+            "source": f"{os.environ.get('EVOLVING_PROFILE_HOST_ID') or os.environ.get('HINDSIGHT_AGENT_NAME') or 'codex'}-userpromptsubmit",
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        # Personal/contact fields are indexed from the exact user message at
+        # ingress, so Codex/Trae/WorkBuddy do not depend on a later Stop hook
+        # to make a person's name or contact record searchable.  The raw
+        # prompt remains the source; this is only an additive local index.
+        try:
+            from lib.personal_records import record_messages
+            record_messages([{
+                'role': 'user',
+                'content': normalized,
+                'source_record': {
+                    'session_id': session_id,
+                    'turn_id': turn_id,
+                    'host_id': row['host_id'],
+                    'transcript_path': transcript_path,
+                },
+            }], session_id=str(session_id or ''), turn_id=str(turn_id or ''),
+                host_id=str(row['host_id'] or ''), transcript_path=str(transcript_path or ''))
+        except Exception:
+            # Personal indexing must never block prompt ingress.
+            pass
         return True
     except OSError:
         # A receipt must never make the prompt hook fail.
@@ -1488,6 +1515,8 @@ def format_memory_route_context(value: dict) -> str:
              'catalog_status':probe.get('status'),'catalog_coverage':probe.get('catalog_coverage'),'matched_entities':entities,'catalog_hints':hints,'agent_may_override':True,
              'catalog_miss_does_not_prove_bank_absence':True}
     route_instruction = (
+        "这是历史成因、失败路径或工具比较问题，必须并行调用 user_recall 核对用户项目事实；若涉及 Agent/工具执行，再调用 agent_recall；若涉及本轮链路，再调用 audit_thread_history。任一通道不可用时必须显式写入 channels_skipped，并用低成本 user_recall 降级，不能把未检索写成无记录。"
+        if route == "multi_route" else
         "单点历史问题必须实际调用 user_recall；若为空、主体不匹配或时间/范围不足，升级一次 user_research。"
         if route == "recall" else
         "这是开放盘点或多实体时间线，必须实际调用 user_research，并继续分页或回读原文。"
@@ -2360,7 +2389,7 @@ def filter_timeline_evidence(query: str, results: list[dict]) -> tuple[list[dict
     )
     narrative_prefixes = (
         "助手解释", "助理解释", "助手建议", "助理建议", "助手澄清", "助理澄清", "回答用户",
-        "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
+        "张三询问", "张三请求", "用户询问", "用户要求", "用户希望", "用户提出", "用户指出",
         "用户认为", "用户担忧", "用户偏好", "用户决定", "用户设定", "对用户当前场景的判断", "当前问题",
     )
     realization_terms = ("已完成", "完成", "已实现", "实现", "已上线", "上线", "已启用", "启用", "已生效", "生效", "正式启用", "正式切换", "生产切换", "生产运行", "已切换", "切换成功", "部署完成", "验证通过", "测试通过", "落地", "运行中")
@@ -2417,7 +2446,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         return list(results or []), []
     narrative_prefixes = (
         "用户询问", "用户提问", "用户问题", "用户请求", "用户要求", "用户希望",
-        "当前问题",
+        "张三询问", "张三提问", "张三请求", "张三要求", "当前问题",
     )
     # Do not use generic words such as "解决" or "验证" here: a historical
     # *question* can ask for a solution or verification and would then evade
@@ -2427,7 +2456,7 @@ def filter_question_echo_evidence(query: str, results: list[dict]) -> tuple[list
         "当前运行态", "当前正式架构运行态", "独立公司", "独立主体", "不是同一实体",
         "版本为", "版本号", "故障已修复", "修复已完成",
     )
-    # A historical user-led sentence can start with “用户要求”
+    # A historical user-led sentence can start with “用户要求/张三要求”
     # and still contain a durable rule rather than merely echoing a question.
     # These governance markers describe an ordering, prohibition, scope or
     # expiry condition that independently answers the current request.  The

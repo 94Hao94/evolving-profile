@@ -10,6 +10,10 @@ def review_source_layer(source):
     aliases={m['evidence_id']:f'm{i}' for i,m in enumerate(source['messages'],1)}
     messages=[{'message_ref':aliases[m['evidence_id']],**{key:m.get(key) for key in ('role','text','turn_id','at')}}
               for m in source['messages']]
+    for original, projected in zip(source['messages'],messages):
+        context=original.get('form_reply_context')
+        if isinstance(context,dict) and context.get('schema')=='evolving-profile.native-form-answer.v1':
+            projected.update(question_context=context['questions'],question_authority='assistant_question_context_not_user_request')
     quotes=[];transport_quotes=[]
     for message in source['messages']:
         if message['role']!='user':continue
@@ -165,8 +169,9 @@ def expand_review_choices(checked,catalog):
     used=False;annotations=[]
     for entry in entries:
         if not isinstance(entry,dict) or not isinstance(entry.get('intents'),list):continue
-        for intent in entry['intents']:
+        for intent_index,intent in enumerate(entry['intents']):
             if not isinstance(intent,dict):continue
+            location={'message_ref':entry.get('message_ref'),'intent_index':intent_index}
             selected_reply_fields=[]
             for ref_key,quote_key,message_key in [('source_quote_ref','source_quote','message_ref'),('superseding_quote_ref','superseding_quote','superseded_by_ref')]:
                 if ref_key not in intent:continue
@@ -178,24 +183,25 @@ def expand_review_choices(checked,catalog):
                             or not re.fullmatch(r'm[1-9][0-9]*',current)
                             or not re.fullmatch(r'm[1-9][0-9]*',later)
                             or int(later[1:])<=int(current[1:])):
-                        raise CoverageError('review_catalog_choice_invalid')
+                        raise CoverageError('review_catalog_choice_invalid',location=location)
                     if expected is None and message_key not in intent:
                         # The reviewer selected this exact later user quote;
                         # resolve its one source, without deciding supersession.
                         expected=later;intent[message_key]=later
                 if item is None or item['message_ref']!=expected or quote_key in intent:
-                    raise CoverageError('review_catalog_choice_invalid')
+                    raise CoverageError('review_catalog_choice_invalid',location=location)
                 intent[quote_key]=item['source_quote'];del intent[ref_key];used=True
             links=intent.get('field_links')
             if not isinstance(links,list):continue
             for index,link in enumerate(links):
+                location={'message_ref':entry.get('message_ref'),'intent_index':intent_index,'link_index':index}
                 if not isinstance(link,dict) or 'field_ref' not in link:continue
                 ref=link['field_ref'];item=fields.get(ref) if isinstance(ref,str) else None
-                if item is None or set(link)-{'field_ref','context_note'}:raise CoverageError('review_catalog_choice_invalid')
+                if item is None or set(link)-{'field_ref','context_note'}:raise CoverageError('review_catalog_choice_invalid',location=location)
                 if 'context_note' in link:
                     from source_safety import mask_text
                     note=link['context_note']
-                    if not isinstance(note,str) or len(note)>500:raise CoverageError('review_catalog_choice_invalid')
+                    if not isinstance(note,str) or len(note)>500:raise CoverageError('review_catalog_choice_invalid',location=location)
                     annotations.append({'message_ref':entry.get('message_ref'),'field_ref':ref,
                         'text':mask_text(note),'authority':'model_comment_not_source_or_verdict'})
                 links[index]={'episode_ref':item['episode_ref'],'state_path':item['state_path'],

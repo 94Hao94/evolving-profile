@@ -23,7 +23,7 @@ export function summarizeLocalBackups(files: BackupFile[]) {
     verified: items.some((item) => item.name.startsWith("SHA256SUMS-")),
     artifacts: {
       database: items.some((item) => item.name.startsWith("evolving-profile-db-")),
-      config: items.some((item) => item.name.startsWith("evolving-profile-config-")),
+      config: items.some((item) => item.name.startsWith("evolving-profile-config-") && item.name.endsWith(".tar.gz.enc")),
       capture: items.some((item) => item.name.startsWith("evolving-profile-capture-")),
     },
   })).sort((a, b) => b.modifiedMs - a.modifiedMs);
@@ -41,7 +41,18 @@ export function summarizeLocalBackups(files: BackupFile[]) {
   };
 }
 
-export type CloudReadback = { observed: boolean; fileName?: string; fileId?: string; fileSize?: number; completeSize?: number; errorCode?: number; completedAt?: string | null };
+export type CloudReadback = {
+  observed: boolean;
+  fileName?: string;
+  fileId?: string;
+  fileSize?: number;
+  completeSize?: number;
+  errorCode?: number;
+  completedAt?: string | null;
+  transport?: string;
+  remoteProviderReadback?: string;
+  verificationScope?: "local_mirror" | "remote_provider" | "unknown";
+};
 
 export function parseCloudReadbackReceipt(value: unknown): CloudReadback {
   if (!value || typeof value !== "object") return { observed: false };
@@ -54,6 +65,13 @@ export function parseCloudReadbackReceipt(value: unknown): CloudReadback {
   const completedAt = typeof receipt.completedAt === "string" && !Number.isNaN(Date.parse(receipt.completedAt))
     ? receipt.completedAt
     : null;
+  const transport = typeof receipt.transport === "string" ? receipt.transport : undefined;
+  const remoteProviderReadback = typeof receipt.remoteProviderReadback === "string" ? receipt.remoteProviderReadback : undefined;
+  const verificationScope = remoteProviderReadback === "unavailable" || transport === "wps-sync-folder-mirror"
+    ? "local_mirror" as const
+    : remoteProviderReadback
+      ? "remote_provider" as const
+      : "unknown" as const;
   const observed = receipt.observed === true
     && /^evolving-profile-backup-\d{8}-\d{6}\.zip$/i.test(fileName)
     && fileId.length > 0
@@ -61,7 +79,7 @@ export function parseCloudReadbackReceipt(value: unknown): CloudReadback {
     && completeSize === fileSize
     && errorCode === 0;
   if (!observed) return { observed: false };
-  return { observed, fileName, fileId, fileSize, completeSize, errorCode, completedAt };
+  return { observed, fileName, fileId, fileSize, completeSize, errorCode, completedAt, transport, remoteProviderReadback, verificationScope };
 }
 
 export function summarizeCloudBackups(sets: CloudBackupSet[], wpsCache: { present: boolean; fileCount: number; timedOut?: boolean }, nowMs = Date.now(), readback?: CloudReadback) {
@@ -80,6 +98,7 @@ export function summarizeCloudBackups(sets: CloudBackupSet[], wpsCache: { presen
     encrypted,
     plaintextFiles: ordered.reduce((sum, item) => sum + item.plaintextFiles, 0),
     wpsCache,
+    verification_scope: readback?.verificationScope ?? "unknown",
     readback: readback ?? { observed: false },
   };
 }

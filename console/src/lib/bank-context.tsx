@@ -1,9 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { client } from "./api";
 import { bankIdFromPathname } from "./bank-path";
+import type { BankSelection } from "./bank-selection";
+import { withBasePath } from "./base-path";
 
 export interface BankInfo {
   bank_id: string;
@@ -22,17 +24,35 @@ interface BankContextType {
   bankInfos: BankInfo[];
   banksLoading: boolean;
   loadBanks: () => Promise<void>;
+  requestedBank: string | null;
+  primaryBank: string | null;
+  primaryReady: boolean;
+  selectionStatus: BankSelection["status"] | "loading";
+  refreshSelection: () => void;
 }
 
 const BankContext = createContext<BankContextType | undefined>(undefined);
 
 export function BankProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [currentBank, setCurrentBank] = useState<string | null>(null);
+  const requestedBank = bankIdFromPathname(pathname);
+  const invalidBankPath = /(?:^|\/)banks(?:\/|$)/.test(pathname??"") && !requestedBank;
+  const [selection, setSelection] = useState<BankSelection | null>(null);
+  const [selectionRevision, setSelectionRevision] = useState(0);
+  // A previous bank's successful validation is never valid for the new URL.
+  const activeSelection = selection?.requested_bank_id === requestedBank ? selection : null;
+  const currentBank = !invalidBankPath && activeSelection?.status === "ready" ? activeSelection.selected_bank_id : null;
+  const refreshSelection = useCallback(() => {
+    setSelection(null);
+    setSelectionRevision(value=>value+1);
+  },[]);
+  // Existing callers navigate immediately after selecting/creating/deleting.
+  // Do not expose an unchecked choice to bank-scoped readers or writers.
+  const setCurrentBank = useCallback((_bank:string|null)=>refreshSelection(),[refreshSelection]);
   const [bankInfos, setBankInfos] = useState<BankInfo[]>([]);
   const [banksLoading, setBanksLoading] = useState(true);
 
-  const loadBanks = async () => {
+  const loadBanks = useCallback(async () => {
     setBanksLoading(true);
     try {
       const response = await client.listBanks();
@@ -52,23 +72,42 @@ export function BankProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setBanksLoading(false);
     }
-  };
+  },[]);
 
   // Derive bank IDs for backwards compatibility
   const banks = bankInfos.map((b) => b.bank_id);
 
-  // Initialize bank from URL on mount
+  // Validate explicit routes; only routes without a Bank may default to primary.
   useEffect(() => {
-    setCurrentBank(bankIdFromPathname(pathname));
-  }, [pathname]);
+    const abort=new AbortController();
+    setSelection(null);
+    const url=withBasePath("/api/evolving-profile/bank-selection")+
+      (requestedBank ? `?bankId=${encodeURIComponent(requestedBank)}` : "");
+    void fetch(url,{cache:"no-store",signal:abort.signal}).then(async response=>{
+      const data=await response.json();
+      if(data?.schema!=="ep.bank-selection.v1" || data.requested_bank_id!==requestedBank ||
+        !["ready","missing","unavailable","unconfigured"].includes(data.status) ||
+        !data.primary || (data.status==="ready" && typeof data.selected_bank_id!=="string")) {
+        throw new Error("invalid_bank_selection_response");
+      }
+      if(!abort.signal.aborted) setSelection(data);
+    }).catch(()=>{
+      if(!abort.signal.aborted) setSelection({schema:"ep.bank-selection.v1",requested_bank_id:requestedBank,
+        selected_bank_id:null,status:"unavailable",primary:{bank_id:null,status:"unavailable"}});
+    });
+    return ()=>abort.abort();
+  }, [requestedBank,selectionRevision]);
 
   useEffect(() => {
     loadBanks();
-  }, []);
+  }, [loadBanks]);
 
   return (
     <BankContext.Provider
-      value={{ currentBank, setCurrentBank, banks, bankInfos, banksLoading, loadBanks }}
+      value={{ currentBank, setCurrentBank, banks, bankInfos, banksLoading, loadBanks,
+        requestedBank,primaryBank:activeSelection?.primary.bank_id??null,
+        primaryReady:activeSelection?.primary.status==="ready",
+        selectionStatus:invalidBankPath?"missing":activeSelection?.status??"loading",refreshSelection }}
     >
       {children}
     </BankContext.Provider>

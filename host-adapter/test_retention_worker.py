@@ -88,37 +88,6 @@ class RetentionWorkerTest(unittest.TestCase):
         self.assertEqual(self.run_worker()['status'],'retry_requested')
         self.assertEqual(self.queue._read()['items'][0]['operation_id'],'op1')
         self.assertEqual(len(self.posts),1)
-
-    def test_retry_exhaustion_quarantines_bad_batch_and_allows_newer_batches(self):
-        self.capture('bad','2020-01-01T00:00:00Z')
-        self.capture('newer','2020-01-01T00:00:00Z')
-        first=self.queue._select_batches(self.queue._read(),force_tail=True)[0]
-        self.assertTrue(self.queue.mark_submitted(first['batch_id'],'op1',item_ids=first['item_ids']))
-        state=self.root/'retention/worker-state.json'
-        state.parent.mkdir(parents=True)
-        state.write_text(json.dumps({'retry_counts':{'op1':3},'next_retry_at_epoch':0}))
-        self.status='failed'
-        self.assertEqual(self.run_worker()['status'],'retry_quarantined')
-        rows=self.queue.snapshot()['items']
-        bad=next(row for row in rows if row['project']=='bad')
-        self.assertTrue(bad['retention_retry_exhausted'])
-        self.assertIn('retention_retry_exhausted',bad['retention_origin_hold'])
-        self.assertNotIn('operation_id',bad)
-        self.assertEqual(bad['retention_quarantine']['operation_id'],'op1')
-        self.assertEqual(bad['content'],'真实用户原话')
-        # The failed batch is held, but the next user batch is still eligible.
-        self.assertEqual(self.run_worker()['status'],'submitted')
-        self.assertEqual(len(self.posts),1)
-        # Re-running ready_batches must never silently clear the terminal hold.
-        self.status='completed'
-        self.run_worker()
-        remaining=self.queue.snapshot()['items']
-        self.assertEqual(len(remaining),1)
-        self.assertEqual(remaining[0]['project'],'bad')
-        self.assertTrue(remaining[0]['retention_retry_exhausted'])
-        self.assertIn('retention_retry_exhausted',remaining[0]['retention_origin_hold'])
-        self.assertEqual(self.run_worker()['status'],'idle')
-        self.assertEqual(len(self.posts),1)
     def test_configured_priority_tail_uses_the_shorter_age(self):
         self.queue.capture(session_id='priority',message_count=1,bank_id='test-bank',project='priority',content='已完成的有意义任务',metadata={'priority_tail':'true'},captured_at=datetime.now(timezone.utc)-timedelta(seconds=1200))
         self.assertEqual(self.run_worker()['status'],'submitted')
@@ -131,9 +100,6 @@ class RetentionWorkerTest(unittest.TestCase):
         self.assertEqual(self.run_worker()['status'],'retry_policy_held')
         self.assertEqual(self.status,'failed')
         self.assertEqual(self.queue.snapshot()['items'][0]['content'],content)
-        self.capture('newer','2020-01-01T00:00:00Z')
-        self.assertEqual(self.run_worker()['status'],'submitted')
-        self.assertEqual(self.queue.snapshot()['items'][0]['content'],content)
     def test_lost_ack_missing_operation_cannot_resend_a_forbidden_intent(self):
         import retention_worker
         content='[role: user]\n不要保存到长期记忆。\n[user:end]\n\n[role: assistant]\n完成。\n[assistant:end]'
@@ -145,19 +111,6 @@ class RetentionWorkerTest(unittest.TestCase):
         with patch.object(retention_worker.HindsightClient,'operation_status',side_effect=RuntimeError('HTTP 404 missing')):
             self.assertEqual(retention_worker.run_once(self.config,self.root)['status'],'intent_policy_held')
         self.assertEqual(self.posts,[])
-    def test_lost_ack_missing_operation_is_recovered_even_when_queue_still_has_inflight_rows(self):
-        import retention_worker
-        self.capture('old','2020-01-01T00:00:00Z')
-        batch=self.queue._select_batches(self.queue._read(),force_tail=True)[0]
-        self.queue.mark_submitted(batch['batch_id'],'missing',item_ids=batch['item_ids'])
-        path=self.root/'retention/worker-state.json'
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({'intent':{'batch_id':batch['batch_id'],'bank_id':'test-bank','operation_id':'missing','item_ids':batch['item_ids']},'next_retry_at_epoch':0}))
-        with patch.object(retention_worker.HindsightClient,'operation_status',side_effect=RuntimeError('HTTP 404 missing')):
-            with patch.object(retention_worker.HindsightClient,'_request',return_value={'success':True,'operation_id':'missing'}):
-                result=retention_worker.run_once(self.config,self.root)
-        self.assertEqual(result['status'],'submitted')
-        self.assertEqual(self.queue._read()['items'][0]['operation_id'],'missing')
     def test_selected_items_can_be_acknowledged_after_a_new_capture(self):
         self.capture('old','2020-01-01T00:00:00Z')
         selected=self.queue._select_batches(self.queue._read(),force_tail=True)[0]

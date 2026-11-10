@@ -86,7 +86,25 @@ class RepairService:
 
     @staticmethod
     def fingerprint(value: Any) -> str:
-        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        # Operation status responses add volatile timestamps, retry counters and
+        # parsed JSON fields compared with the raw DB row used during diagnosis.
+        # Fingerprint the stable source identity instead of transport formatting,
+        # otherwise a safe repair preview conflicts with itself before apply.
+        if isinstance(value, dict):
+            stable_keys = {
+                "operation_id", "id", "operation_type", "task_type",
+                "status", "error_message", "result_metadata", "task_payload",
+            }
+            normalized = {key: value[key] for key in stable_keys if key in value}
+            for key in ("result_metadata", "task_payload"):
+                raw = normalized.get(key)
+                if isinstance(raw, str):
+                    try:
+                        normalized[key] = json.loads(raw)
+                    except (TypeError, ValueError):
+                        pass
+            value = normalized
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
     _LLM_ERROR_MARKERS = (

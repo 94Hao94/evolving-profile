@@ -3,7 +3,7 @@
  * https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "edge") return;
+  if (process.env.NEXT_RUNTIME === "nodejs") {
   const { DATAPLANE_URL: dataplaneUrl } = await import("@/lib/evolving-client");
   const apiKey = process.env.EVOLVING_PROFILE_DATAPLANE_API_KEY || "";
 
@@ -12,5 +12,6 @@ export async function register() {
     console.log("[Control Plane] Using API key authentication");
   } else {
     console.log("[Control Plane] No API key configured (public access)");
+  }
   }
 }

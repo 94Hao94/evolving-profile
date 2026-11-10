@@ -124,6 +124,32 @@ class TaskStateStoreTest(unittest.TestCase):
         self.assertEqual(sorted(versions), list(range(2, 22)))
         self.assertEqual(final['version'], 21)
 
+    def test_working_state_is_a_bounded_projection_and_survives_continuation(self):
+        with tempfile.TemporaryDirectory() as root:
+            store = TaskStateStore(Path(root))
+            initial = store.record("s1", "补齐宿主兼容矩阵", "t1", "h1", continuation=False)
+            updated = store.update("s1", {
+                "working_state": {
+                    "phase": "verify",
+                    "next_action": "跑 Trae 与 WorkBuddy 回执",
+                    "open_loops": ["Claude Desktop 未实测"],
+                    "checkpoint": {"host_matrix": "partial"},
+                },
+                "unresolved": ["Claude Desktop 未实测"],
+            }, expected_version=initial["version"])
+            resumed = store.record("s1", "继续", "t2", "h2", continuation=True)
+        self.assertEqual(updated["working_state"]["goal"], "补齐宿主兼容矩阵")
+        self.assertEqual(resumed["working_state"]["phase"], "verify")
+        self.assertEqual(resumed["working_state"]["next_action"], "跑 Trae 与 WorkBuddy 回执")
+        self.assertEqual(resumed["working_state"]["checkpoint"], {"host_matrix": "partial"})
+
+    def test_working_state_rejects_unbounded_shapes(self):
+        with tempfile.TemporaryDirectory() as root:
+            store = TaskStateStore(Path(root))
+            first = store.record("s1", "检查状态", "t1", "h1", continuation=False)
+            with self.assertRaisesRegex(ValueError, "working_state_open_loops_must_be_array"):
+                store.update("s1", {"working_state": {"open_loops": "not-an-array"}}, expected_version=first["version"])
+
 
 if __name__ == "__main__":
     unittest.main()

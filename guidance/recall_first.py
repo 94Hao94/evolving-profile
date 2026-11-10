@@ -10,7 +10,6 @@ import json
 import math
 import os
 import re
-from pathlib import Path
 
 VERSION='recall-first.v2-20260922'
 DEFAULT_CANDIDATE_LIMIT = 6
@@ -298,8 +297,8 @@ def select(repo,request,char_budget=None):
     if not callable(semantic_embed_many) and request.get('semantic_recall')=='local':
         from semantic_recall import LocalGuidanceEmbeddingClient, SemanticRecallService
         base=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_API_BASE','http://127.0.0.1:12088')
-        bank=os.getenv('EVOLVING_PROFILE_GUIDANCE_BANK_ID','personal-memory')
-        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE',str(Path.home()/'.evolving-profile/guidance-v1/semantic-vectors.json'))
+        bank=os.getenv('EVOLVING_PROFILE_GUIDANCE_BANK_ID','ep-default-bank-v2-shadow-20260811')
+        cache=os.getenv('EVOLVING_PROFILE_GUIDANCE_SEMANTIC_CACHE','/Users/example/.evolving-profile/guidance-v1/semantic-vectors.json')
         semantic_service=SemanticRecallService(
             LocalGuidanceEmbeddingClient(f'{base.rstrip("/")}/v1/default/banks/{bank}/internal/guidance-embeddings'),cache
         )

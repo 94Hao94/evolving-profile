@@ -13,7 +13,7 @@ from PIL import Image
 from playwright.sync_api import Browser, Page, sync_playwright
 
 
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:9999"
 OUT = Path("output/playwright")
 OUT.mkdir(parents=True, exist_ok=True)

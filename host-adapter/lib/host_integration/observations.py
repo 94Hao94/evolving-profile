@@ -5,11 +5,19 @@ import json
 from pathlib import Path
 from ..platform_lock import file_lock,atomic_replace_bytes
 from .readiness import readiness
+from .native_receipts import read_latest_native_receipts
 
 
 def adapter_revision(root):
     root=Path(root)
-    files=sorted((root/'host-adapter/lib/host_integration').glob('*.py'))
+    # The host execution fingerprint must not churn when only read-only
+    # readiness, receipt projection or audit presentation code changes. Those
+    # governance lanes have their own schemas and should not invalidate a real
+    # client task receipt. Keep execution/protocol/configuration code in this
+    # fingerprint, while excluding the evidence projection modules.
+    excluded={'readiness.py','observations.py','native_receipts.py'}
+    files=sorted(p for p in (root/'host-adapter/lib/host_integration').glob('*.py')
+                 if p.name not in excluded)
     files+=[root/'host-adapter/evolving_profile_controller_mcp.py',root/'guidance/context_binding.py',root/'guidance/ep_platform_lock.py']
     digest=hashlib.sha256()
     for p in files:digest.update(str(p.relative_to(root)).encode()+b'\0'+p.read_bytes())
@@ -32,12 +40,30 @@ def read_observations(root):
 
 
 def project_observations(report,registry,root,code_root):
-    observations=read_observations(root);revision=adapter_revision(code_root)
+    observations=read_observations(root)
+    # Read the deduplicated current projection. Historical receipt events stay
+    # available in native-receipt-events.jsonl but must not make a previously
+    # refreshed capability appear stale again.
+    native_latest=read_latest_native_receipts(root)
+    # A current native receipt is the authority for its host/capability. Drop
+    # older isolated probes (and legacy native rows still present in the
+    # preparation ledger) for that same key before readiness evaluates context
+    # freshness; otherwise a stale historical row can reintroduce a false
+    # mismatch after the latest projection has been refreshed.
+    native_keys={(r.get('host_id'),r.get('capability_id')) for r in native_latest}
+    observations=[r for r in observations if (r.get('host_id'),r.get('capability_id')) not in native_keys]
+    observations.extend(native_latest)
+    native_hosts={r.get('host_id') for r in native_latest}
+    revision=adapter_revision(code_root)
     profiles={r['id']:r for r in registry['profiles']}
     for host in report['hosts']:
         host['context']['adapter_revision']=revision
-        host['readiness']=readiness(profiles[host['host_id']],
-            [r for r in observations if r.get('host_id')==host['host_id']],host['context'])
+        host_rows=[r for r in observations if r.get('host_id')==host['host_id']]
+        if host['host_id'] in native_hosts:
+            # Native latest rows are authoritative for that host. Do not let
+            # any older isolated/configuration row reintroduce stale state.
+            host_rows=[r for r in native_latest if r.get('host_id')==host['host_id']]
+        host['readiness']=readiness(profiles[host['host_id']],host_rows,host['context'])
     return report
 
 

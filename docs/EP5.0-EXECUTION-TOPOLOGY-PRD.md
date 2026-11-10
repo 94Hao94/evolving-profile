@@ -46,13 +46,13 @@
 
 ```text
 React Flow / XYFlow
-
+        +
 ELK.js 分层布局
-
+        +
 自定义正交边
-
+        +
 自定义泳道、Fork、Merge、Packet 节点
-
+        +
 固定的 Receipt Inspector / 弹层
 ```
 

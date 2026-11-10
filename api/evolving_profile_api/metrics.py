@@ -164,7 +164,7 @@ logger = logging.getLogger(__name__)
 _meter = None
 
 
-def initialize_metrics(service_name: str = "evolving-profile-api", service_version: str = "1.0.0"):
+def initialize_metrics(service_name: str = "evolving-profile-api", service_version: str | None = None):
     """
     Initialize OpenTelemetry metrics with Prometheus exporter.
 
@@ -179,13 +179,15 @@ def initialize_metrics(service_name: str = "evolving-profile-api", service_versi
     """
     global _meter
 
-    # Create resource with service information
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "service.version": service_version,
-        }
-    )
+    # Use the same runtime identity as /version and health. An explicit
+    # service_version remains supported for callers that intentionally export
+    # a compatibility version, but normal entrypoints must not hard-code one.
+    from evolving_profile_api.runtime_identity import runtime_resource_attributes
+
+    resource_attributes = runtime_resource_attributes(service_name)
+    if service_version is not None:
+        resource_attributes["service.version"] = service_version
+    resource = Resource.create(resource_attributes)
 
     # Create Prometheus metric reader
     prometheus_reader = PrometheusMetricReader()

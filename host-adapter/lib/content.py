@@ -120,7 +120,8 @@ def normalize_question_reply(content: str) -> str:
         return value
 
 
-def extract_user_request(content: str, *, structural_context_only: bool = False) -> str:
+def extract_user_request(content: str, *, structural_context_only: bool = False,
+                         preserve_question_reply: bool = False) -> str:
     """Return only the user-authored request from a Codex prompt envelope.
 
     Codex can prepend attachment manifests and ambient UI blocks to the actual
@@ -144,7 +145,9 @@ def extract_user_request(content: str, *, structural_context_only: bool = False)
         "",
         value,
     )
-    return normalize_question_reply(value.strip())
+    # Scenario provenance checks may retain a form envelope, but must still
+    # apply the ordinary attachment, ambient-context and memory-tag cleanup.
+    return value.strip() if preserve_question_reply else normalize_question_reply(value.strip())
 
 
 def _native_environment_shape(element) -> bool:

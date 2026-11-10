@@ -3,7 +3,7 @@ type ScenarioIndex = { sessions?: ScenarioRow[]; projects?: ScenarioRow[] };
 
 export function summarizeScenarioStatus(index: ScenarioIndex) {
   const rows = [...(index.sessions ?? []), ...(index.projects ?? [])];
-  const reviewed = rows.filter((row) => row.status === "model_reviewed").length;
+  const reviewed = rows.filter((row) => row.status === "model_reviewed" || row.status === "raw_available_summary_ai_report").length;
   const pendingReview = rows.length - reviewed;
   const qualityStatus = rows.length === 0 ? "unavailable" : pendingReview ? "unreviewed" : "reviewed";
   const pipeline = rows.length === 0

@@ -4,5 +4,6 @@
  */
 export function bankIdFromPathname(pathname: string | null | undefined): string | null {
   const match = pathname?.match(/(?:^|\/)banks\/([^/?]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  try { return match ? decodeURIComponent(match[1]) : null; }
+  catch { return null; }
 }

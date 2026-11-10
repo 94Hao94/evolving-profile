@@ -12,7 +12,7 @@ from observation_rebuild import load_env,atomic
 
 def audit(output):
     import psycopg2
-    bank='personal-memory'
+    bank='ep-default-bank-v2-shadow-20260811'
     catalog=TopicCatalog(Path.home()/'.evolving-profile/catalog/topics.sqlite3')
     topics=catalog.list(1000);by_id={r['topic_id']:r for r in topics}
     roots=[r for r in topics if r.get('level')=='L0'];leaves=[r for r in topics if r.get('level')=='L1']

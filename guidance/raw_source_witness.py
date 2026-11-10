@@ -9,7 +9,7 @@ import re
 import sys
 
 INSTANCE = Path.home() / ".pg0/instances/hindsight-embed-agentmemory/instance.json"
-BANK = "personal-memory"
+BANK = "ep-default-bank-v2-shadow-20260811"
 
 
 def user_spans(text: str) -> list[str]:

@@ -45,7 +45,7 @@ def _core_context(config, hook_input):
     global CORE_REPORT
     CORE_REPORT = None
     protocol = ''
-    agent_name=os.environ.get('HINDSIGHT_AGENT_NAME','codex')
+    agent_name=os.environ.get('HINDSIGHT_AGENT_NAME') or os.environ.get('EVOLVING_PROFILE_HOST_ID') or 'codex'
     instructions = instruction_block(agent_name+'-session-start')
     if hook_input.get('session_id') in config.get('nativeDelegationSessions',[]):
         from memory_turn_check import NATIVE_PREFLIGHT_POLICY
@@ -60,7 +60,7 @@ def _core_context(config, hook_input):
         return '\n'.join(v for v in (instructions,protocol) if v)
 
 def _record_instruction(hook_input,stage):
-    host=os.environ.get('HINDSIGHT_AGENT_NAME','codex')
+    host=os.environ.get('HINDSIGHT_AGENT_NAME') or os.environ.get('EVOLVING_PROFILE_HOST_ID') or 'codex'
     try:record_instruction(Path.home()/'.evolving-profile/guidance-v1/instruction-receipts',stage,host,
         {k:hook_input.get(k) for k in ('session_id','turn_id','source')})
     except Exception:pass
@@ -144,7 +144,7 @@ def main():
         if profile_included:
             context = f"{core}\n{context}"
         else:
-            instructions=instruction_block(os.environ.get('HINDSIGHT_AGENT_NAME','codex')+'-'+('compact' if source=='compact' else 'resume'))
+            instructions=instruction_block((os.environ.get('HINDSIGHT_AGENT_NAME') or os.environ.get('EVOLVING_PROFILE_HOST_ID') or 'codex')+'-'+('compact' if source=='compact' else 'resume'))
             context=f"{instructions}\n{context}"
         json.dump(
             {

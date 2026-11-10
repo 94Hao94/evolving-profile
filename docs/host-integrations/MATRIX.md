@@ -1,16 +1,17 @@
 # Host preparation matrix
 
-Registry revision: 52e1e51e137d3dd7e4c05a486db6e267253e97f5536a58da1b45deaa3196af24
+Registry revision: 2026-11-09-ep52-host-evidence
 
-| ID | Host | Local MCP | HTTP MCP | Prompt hook | Native host |
-| --- | --- | --- | --- | --- | --- |
-| codex | Codex | Documented | Documented | Documented | Unverified |
-| claude_code_cli | Claude Code CLI | Documented | Documented | Documented | Unverified |
-| claude_code_desktop_local | Claude desktop · local Code | Documented | Documented | Documented | Unverified |
-| claude_desktop_chat | Claude Desktop · Chat | Documented | Unknown | Unknown | Unverified |
-| hermes | Hermes | Unknown | Unknown | Unknown | Unverified |
-| workbuddy | Tencent WorkBuddy | Documented | Documented | Documented | Unverified |
-| doubao_work | Doubao Work | Documented | Documented | Unknown | Unverified |
-| generic_mcp | Other MCP client | Unknown | Unknown | Unknown | Unverified |
+| ID | Host | Transports | Local MCP | HTTP MCP | Prompt hook | Session association | Receipt | Source readback | Native host |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex | Codex | stdio / Streamable HTTP | host_verified | Documented | host_verified | host_verified | received | source_read | Verified |
+| trae | Trae | stdio / SSE / Streamable HTTP | host_verified | Documented | host_verified | host_verified | received | source_read | Partial |
+| claude_code_cli | Claude Code CLI | stdio / Streamable HTTP | Documented | Documented | Documented | parser_available | not_measured | Documented | Unverified |
+| claude_code_desktop_local | Claude desktop · local Code | stdio / Streamable HTTP | Documented | Documented | Documented | parser_available | not_measured | Documented | Unverified |
+| claude_desktop_chat | Claude Desktop · Chat | stdio | Documented | Unknown | Unknown | unverified | not_measured | Unknown | Unverified |
+| hermes | Hermes | Unconfirmed | Unknown | Unknown | Unknown | unverified | not_measured | Unknown | Unverified |
+| workbuddy | Tencent WorkBuddy | stdio / Streamable HTTP | Documented | Documented | host_verified | host_verified | received | source_read | Partial |
+| doubao_work | Doubao Work | stdio / Streamable HTTP | Documented | Documented | Unknown | unverified | not_measured | Unknown | Unverified |
+| generic_mcp | Other MCP client | stdio / SSE / Streamable HTTP | Unknown | Unknown | Unknown | unverified | not_measured | Unknown | Unverified |
 
 Recipes and documentary evidence only; not native-host or Windows certification.

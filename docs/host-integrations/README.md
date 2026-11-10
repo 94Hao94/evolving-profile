@@ -4,7 +4,8 @@
 
 One EP core can serve multiple clients. This preparation layer distinguishes documented support,
 configuration, isolated protocol checks and real-host evidence. It does not certify untested hosts.
-The existing trusted Codex route is retained. New integrations are read-only; automatic capture is off.
+The existing trusted Codex route is retained. Host evidence is recorded per capability; automatic
+capture is only treated as enabled where a real host receipt was observed.
 
 ## Inspect without changing client settings
 
@@ -32,7 +33,11 @@ does not read credential-bearing bytes. Reviewed apply/rollback uses full-byte r
   local command, args and environment for a local task. Its UI-managed settings remain manual import;
   no undocumented file path is guessed. Select the EP plugin/guide where available.
 - WorkBuddy: official user-level MCP recipe is `.workbuddy/mcp.json`; generate a preview before
-  modifying it. Hooks and transcript parsing still require native-host validation.
+  modifying it. Prompt hook, stop hook and automatic capture are host-verified in the current
+  evidence window; an already-running MCP child may need reconnecting before it loads new code.
+- Trae supports documented STDIO, SSE and Streamable HTTP MCP transports. STDIO, prompt hook and
+  automatic capture are host-verified in the current evidence window; SSE/HTTP remain documented
+  until a native task receipt is observed.
 - Claude CLI, desktop local Code and ordinary Chat are distinct profiles. TOML, host-managed or
   unknown formats stay import-only when safe preservation cannot be guaranteed.
 - Hermes and generic clients remain explicit capability checks, not automatically certified adapters.

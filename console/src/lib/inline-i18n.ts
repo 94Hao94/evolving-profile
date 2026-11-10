@@ -8,6 +8,11 @@ import { RELEASE_UI_COPY } from "./release-ui-copy";
 import { RELEASE_UI_LOCALIZED } from "./release-ui-localized";
 const RELEASE_SOURCE_KEYS=Object.fromEntries(Object.entries(RELEASE_UI_COPY).map(([key,item])=>[item.source,key]));
 const ZH_TO_EN: Record<string, string> = {
+  "加密数据归档": "Encrypted data archive",
+  "缺数据归档": "Data archive missing",
+  "加密原始记录": "Encrypted capture data",
+  "无原始记录快照": "Capture snapshot missing",
+  "份数按同一时间戳的一组数据库、数据归档、原始记录和校验清单计算，不把每个文件误算成一份备份。": "A backup set groups its database, data archive, capture snapshot and checksums by timestamp; individual files are not counted as separate sets.",
   "待语义审核": "Pending semantic review",
   "已审核偏好": "Reviewed preference",
   "未提供": "Not provided",

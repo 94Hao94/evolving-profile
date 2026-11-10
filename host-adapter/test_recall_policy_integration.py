@@ -141,6 +141,40 @@ def test_user_policy_filters_before_pagination_and_keeps_full_content_anchor(tmp
     assert value["relevance_audit"]["excluded_count"] == 2
 
 
+def test_policy_filtered_candidates_remain_navigable_as_bodyless_locators(tmp_path):
+    from evidence_workspace import search
+    from lib.recall_relevance import resolve_min_relevance
+    import uuid
+    admitted, filtered, denied = [str(uuid.uuid4()) for _ in range(3)]
+    rows = [{"id": admitted, "state": "valid", "type": "world",
+             "text": "Nebula 部署使用 make ship-prod。", "document_id": "d", "chunk_id": "c"},
+            {"id": filtered, "state": "valid", "type": "world",
+             "text": "Potato soup tastes delicious.", "document_id": "d", "chunk_id": "c"},
+            {"id": denied, "state": "valid", "type": "world",
+             "text": "Garden salad is fresh today.", "document_id": "d", "chunk_id": "c",
+             "scope_status": "denied"}]
+    def api(path, body=None, timeout=None):
+        if path.endswith("/recall"):
+            return {"results": rows}
+        if path.endswith("/chunks/c"):
+            return {"bank_id": "bank", "document_id": "d", "chunk_id": "c",
+                    "chunk_text": "Nebula 部署：make ship-prod。无关段落：soup 与 salad。"}
+        return next(row for row in rows if row["id"] == path.rsplit("/", 1)[-1])
+    policy = resolve_min_relevance({"recall_policy": {"default_min_relevance": "weak"}})
+    value = search("bank", "Nebula 部署方式", api, tmp_path, page_size=5, relevance_policy=policy)
+    # The admitted memory is returned as evidence, not as navigation.
+    assert [row["id"] for row in value["memories"]] == [admitted]
+    # A candidate filtered only by relevance keeps a bodyless locator so the
+    # host can read_source on demand instead of receiving a bare raw count.
+    assert [row["memory_id"] for row in value["source_navigation"]] == [filtered]
+    locator = value["source_navigation"][0]
+    assert locator["next_action"] == {"tool": "read_source", "arguments": {"memory_id": filtered, "scope": "chunk"}}
+    assert locator["subject_relation"] == "unverified"
+    assert value["source_navigation_reference_count"] == 1
+    # Hard scope denials never become navigation.
+    assert denied not in [row["memory_id"] for row in value["source_navigation"]]
+
+
 def test_changed_policy_cannot_turn_source_failures_into_successful_empty(tmp_path):
     from evidence_workspace import read_page
     from lib.recall_relevance import resolve_min_relevance

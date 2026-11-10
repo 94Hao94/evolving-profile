@@ -98,7 +98,9 @@ function BankSelectorInner() {
   const tCommon = useTranslations("common");
   const tAddDocument = useTranslations("addDocument");
   const tAction = useTranslations("actionFeedback");
-  const { currentBank, setCurrentBank, banks, bankInfos, banksLoading, loadBanks } = useBank();
+  const { currentBank, setCurrentBank, banks, bankInfos, banksLoading, loadBanks,
+    requestedBank,primaryBank,primaryReady,selectionStatus } = useBank();
+  const tSelection=useTranslations("bankSelection");
   const { theme, toggleTheme } = useTheme();
   const { features } = useFeatures();
   const [open, setOpen] = React.useState(false);
@@ -180,11 +182,13 @@ function BankSelectorInner() {
   const sortedBanks = React.useMemo(() => {
     // Sort by last document inserted descending, then by created_at
     return [...bankInfos].sort((a, b) => {
+      if(primaryReady && a.bank_id===primaryBank) return -1;
+      if(primaryReady && b.bank_id===primaryBank) return 1;
       const aTime = a.last_document_at || a.created_at || "";
       const bTime = b.last_document_at || b.created_at || "";
       return bTime.localeCompare(aTime);
     });
-  }, [bankInfos]);
+  }, [bankInfos,primaryBank,primaryReady]);
 
   const maxFactCount = React.useMemo(
     () => Math.max(1, ...sortedBanks.map((b) => b.fact_count)),
@@ -496,7 +500,11 @@ function BankSelectorInner() {
               aria-expanded={open}
               className="min-w-0 flex-1 justify-between border-2 border-primary font-bold hover:bg-accent sm:w-[250px] sm:flex-none"
             >
-              <span className="truncate">{currentBank || tNavBank("select")}</span>
+              <span className="truncate">{currentBank || requestedBank || tNavBank("select")}</span>
+              <span className="ml-2 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium">
+                {tSelection(selectionStatus==="missing"?"missing":selectionStatus!=="ready"?"unknown":
+                  primaryReady ? (currentBank===primaryBank?"primary":"other") : "unknown")}
+              </span>
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
@@ -525,8 +533,8 @@ function BankSelectorInner() {
                         onSelect={(value) => {
                           setCurrentBank(value);
                           setOpen(false);
-                          const view = searchParams.get("view") || "data";
-                          const subTab = searchParams.get("subTab");
+                          const view = searchParams?.get("view") || "data";
+                          const subTab = searchParams?.get("subTab");
                           const queryString = subTab
                             ? `?view=${view}&subTab=${subTab}`
                             : `?view=${view}`;
@@ -547,7 +555,7 @@ function BankSelectorInner() {
                             )}
                           />
                           <span className="truncate flex-1 font-medium" title={bank.bank_id}>
-                            {bank.bank_id}
+                            {bank.bank_id}{primaryReady && bank.bank_id===primaryBank && ` · ${tSelection("primary")}`}
                           </span>
                           <button
                             type="button"

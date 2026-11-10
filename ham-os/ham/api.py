@@ -12,16 +12,25 @@ from .evidence_runtime import EvidenceCandidate, QueryContract, ClaimLedger, pac
 
 ROOT=Path(__file__).resolve().parents[1]
 SCHEMA_ROOT=ROOT/'schemas'
+
+def _runtime_roots() -> tuple[Path, Path]:
+ migrated = Path.home()/'.evolving-profile'
+ legacy = Path.home()/'.hindsight'
+ if (migrated/'memory-contract-v5.json').is_file():
+  return migrated/'memory-os', migrated/'memory-contract-v5.json'
+ return legacy/'memory-os', legacy/'memory-contract-v5.json'
+
 class Api:
  def __init__(self,state_root:Path|None=None,contract_path:Path|None=None):
-  self.state_root=Path(state_root or os.environ.get('HAM_OS_STATE_ROOT') or Path.home()/'.hindsight/memory-os'); self.state_root.mkdir(parents=True,exist_ok=True)
-  self.contract_path=Path(contract_path or Path.home()/'.hindsight/memory-contract-v5.json'); self.ledger=Ledger(self.state_root/'state.sqlite3'); self.auth=AdapterAuth(self.state_root/'adapter-registry.json')
+  default_state_root, default_contract_path = _runtime_roots()
+  self.state_root=Path(state_root or os.environ.get('HAM_OS_STATE_ROOT') or default_state_root); self.state_root.mkdir(parents=True,exist_ok=True)
+  self.contract_path=Path(contract_path or os.environ.get('HAM_MEMORY_CONTRACT') or default_contract_path); self.ledger=Ledger(self.state_root/'state.sqlite3'); self.auth=AdapterAuth(self.state_root/'adapter-registry.json')
  def contract(self): return json.loads(self.contract_path.read_text())
  def flags(self): return self.contract().get('memoryOS') or {}
  def response(self,status:int,value:dict):
   value.setdefault('schema_version','ham.api.v2'); value.setdefault('server_generation',self.flags().get('generation','unknown')); value.setdefault('policy_hash',hashlib.sha256(self.contract_path.read_bytes()).hexdigest()); value.setdefault('computed_at',utcnow()); value.setdefault('trace_id',str(uuid.uuid4())); return status,value
  def capabilities(self):
-  f=self.flags(); return self.response(200,{'schema':'ham.capabilities.v1','enabled':bool(f.get('enabled')),'phase':f.get('phase'),'schema_uris':['schemas/api/query.schema.json','schemas/events/event-envelope.schema.json','schemas/receipts/execution-progress.schema.json'],'max_payload_bytes':1048576,'page_limits':{'default':50,'max':200},'status_enums':{'execution':['running','partial','complete','failed','noop','stalled'],'coverage':['complete','incomplete','unknown','not_required']},'adapter_contract':'ham.adapter.v1'})
+  f=self.flags(); return self.response(200,{'schema':'ham.capabilities.v1','enabled':bool(f.get('enabled')),'phase':f.get('phase'),'schema_uris':['schemas/api/query.schema.json','schemas/api/expand.schema.json','schemas/events/event-envelope.schema.json','schemas/receipts/execution-progress.schema.json'],'max_payload_bytes':1048576,'page_limits':{'default':50,'max':200},'status_enums':{'execution':['running','partial','complete','failed','noop','stalled'],'coverage':['complete','incomplete','unknown','not_required']},'adapter_contract':'ham.adapter.v1'})
  def _error(self,status,code,**extra): return self.response(status,receipt(execution='failed',coverage='unknown',continuation='not_needed',error_code=code,retryable=code in {'generation_skew','quota_circuit_open','upstream_unavailable','storage_pressure'},**extra))
  def handle(self,method:str,path:str,body:bytes,headers:dict[str,str]):
   path=path.split('?',1)[0]
@@ -127,7 +136,8 @@ class Api:
   if pack.get('expansion_handle'):
    self.ledger.save_pack(str(pack['expansion_handle']),{
     'execution_id':eid,'query_contract':self._mer_contract_payload(contract),
-    'claims':pack['claims'],'coverage':pack['coverage'],'created_at':utcnow(),
+    'claims':pack['claims'],'coverage':pack['coverage'],'token_budget':pack.get('token_budget'),
+    'created_at':utcnow(),
    })
   return self.response(200,receipt(
    execution_id=eid,execution=progress['execution_status'],coverage=coverage.status,
@@ -138,6 +148,21 @@ class Api:
  def expand(self,v):
   handle=str(v.get('expansion_handle') or ''); saved=self.ledger.get_pack(handle) if handle else None
   if not saved: return self.response(410,receipt(execution='noop',coverage='unknown',error_code='handle_expired'))
-  limit=max(1,min(50,int(v.get('limit') or 10))); return self.response(200,receipt(execution='complete',coverage='not_required',continuation='not_needed',memory_pack={'schema':'ham.memory_pack.v1','items':saved['items'][:limit],'expansion_handle':None}))
+  requested_execution=str(v.get('execution_id') or '')
+  saved_execution=str(saved.get('execution_id') or '')
+  if requested_execution and saved_execution and requested_execution != saved_execution:
+   return self._error(409,'execution_mismatch',expected_execution_id=saved_execution)
+  execution_id=requested_execution or saved_execution or str(uuid.uuid4())
+  limit=max(1,min(50,int(v.get('limit') or 10)))
+  if isinstance(saved.get('claims'),list):
+   claims=saved['claims'][:limit]
+   coverage=saved.get('coverage') or {'status':'incomplete','required_slots':[],'covered_slots':[],'missing_slots':[],'reason':'expansion_receipt_only'}
+   pack={'schema':'ham.claim_pack.v1','execution_id':execution_id,'claims':claims,
+         'token_budget':int(v.get('remaining_context_tokens') or saved.get('token_budget') or 1200),
+         'used_tokens':sum(int(claim.get('tokens') or 1) for claim in claims),
+         'coverage':coverage,'expansion_handle':None}
+   return self.response(200,receipt(execution_id=execution_id,execution='complete',coverage=coverage.get('status','incomplete'),continuation='not_needed',query_contract=saved.get('query_contract'),memory_pack=pack))
+  items=saved.get('items') or []
+  return self.response(200,receipt(execution_id=execution_id,execution='complete',coverage='not_required',continuation='not_needed',memory_pack={'schema':'ham.memory_pack.v1','items':items[:limit],'token_budget':saved.get('token_budget',1200),'used_tokens':sum(int(item.get('tokens') or 1) for item in items[:limit]),'expansion_handle':None}))
  def feedback(self,v):
   fid=str(uuid.uuid4()); record={'schema':'ham.feedback.v1','mode':'audit_only','payload':v,'received_at':utcnow()}; self.ledger.save_feedback(fid,record); return self.response(200,receipt(execution='complete',coverage='not_required',feedback_id=fid,feedback_mode='audit_only'))

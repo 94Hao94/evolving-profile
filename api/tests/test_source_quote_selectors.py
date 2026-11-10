@@ -41,6 +41,47 @@ def test_invalid_selector_never_bypasses_attribution(mutation):
     with pytest.raises(ValueError): source.verify_attribution(chunk, fact, META)
 
 
+def test_stale_selector_falls_back_to_exact_quote_in_same_witness():
+    """A bad model selector must not discard an independently exact witness.
+
+    The selector is only a transport hint.  If the claimed role/index and the
+    quote itself still resolve to one exact source span, retaining that source
+    bytes is safe; a missing/ambiguous quote remains fail-closed below.
+    """
+    chunk = fixture("user")
+    quote = "原始请求：保留条件。"
+    _, kind, evidence = source.verify_attribution(
+        chunk,
+        {
+            "source_message_index": 0,
+            "source_role": "user",
+            "source_quote": quote,
+            "source_quote_ref": "stale-catalog-selector",
+        },
+        META,
+    )
+    assert kind == "world"
+    assert evidence["source_quote"] == quote
+    assert evidence["source_quote_resolution"] == "invalid_selector_ignored_exact_quote"
+
+
+def test_non_string_selector_falls_back_only_with_exact_quote():
+    chunk = fixture("user")
+    quote = "原始请求：保留条件。"
+    _, _, evidence = source.verify_attribution(
+        chunk,
+        {
+            "source_message_index": 0,
+            "source_role": "user",
+            "source_quote": quote,
+            "source_quote_ref": 7,
+        },
+        META,
+    )
+    assert evidence["source_quote"] == quote
+    assert evidence["source_quote_resolution"] == "invalid_selector_type_ignored_exact_quote"
+
+
 def test_catalog_is_bounded_and_contains_only_real_source_spans():
     chunk = json.dumps([{"role":"user","content":"正文。\n"*9000}],ensure_ascii=False)
     catalog = source.source_quote_catalog(chunk)
