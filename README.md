@@ -89,7 +89,7 @@ You: Continue the AI course outline for the School of Economics and Management.
 
 Native memory only
 Claude: I remember an AI course outline, but I cannot tell whether it was the
-      Tianjin Vocational University project or the Hebei University project.
+      a vocational-university project or another university project.
       Please paste the audience and the last approved version.
 
 Hindsight-only backend
@@ -131,7 +131,7 @@ EP lineage: same Bank, same project key, later stage of the same task
 EP preference packet: result-first · causal explanation · visual acceptance check
 EP source revision: approved-scope@r17
 Codex: I am using the same project-scoped decisions. I will not merge the
-       similar Tianjin project, and I will re-read the source before changing
+       similar regional project, and I will re-read the source before changing
        an amount, date, named institution or approved conclusion.
 ```
 
